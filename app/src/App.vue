@@ -60,7 +60,7 @@ import FileChangedDialog from './components/FileChangedDialog.vue';
 import ImageUrlDialog from './components/ImageUrlDialog.vue';
 import Toast from './components/Toast.vue';
 import { useTabsStore } from './stores/tabs';
-import { useSettingsStore, buildEditorFontStack } from './stores/settings';
+import { useSettingsStore, buildEditorFontStack, setRightSidebarShell } from './stores/settings';
 import { useWindowsStore, isAuxLabel } from './stores/windows';
 import { useTilesStore } from './stores/tiles';
 import { usePomodoroStore } from './stores/pomodoro';
@@ -1531,12 +1531,19 @@ const showSearchPane = computed(() => searchOpen.value);
 // #168 — phone shell: one flag drives the CSS and the behaviour.
 const { isNarrow } = useViewport();
 
-const showRightSidebar = computed(() => {
-  // Master "hide" toggle wins over individual panes — preserves which panes
-  // the user had on while still letting them dismiss the whole strip with
-  // a single action (toolbar close button / ⌥⌘B / command palette).
-  if (settings.rightSidebarHidden) return false;
-  return (
+/**
+ * Whether any pane in the right strip could draw something right now,
+ * ignoring the master hide flag. Most panes need a workspace folder and
+ * Backlinks also needs a markdown tab, so on a fresh install with no folder
+ * open the two panes that are on by default can render nothing at all.
+ *
+ * The settings store reads this through `setRightSidebarRenderable` so that
+ * toggling the strip on always has a visible result. Deriving it a second
+ * time over there would be two sources of truth for the same rules — the
+ * shape of bug this is fixing.
+ */
+const rightSidebarHasRenderablePane = computed(
+  () =>
     showSearchPane.value ||
     showOutlinePane.value ||
     showBacklinksPane.value ||
@@ -1547,8 +1554,34 @@ const showRightSidebar = computed(() => {
     showTypesPane.value ||
     showHistoryPane.value ||
     showInspectorPane.value ||
-    showAgentPane.value
-  );
+    showAgentPane.value,
+);
+
+const showRightSidebar = computed(() => {
+  // Master "hide" toggle wins over individual panes — preserves which panes
+  // the user had on while still letting them dismiss the whole strip with
+  // a single action (toolbar close button / ⌥⌘B / command palette).
+  if (settings.rightSidebarHidden) return false;
+  return rightSidebarHasRenderablePane.value;
+});
+
+// Asked by settings.toggleRightSidebar() when it un-hides the strip: make
+// sure something in there can actually draw, and say whether it now can. The
+// Outline is the fallback because it is the only pane that needs no workspace
+// folder — which is why users found that opening it once made the toggle
+// button start working.
+setRightSidebarShell({
+  visible: () => showRightSidebar.value,
+  ensureRenderable: () => {
+    if (rightSidebarHasRenderablePane.value) return true;
+    const tab = tabs.activeTab;
+    if (tab && tab.language === 'markdown') {
+      tab.showOutline = true;
+      settings.showOutline = true;
+      return true;
+    }
+    return false;
+  },
 });
 
 /**
