@@ -1,0 +1,14 @@
+# pnpm settings live here (pnpm 10.6+). llowBuilds is the key pnpm 11/12
+# reads to let a dependency run its install scripts. The older
+# pnpm.onlyBuiltDependencies field in package.json is no longer read at all
+# (pnpm 12 says so explicitly on every install), and the same-named key here is
+# superseded by this map.
+#
+# Without an allowlist, pnpm 11+ turns a blocked build script into a hard
+# install failure (ERR_PNPM_IGNORED_BUILDS), which is what stopped the local
+# build before it started. esbuild's install step is the one that matters (it
+# verifies/links the platform binary); core-js's is a funding banner. pnpm 10,
+# which the release workflow pins, only warns, so CI needs nothing from here.
+allowBuilds:
+  core-js: true
+  esbuild: true
