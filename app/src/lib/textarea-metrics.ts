@@ -120,6 +120,62 @@ export function caretTopPx(el: HTMLTextAreaElement, text: string, pos: number): 
   }
 }
 
+export interface CaretOffsetInLine {
+  /** x of the caret within its *visual* row, px from the content's left edge. */
+  left: number;
+  /** y of the caret's visual row, px from the *logical line's* top. */
+  rowTop: number;
+  /** Height of one visual row (the drawn caret's height). */
+  height: number;
+}
+
+/**
+ * Caret x and row-offset inside a single logical line, soft wrap included.
+ *
+ * `caretTopPx` mirrors the *entire* document, which is fine for a one-off
+ * autocomplete anchor but far too expensive for the drawn caret of #316: that
+ * one is recomputed on every keystroke, caret move and scroll event. Mirroring
+ * one line keeps the layout cost proportional to that line, not the document —
+ * and every visual row starts at x = 0, so the marker's own offsetLeft is the
+ * caret's x within its row no matter how the line wrapped.
+ *
+ * `rowTop` is deliberately NOT the marker's offsetTop. An inline box is
+ * vertically centred inside its line box, so offsetTop lands
+ * `(lineHeight - inlineBoxHeight) / 2` below the row's top — measured at 2px
+ * for the default 14px/1.6 editor font, which put the drawn caret 2px low.
+ * Subtracting that half-leading yields the row top the caret has to cover.
+ */
+export function caretOffsetInLine(
+  el: HTMLTextAreaElement,
+  lineText: string,
+  column: number,
+): CaretOffsetInLine {
+  const col = Math.max(0, Math.min(column, lineText.length));
+  const mirror = createMirror(el);
+  try {
+    const row = document.createElement('div');
+    const before = document.createElement('span');
+    before.textContent = lineText.slice(0, col);
+    // Zero-width space: gives the caret a measurable box without widening the
+    // text — same trick `caretTopAt` uses.
+    const marker = document.createElement('span');
+    marker.textContent = '\u200B';
+    const after = document.createElement('span');
+    after.textContent = lineText.slice(col);
+    row.append(before, marker, after);
+    mirror.appendChild(row);
+    const height = lineHeightPx(el);
+    const inlineBox = marker.getBoundingClientRect().height;
+    return {
+      left: marker.offsetLeft,
+      rowTop: marker.offsetTop - (height - inlineBox) / 2,
+      height,
+    };
+  } finally {
+    mirror.remove();
+  }
+}
+
 export interface CaretRowInfo {
   /** Caret is on the first *visual* row of the text. */
   firstRow: boolean;
