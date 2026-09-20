@@ -1704,6 +1704,7 @@ export const fr: I18n = {
       preview: 'Affichage : Aperçu seul',
       cycleView: 'Affichage : Changer de mode',
       toggleOutline: 'Affichage : Afficher/masquer le plan',
+      toggleReading: 'Affichage : basculer le mode lecture',
       toggleFileTree: 'Affichage : Afficher/masquer l\'arborescence de fichiers',
       toggleRightSidebar: 'Affichage : Afficher/masquer la barre latérale droite',
       toggleAgentPanel: 'Affichage : Afficher/masquer le panneau de l\'agent',

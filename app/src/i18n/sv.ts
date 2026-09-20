@@ -1721,6 +1721,7 @@ export const sv: I18n = {
       preview: 'Vy: Endast förhandsvisning',
       cycleView: 'Vy: Växla läge',
       toggleOutline: 'Vy: Växla disposition',
+      toggleReading: 'Vy: växla läsläge',
       toggleFileTree: 'Vy: Växla filträd',
       toggleRightSidebar: 'Vy: Växla höger sidofält',
       toggleAgentPanel: 'Vy: Växla agentpanel',

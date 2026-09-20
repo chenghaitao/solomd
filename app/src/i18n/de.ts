@@ -1704,6 +1704,7 @@ export const de: I18n = {
       preview: 'Ansicht: Nur Vorschau',
       cycleView: 'Ansicht: Modus wechseln',
       toggleOutline: 'Ansicht: Gliederung umschalten',
+      toggleReading: 'Ansicht: Lesemodus umschalten',
       toggleFileTree: 'Ansicht: Dateibaum umschalten',
       toggleRightSidebar: 'Ansicht: Rechte Seitenleiste umschalten',
       toggleAgentPanel: 'Ansicht: Agent-Panel umschalten',

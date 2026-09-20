@@ -1704,6 +1704,7 @@ export const it: I18n = {
       preview: 'Vista: Solo anteprima',
       cycleView: 'Vista: Cambia modalità',
       toggleOutline: 'Vista: Attiva/disattiva struttura',
+      toggleReading: 'Vista: attiva/disattiva modalità lettura',
       toggleFileTree: 'Vista: Attiva/disattiva albero dei file',
       toggleRightSidebar: 'Vista: Attiva/disattiva barra laterale destra',
       toggleAgentPanel: 'Vista: Attiva/disattiva pannello agente',

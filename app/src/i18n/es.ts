@@ -1704,6 +1704,7 @@ export const es: I18n = {
       preview: 'Vista: Solo vista previa',
       cycleView: 'Vista: Cambiar modo',
       toggleOutline: 'Vista: Alternar esquema',
+      toggleReading: 'Vista: alternar modo lectura',
       toggleFileTree: 'Vista: Alternar árbol de archivos',
       toggleRightSidebar: 'Vista: Alternar barra lateral derecha',
       toggleAgentPanel: 'Vista: Alternar panel del agente',

@@ -1721,6 +1721,7 @@ export const nl: I18n = {
       preview: 'Weergave: Alleen voorbeeld',
       cycleView: 'Weergave: Modus wisselen',
       toggleOutline: 'Weergave: Structuur in-/uitschakelen',
+      toggleReading: 'Weergave: leesmodus in-/uitschakelen',
       toggleFileTree: 'Weergave: Bestandsboom in-/uitschakelen',
       toggleRightSidebar: 'Weergave: Rechterzijbalk in-/uitschakelen',
       toggleAgentPanel: 'Weergave: Agentpaneel in-/uitschakelen',

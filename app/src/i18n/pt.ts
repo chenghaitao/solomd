@@ -1706,6 +1706,7 @@ export const pt: I18n = {
       preview: 'Exibir: Somente visualização',
       cycleView: 'Exibir: Alternar modo',
       toggleOutline: 'Exibir: Alternar estrutura',
+      toggleReading: 'Exibir: alternar modo de leitura',
       toggleFileTree: 'Exibir: Alternar árvore de arquivos',
       toggleRightSidebar: 'Exibir: Alternar barra lateral direita',
       toggleAgentPanel: 'Exibir: Alternar painel do agente',

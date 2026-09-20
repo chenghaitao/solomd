@@ -1707,6 +1707,7 @@ export const zh: I18n = {
       preview: '视图:仅预览',
       cycleView: '视图:循环切换模式',
       toggleOutline: '视图:显示/隐藏大纲',
+      toggleReading: '视图:切换阅读模式',
       toggleFileTree: '视图:显示/隐藏文件树',
       toggleRightSidebar: '视图:显示/隐藏右侧栏',
       toggleAgentPanel: '视图:显示/隐藏智能体面板',

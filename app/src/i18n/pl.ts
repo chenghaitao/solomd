@@ -1721,6 +1721,7 @@ export const pl: I18n = {
       preview: 'Widok: Tylko podgląd',
       cycleView: 'Widok: Przełącz tryb',
       toggleOutline: 'Widok: Przełącz konspekt',
+      toggleReading: 'Widok: przełącz tryb czytania',
       toggleFileTree: 'Widok: Przełącz drzewo plików',
       toggleRightSidebar: 'Widok: Przełącz prawy pasek boczny',
       toggleAgentPanel: 'Widok: Przełącz panel agenta',

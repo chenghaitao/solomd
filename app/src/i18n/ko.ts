@@ -1704,6 +1704,7 @@ export const ko: I18n = {
       preview: '보기: 미리보기만',
       cycleView: '보기: 모드 전환',
       toggleOutline: '보기: 개요 토글',
+      toggleReading: '보기: 읽기 모드 전환',
       toggleFileTree: '보기: 파일 트리 토글',
       toggleRightSidebar: '보기: 오른쪽 사이드바 토글',
       toggleAgentPanel: '보기: 에이전트 패널 토글',

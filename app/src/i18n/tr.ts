@@ -1721,6 +1721,7 @@ export const tr: I18n = {
       preview: 'Görünüm: Yalnızca Önizleme',
       cycleView: 'Görünüm: Modu Değiştir',
       toggleOutline: 'Görünüm: Ana Hattı Aç/Kapat',
+      toggleReading: 'Görünüm: Okuma modunu aç/kapat',
       toggleFileTree: 'Görünüm: Dosya Ağacını Aç/Kapat',
       toggleRightSidebar: 'Görünüm: Sağ Kenar Çubuğunu Aç/Kapat',
       toggleAgentPanel: 'Görünüm: Ajan Panelini Aç/Kapat',

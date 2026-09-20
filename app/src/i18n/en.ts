@@ -1727,6 +1727,7 @@ export const en = {
       preview: 'View: Preview Only',
       cycleView: 'View: Cycle Mode',
       toggleOutline: 'View: Toggle Outline',
+      toggleReading: 'View: Toggle Reading Mode',
       toggleFileTree: 'View: Toggle File Tree',
       toggleRightSidebar: 'View: Toggle Right Sidebar',
       toggleAgentPanel: 'View: Toggle Agent Panel',

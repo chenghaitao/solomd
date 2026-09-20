@@ -1704,6 +1704,7 @@ export const ja: I18n = {
       preview: '表示: プレビューのみ',
       cycleView: '表示: モードを切り替え',
       toggleOutline: '表示: アウトラインを切り替え',
+      toggleReading: '表示: 読書モードの切り替え',
       toggleFileTree: '表示: ファイルツリーを切り替え',
       toggleRightSidebar: '表示: 右サイドバーを切り替え',
       toggleAgentPanel: '表示: エージェントパネルを切り替え',
