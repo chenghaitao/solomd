@@ -41,6 +41,13 @@ distribution/macos/
 distribution/linux/
 winget-pkgs
 
+# Local build products - build.bat / scripts/package-portable-win.ps1 write
+# here so a build never leaves anything to accidentally commit.
+/local_build_output/
+# older builds dropped these next to the source instead
+/SoloMD_*-portable/
+/SoloMD_*-portable.zip
+
 # ai assist
 CLAUDE.md
 # Everything under .claude/ is local — worktrees alone are gigabytes — except

@@ -1,6 +1,8 @@
 ﻿# package-portable-win.ps1 — 把 tauri build 产物打包成免安装便携 zip
 # 由 build.bat 第 5 步调用: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package-portable-win.ps1 -Arch x64
-# 产物: SoloMD_<ver>_<arch>-portable.zip  (SoloMD.exe + solomd-mcp.exe + README.txt), 位于仓库根目录
+# 产物: local_build_output\SoloMD_<ver>_<arch>-portable.zip
+#        (SoloMD.exe + solomd-mcp.exe + README.txt)
+# local_build_output\ 已被 .gitignore 排除, 不会误提交
 
 param(
   [string]$Arch = "x64",
@@ -27,11 +29,15 @@ if (-not (Test-Path $Exe)) {
 
 $ver = (Get-Content $PkgJson -Raw | ConvertFrom-Json).version
 
+# 所有本地构建产物统一放这里 (已 gitignore), 不再散落在仓库根目录
+$OutDir = Join-Path $RepoRoot 'local_build_output'
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
 $Mcp = Get-ChildItem -Path $McpBase -Recurse -Filter 'solomd-mcp.exe' |
        Where-Object { $_.FullName -match '[\\/]release[\\/]' } |
        Select-Object -First 1
 
-$Stage = Join-Path $RepoRoot "SoloMD_${ver}_${Arch}-portable"
+$Stage = Join-Path $OutDir "SoloMD_${ver}_${Arch}-portable"
 if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 
@@ -49,7 +55,7 @@ If launch fails with a WebView2 missing error, install from
 https://go.microsoft.com/fwlink/p/?LinkId=2124703
 "@
 
-$Zip = Join-Path $RepoRoot "SoloMD_${ver}_${Arch}-portable.zip"
+$Zip = Join-Path $OutDir "SoloMD_${ver}_${Arch}-portable.zip"
 if (Test-Path $Zip) { Remove-Item $Zip -Force }
 Compress-Archive -Path "$Stage\*" -DestinationPath $Zip -Force
 

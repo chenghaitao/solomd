@@ -22,9 +22,10 @@ REM       bundle.externalBin is validated by build.rs at COMPILE time, so a
 REM       missing sidecar binary fails the build outright
 REM    3) Windows needs an MSVC environment (vendored-openssl / vendored-libgit2)
 REM
-REM  Output:
-REM    app\src-tauri\target\release\bundle\msi\SoloMD_x64_zh-CN.msi
-REM    SoloMD_[ver]_[arch]-portable.zip  (SoloMD.exe + solomd-mcp.exe + README)
+REM  Output:  (everything lands in local_build_output\, which .gitignore excludes)
+REM    local_build_output\SoloMD_[ver]_[arch]_[locale].msi   (installer)
+REM    local_build_output\SoloMD_[ver]_[arch]-portable.zip
+REM                          (SoloMD.exe + solomd-mcp.exe + README.txt)
 REM
 REM  Prerequisites:
 REM    - Rust stable (rustc / cargo)
@@ -141,9 +142,18 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM -- 5/5 pack the portable zip (SoloMD.exe + solomd-mcp.exe) -----------
-echo [5/5] packing the portable zip ...
+REM -- 5/5 collect the artifacts into local_build_output ----------------
+echo [5/5] collecting artifacts into local_build_output ...
 cd /D "%~dp0"
+if not exist "local_build_output" mkdir "local_build_output"
+
+REM tauri always writes the MSI to target\release\bundle\msi, and its layout is
+REM fixed - copy it out so one folder holds everything a build produced.
+copy /Y "app\src-tauri\target\release\bundle\msi\*.msi" "local_build_output\" >nul
+if errorlevel 1 (
+  echo [WARN] MSI copy failed - it is still under app\src-tauri\target\release\bundle\msi
+)
+
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\package-portable-win.ps1" -Arch "%ARCH%"
 if errorlevel 1 (
   echo [WARN] portable zip packaging failed - the MSI above is still good
@@ -152,7 +162,10 @@ if errorlevel 1 (
 echo.
 echo =============================================================
 echo   BUILD_DONE
-echo   MSI : app\src-tauri\target\release\bundle\msi\
-echo   ZIP : SoloMD_[ver]_%ARCH%-portable.zip   in the repo root
+echo   local_build_output\
+echo     SoloMD_*.msi                       (installer)
+echo     SoloMD_[ver]_%ARCH%-portable.zip   (exe + mcp sidecar + README)
+echo.
+echo   local_build_output is gitignored - nothing to commit
 echo =============================================================
 endlocal
