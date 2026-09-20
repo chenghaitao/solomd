@@ -8,19 +8,12 @@ import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatchi
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { cjkFriendlyEmphasis } from '../lib/cm-cjk-emphasis';
 import { initMermaid } from '../lib/mermaid-lazy';
-import { LanguageDescription } from '@codemirror/language';
-import { javascript } from '@codemirror/lang-javascript';
-import { python } from '@codemirror/lang-python';
-import { rust } from '@codemirror/lang-rust';
-import { html as htmlLang } from '@codemirror/lang-html';
-import { css as cssLang } from '@codemirror/lang-css';
-import { json as jsonLang } from '@codemirror/lang-json';
-import { cpp } from '@codemirror/lang-cpp';
-import { java } from '@codemirror/lang-java';
-import { go } from '@codemirror/lang-go';
-import { yaml } from '@codemirror/lang-yaml';
-import { sql } from '@codemirror/lang-sql';
-import { xml } from '@codemirror/lang-xml';
+// The grammar imports and the `codeLanguages` list they feed now live in
+// `lib/code-languages.ts`: the ``` fence-language picker (#297) derives its
+// catalogue from that same list, so there is only one copy to keep in sync.
+import { codeLanguages } from '../lib/code-languages';
+import { fenceLanguageComplete, fenceLanguageExtension } from '../lib/cm-fence-completion';
+import { filterFenceLanguages, isInsideFenceBefore, matchFenceOpener } from '../lib/fence-languages';
 import { vim, Vim } from '@replit/codemirror-vim';
 import { cmThemeFor } from '../lib/themes';
 import { registerPlainSelectionGetter } from '../lib/plain-selection';
@@ -128,22 +121,6 @@ type PlainBlock = {
   hasTrailingNewline: boolean;
   html: string;
 };
-
-const codeLanguages = [
-  LanguageDescription.of({ name: 'javascript', alias: ['js', 'jsx'], support: javascript({ jsx: true }) }),
-  LanguageDescription.of({ name: 'typescript', alias: ['ts', 'tsx'], support: javascript({ jsx: true, typescript: true }) }),
-  LanguageDescription.of({ name: 'python', alias: ['py'], support: python() }),
-  LanguageDescription.of({ name: 'rust', alias: ['rs'], support: rust() }),
-  LanguageDescription.of({ name: 'html', support: htmlLang() }),
-  LanguageDescription.of({ name: 'css', support: cssLang() }),
-  LanguageDescription.of({ name: 'json', support: jsonLang() }),
-  LanguageDescription.of({ name: 'cpp', alias: ['c', 'c++'], support: cpp() }),
-  LanguageDescription.of({ name: 'java', support: java() }),
-  LanguageDescription.of({ name: 'go', alias: ['golang'], support: go() }),
-  LanguageDescription.of({ name: 'yaml', alias: ['yml'], support: yaml() }),
-  LanguageDescription.of({ name: 'sql', support: sql() }),
-  LanguageDescription.of({ name: 'xml', support: xml() }),
-];
 
 const props = withDefaults(
   defineProps<{
@@ -1784,9 +1761,10 @@ function replacePlainAll() {
 }
 
 // ---- Plain editor: autocomplete popup (/ slash commands, [[ wikilinks,
-// # tags, @ citations). Triggers as you type; ↑/↓ navigate, Enter/Tab insert,
-// Esc dismisses. Reuses the same data the CodeMirror editor uses. ----
-type AcKind = 'slash' | 'wikilink' | 'tag' | 'citation';
+// # tags, @ citations, ``` fence languages). Triggers as you type; ↑/↓
+// navigate, Enter/Tab insert, Esc dismisses. Reuses the same data the
+// CodeMirror editor uses. ----
+type AcKind = 'slash' | 'wikilink' | 'tag' | 'citation' | 'fence';
 interface AcItem { label: string; hint?: string; insert: string; cursorOffset: number }
 const acOpen = ref(false);
 const acItems = ref<AcItem[]>([]);
@@ -1824,6 +1802,16 @@ function buildAcItems(kind: AcKind, query: string): AcItem[] {
       .filter((t) => t.tag.toLowerCase().includes(q))
       .slice(0, 8)
       .map((t) => ({ label: `#${t.tag}`, hint: String(t.count), insert: `#${t.tag} `, cursorOffset: t.tag.length + 2 }));
+  }
+  // ``` fence languages (#297) — the same catalogue the CodeMirror source
+  // uses, so both editors offer the same rows in the same order.
+  if (kind === 'fence') {
+    return filterFenceLanguages(query, 10).map((lang) => ({
+      label: lang.name,
+      hint: lang.hint,
+      insert: lang.name,
+      cursorOffset: lang.name.length,
+    }));
   }
   // citation
   return cachedCitations
@@ -1868,6 +1856,18 @@ function maybeOpenPlainAutocomplete(el: HTMLTextAreaElement) {
   else if ((m = before.match(/\[\[([^\]\n]*)$/))) { kind = 'wikilink'; query = m[1]; acTriggerStart = caret - m[1].length - 2; }
   else if ((m = before.match(/(?:^|[\s(])#([^\s#]*)$/))) { kind = 'tag'; query = m[1]; acTriggerStart = caret - m[1].length - 1; }
   else if ((m = before.match(/(?:^|[\s(])@([^\s@]*)$/))) { kind = 'citation'; query = m[1]; acTriggerStart = caret - m[1].length - 1; }
+  else {
+    // ``` fence opener (#297). Same helper the CodeMirror source uses, so the
+    // two editors cannot disagree about what counts as an opener — and the
+    // same "already inside a fence" test, so typing the *closing* fence never
+    // pops a list whose Enter would insert a language into it.
+    const opener = matchFenceOpener(before);
+    if (opener && !isInsideFenceBefore(before.slice(0, before.lastIndexOf('\n') + 1))) {
+      kind = 'fence';
+      query = opener.query;
+      acTriggerStart = opener.queryStart;
+    }
+  }
   if (!kind) { closePlainAutocomplete(); return; }
   const items = buildAcItems(kind, query);
   if (!items.length) { closePlainAutocomplete(); return; }
@@ -2870,19 +2870,24 @@ function buildExtensions() {
           wikilinkExtension(),
           tagAutocompleteExtension(),
           citationsExtension(() => cachedCitations),
-          // Single autocompletion config combining all 3 markdown sources
-          // (wikilinks `[[`, tags `#`, citations `@`). CM6 disallows
-          // multiple `autocompletion({ override })` extensions.
+          // #297 — opens itself on the third backtick of a fence opener.
+          fenceLanguageExtension(),
+          // Single autocompletion config combining all 4 markdown sources
+          // (wikilinks `[[`, tags `#`, citations `@`, fence languages ```).
+          // CM6 disallows multiple `autocompletion({ override })` extensions.
           autocompletion({
             override: [
               wikilinkComplete,
               tagComplete,
               citationCompleteSource(() => cachedCitations),
+              fenceLanguageComplete,
             ],
             defaultKeymap: true,
             // Typing-triggered completion is the last remaining source of
             // IME-hostile churn here. Keep the sources available for explicit
             // invocation, but do not wake them up on every keystroke.
+            // (`fenceLanguageExtension` above triggers only the fence source,
+            // and only for the keystroke that opens a fence.)
             activateOnTyping: false,
           }),
           ...(IS_APP_STORE_BUILD ? [] : [aiKeyCompartment.of(aiRewriteExtension(currentAiRewriteKey()))]),
@@ -4174,7 +4179,8 @@ const cls = computed(() => ({
       </div>
     </div>
 
-    <!-- Autocomplete popup (/ slash, [[ wikilink, # tag, @ citation). -->
+    <!-- Autocomplete popup (/ slash, [[ wikilink, # tag, @ citation,
+         ``` fence language). -->
     <ul
       v-if="acOpen && acItems.length"
       class="plain-ac"
