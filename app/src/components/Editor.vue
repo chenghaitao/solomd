@@ -42,7 +42,8 @@ import {
   type FoldAnchor,
   type HeadingSpan,
 } from '../lib/heading-fold';
-import { caretRowInfo, caretTopPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights } from '../lib/textarea-metrics';
+import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights } from '../lib/textarea-metrics';
+import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore, buildEditorFontStack } from '../stores/settings';
@@ -321,7 +322,7 @@ const plainSelectAll = ref(false);
 // Events firing in between (the Ctrl+A keyup, the focus emit) see a collapsed
 // selection and must not be mistaken for "user collapsed it — exit".
 let plainSelectAllPending = false;
-let plainComposing = false;
+const plainComposing = ref(false);
 let plainMermaidIdSeq = 0;
 const plainRenderCache = new Map<string, string>();
 
@@ -352,7 +353,13 @@ const plainMetricsEnabled = computed(
   () =>
     usePlainWindowsEditor &&
     !plainLiveEnabled.value &&
-    (settings.showLineNumbers || settings.viewMode === 'split' || props.typewriterMode),
+    // #316 — the focus shade and the drawn caret take their y from the same
+    // measured line tops, so they keep the metrics warm too.
+    (settings.showLineNumbers ||
+      settings.viewMode === 'split' ||
+      props.typewriterMode ||
+      props.focusMode ||
+      settings.solidCursor),
 );
 const plainGutterEnabled = computed(
   () => plainMetricsEnabled.value && settings.showLineNumbers,
@@ -385,6 +392,9 @@ function schedulePlainGutter() {
 
 function onPlainScroll(event: Event) {
   plainScrollTop.value = (event.target as HTMLTextAreaElement).scrollTop;
+  // The shade and the drawn caret are positioned against the container, not
+  // the scrolled text, so they have to follow the textarea's own scrolling.
+  schedulePlainOverlays();
 }
 
 watch(
@@ -863,6 +873,9 @@ function plainSelectionText(): string {
 }
 
 function emitPlainCursorAndSelection() {
+  // Every selection-ish event in both plain paths funnels through here, so
+  // it is also where the focus shade and the drawn caret get repainted.
+  schedulePlainOverlays();
   if (plainLiveEnabled.value) {
     // Select-all mode ends the moment the user collapses the selection
     // (click into the text, arrow key); this is the single choke point all
@@ -922,6 +935,170 @@ function maybeTypewriterScroll() {
     if (Math.abs(delta) > 1) host.scrollTop += delta;
   });
 }
+
+// ---- #316 — 专注模式 / 实心光标 on the plain <textarea> path ----
+// Both ship as CodeMirror extensions (focusModeExtension, and drawSelection
+// with cursorBlinkRate 0), so on Windows with Vim mode off — where there is
+// no CodeMirror at all — the two switches silently did nothing. Same shape of
+// gap as the line-number gutter (#161) and typewriter mode (#199) before them.
+//
+// Focus mode: the block editor already has one element per paragraph, so it
+// dims by CSS class. The flat editor is a single <textarea> whose lines can't
+// be styled individually, so two shade panels are laid over everything above
+// and below the active paragraph instead — same rendered result as opacity
+// 0.35 on the text, since they are painted in the editor's own background.
+//
+// Solid cursor: no CSS turns off the native caret's blink, so the textarea's
+// caret is made transparent and a non-blinking 2px accent bar is drawn at
+// measured coordinates — matching the CodeMirror cursor. The native caret is
+// only hidden while a drawn one exists (and never mid-IME-composition), so a
+// measurement that comes back empty leaves the user with a blinking caret
+// rather than no caret at all.
+
+const plainFocusMode = computed(() => usePlainWindowsEditor && props.focusMode);
+const plainSolidCursor = computed(() => usePlainWindowsEditor && settings.solidCursor);
+
+const plainCaretBox = ref<{ top: number; left: number; height: number } | null>(null);
+const plainWindowFocused = ref(true);
+const plainFocusBand = ref<{ top: number; bottom: number } | null>(null);
+// Hide the native caret only while we are actually drawing one.
+const plainSolidCaretOn = computed(() => !!plainCaretBox.value);
+const plainShadeLeft = computed(() =>
+  plainGutterEnabled.value ? `calc(${plainGutterWidth.value} + 21px)` : '0px',
+);
+
+function plainActiveTextarea(): HTMLTextAreaElement | null {
+  return plainLiveEnabled.value
+    ? plainBlockEditors.value[plainActiveBlock.value] ?? null
+    : plainEditor.value;
+}
+
+/** Top of the given 1-based logical line, in flat-editor content px. */
+function plainLineTopPx(line: number, lineHeight: number): number {
+  const tops = plainLineTops.value;
+  if (tops && line >= 1 && line <= tops.length) return tops[line - 1];
+  return (line - 1) * lineHeight;
+}
+
+function computePlainFocusBand() {
+  // The block editor dims by class; only the flat textarea needs geometry.
+  if (!plainFocusMode.value || plainLiveEnabled.value) {
+    plainFocusBand.value = null;
+    return;
+  }
+  const el = plainEditor.value;
+  if (!el) {
+    plainFocusBand.value = null;
+    return;
+  }
+  const text = el.value;
+  const from = el.selectionStart ?? 0;
+  const to = el.selectionEnd ?? from;
+  const { first, last } = activeParagraphLines(text, from, to);
+  const lh = plainLineHeightPx();
+  const heights = plainLineHeights.value;
+  const padTop = plainPaddingTopPx(el);
+  const top = plainLineTopPx(first, lh);
+  const lastTop = plainLineTopPx(last, lh);
+  const lastHeight = heights.length === text.split('\n').length ? heights[last - 1] ?? lh : lh;
+  plainFocusBand.value = {
+    top: padTop + top - el.scrollTop,
+    bottom: padTop + lastTop + lastHeight - el.scrollTop,
+  };
+}
+
+function computePlainCaretBox() {
+  if (!plainSolidCursor.value || plainComposing.value) {
+    plainCaretBox.value = null;
+    return;
+  }
+  const el = plainActiveTextarea();
+  // No focus, another window in front, or a range selection — the native
+  // caret would not be drawn either, so draw nothing.
+  //
+  // Window focus is tracked from the blur/focus events rather than read from
+  // document.hasFocus(): a browser that reports focus wrongly (Unzoo answers
+  // false for a frontmost window) would otherwise hide the caret forever,
+  // which is the very failure this is fixing. Missing the event instead
+  // leaves a caret drawn — visible, not absent.
+  if (!el || document.activeElement !== el || !plainWindowFocused.value) {
+    plainCaretBox.value = null;
+    return;
+  }
+  const from = el.selectionStart ?? 0;
+  if ((el.selectionEnd ?? from) !== from) {
+    plainCaretBox.value = null;
+    return;
+  }
+  const container = plainLiveEnabled.value ? plainLiveHost.value : el.parentElement;
+  if (!container) {
+    plainCaretBox.value = null;
+    return;
+  }
+  const cs = window.getComputedStyle(el);
+  const padTop = Number.parseFloat(cs.paddingTop) || 0;
+  const padLeft = Number.parseFloat(cs.paddingLeft) || 0;
+  const cRect = container.getBoundingClientRect();
+  const eRect = el.getBoundingClientRect();
+  try {
+    if (plainLiveEnabled.value) {
+      // A block holds one paragraph, so mirroring all of it is cheap. The
+      // host is the scroll container and the caret is absolutely positioned
+      // inside its content, so it scrolls along without a scroll listener.
+      const point = caretPointPx(el, el.value, from);
+      plainCaretBox.value = {
+        top: eRect.top - cRect.top + container.scrollTop + padTop + point.top,
+        left: eRect.left - cRect.left + container.scrollLeft + padLeft + point.left,
+        height: point.height,
+      };
+      return;
+    }
+    // Flat editor: mirror only the caret's own logical line — the whole
+    // document would be laid out on every keystroke — and take the line's y
+    // from the same measured tops the gutter and scroll sync use.
+    const text = el.value;
+    const lineStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+    const nl = text.indexOf('\n', lineStart);
+    const lineText = text.slice(lineStart, nl < 0 ? text.length : nl);
+    const point = caretPointPx(el, lineText, from - lineStart);
+    const top =
+      padTop + plainLineTopPx(lineAt(text, from), point.height) + point.top - el.scrollTop;
+    // Scrolled out of the textarea's own viewport: nothing to draw.
+    if (top + point.height < 0 || top > el.clientHeight) {
+      plainCaretBox.value = null;
+      return;
+    }
+    plainCaretBox.value = {
+      top: eRect.top - cRect.top + top,
+      left: eRect.left - cRect.left + padLeft + point.left - el.scrollLeft,
+      height: point.height,
+    };
+  } catch {
+    plainCaretBox.value = null;
+  }
+}
+
+let cleanupPlainOverlays: (() => void) | null = null;
+let plainOverlayRaf = 0;
+/** Repaint the drawn caret and the focus shade, coalesced to one per frame. */
+function schedulePlainOverlays() {
+  if (!usePlainWindowsEditor) return;
+  if (!plainFocusMode.value && !plainSolidCursor.value) {
+    if (plainCaretBox.value) plainCaretBox.value = null;
+    if (plainFocusBand.value) plainFocusBand.value = null;
+    return;
+  }
+  if (plainOverlayRaf) return;
+  plainOverlayRaf = requestAnimationFrame(() => {
+    plainOverlayRaf = 0;
+    computePlainFocusBand();
+    computePlainCaretBox();
+  });
+}
+
+watch([plainFocusMode, plainSolidCursor, plainLineHeights, plainLiveEnabled], () =>
+  schedulePlainOverlays(),
+);
 
 function plainSetCaret(pos: number) {
   if (plainLiveEnabled.value) {
@@ -1102,7 +1279,7 @@ function syncPlainEditorAfterModeSwitch() {
 function handlePlainInput(event: Event) {
   if (plainLiveEnabled.value) return;
   const el = event.target as HTMLTextAreaElement;
-  if (!plainComposing) recordPlainHistory();
+  if (!plainComposing.value) recordPlainHistory();
   plainText.value = el.value;
   tabs.setContent(props.tab.id, el.value);
   emitPlainCursorAndSelection();
@@ -1375,7 +1552,7 @@ function caretRectFromHighlight(caret: number): { left: number; bottom: number }
 }
 
 function maybeOpenPlainAutocomplete(el: HTMLTextAreaElement) {
-  if (plainComposing) return;
+  if (plainComposing.value) return;
   const caret = el.selectionStart ?? 0;
   const before = el.value.slice(0, caret);
   let kind: AcKind | null = null;
@@ -1649,7 +1826,7 @@ function plainFirstRowEnd(el: HTMLTextAreaElement, text: string): number {
 }
 
 function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
-  if (plainComposing) return;
+  if (plainComposing.value) return;
   if (handleAutocompleteKeydown(event)) return;
   if (handlePlainKeydownShared(event)) return;
   // Block-boundary arrow navigation (#155). Each block is its own <textarea>,
@@ -1785,7 +1962,7 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
 }
 
 function handlePlainEditorKeydown(event: KeyboardEvent) {
-  if (plainComposing) return;
+  if (plainComposing.value) return;
   // Must come before the shared handler: ↑/↓/Enter/Tab/Esc belong to the
   // popup while it is open (Gitee IK6JCC).
   if (handleAutocompleteKeydown(event)) return;
@@ -1957,17 +2134,23 @@ function autoSizePlainBlock(el: HTMLTextAreaElement) {
 function handlePlainBlockInput(index: number, event: Event) {
   const el = event.target as HTMLTextAreaElement;
   autoSizePlainBlock(el);
-  if (plainComposing) return;
+  schedulePlainOverlays();
+  if (plainComposing.value) return;
   updatePlainBlock(index, el.value, el.selectionStart ?? el.value.length);
   maybeOpenPlainAutocomplete(el);
 }
 
 function handlePlainBlockCompositionStart() {
-  plainComposing = true;
+  plainComposing.value = true;
+  // Give the native caret back for the duration of the composition: the
+  // composed text is drawn by the textarea itself and a measured caret
+  // cannot follow it.
+  schedulePlainOverlays();
 }
 
 function handlePlainBlockCompositionEnd(index: number, event: CompositionEvent) {
-  plainComposing = false;
+  plainComposing.value = false;
+  schedulePlainOverlays();
   const el = event.target as HTMLTextAreaElement;
   autoSizePlainBlock(el);
   updatePlainBlock(index, el.value, el.selectionStart ?? el.value.length);
@@ -1982,7 +2165,7 @@ function handlePlainBlockCompositionEnd(index: number, event: CompositionEvent) 
  */
 function applyPlainFullEdit(next: string, absoluteCaret: number) {
   plainSelectAll.value = false; // full edits land in normal block view
-  if (!plainComposing) recordPlainHistory();
+  if (!plainComposing.value) recordPlainHistory();
   plainText.value = next;
   tabs.setContent(props.tab.id, next);
   const nextBlocks = splitPlainMarkdownBlocks(next);
@@ -2076,7 +2259,7 @@ function updatePlainBlock(index: number, text: string, caret?: number) {
   const wasSelectAll = plainSelectAll.value;
   plainSelectAll.value = false;
   // Snapshot the pre-edit document for undo (coalesced) before we mutate it.
-  if (!plainComposing) recordPlainHistory();
+  if (!plainComposing.value) recordPlainHistory();
   const nextCaret = block.start + (caret ?? text.length);
   // Re-attach the block separator that splitPlainMarkdownBlocks stripped from
   // the editable text, so neighbouring blocks don't merge on every edit.
@@ -2400,6 +2583,30 @@ onMounted(() => {
   };
 
   if (usePlainWindowsEditor) {
+    // #316 — the drawn caret has to disappear exactly when the native one
+    // would. A click into the file tree or the preview fires focusin, and a
+    // window that goes to the background fires no blur on the textarea at
+    // all, so both are listened for.
+    const onFocusShift = () => schedulePlainOverlays();
+    const onWindowBlur = () => {
+      plainWindowFocused.value = false;
+      schedulePlainOverlays();
+    };
+    const onWindowFocus = () => {
+      plainWindowFocused.value = true;
+      schedulePlainOverlays();
+    };
+    document.addEventListener('focusin', onFocusShift);
+    window.addEventListener('blur', onWindowBlur);
+    window.addEventListener('focus', onWindowFocus);
+    cleanupPlainOverlays = () => {
+      document.removeEventListener('focusin', onFocusShift);
+      window.removeEventListener('blur', onWindowBlur);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }
+
+  if (usePlainWindowsEditor) {
     syncPlainEditorFromStore(props.tab.content);
     maybeRestoreSession();
     void processPlainLiveRenderedBlocks();
@@ -2705,6 +2912,12 @@ onBeforeUnmount(() => {
   cleanupTransformCase = null;
   cleanupPlainSelection?.();
   cleanupPlainSelection = null;
+  cleanupPlainOverlays?.();
+  cleanupPlainOverlays = null;
+  if (plainOverlayRaf) {
+    cancelAnimationFrame(plainOverlayRaf);
+    plainOverlayRaf = 0;
+  }
   if (contentSyncTimer) {
     // A Vim-mode toggle remounts the Windows editor. Flush the current
     // CodeMirror document before cancelling the debounce so the last keystroke
@@ -2902,7 +3115,7 @@ watch(
       // branch — this one returned before reaching them, so on Windows an
       // external content update still reset the caret and killed an in-flight
       // IME composition. Same two guards, expressed for the textarea.
-      if (plainComposing) return;
+      if (plainComposing.value) return;
       syncPlainEditorFromStore(next, true);
       return;
     }
@@ -3319,7 +3532,10 @@ const cls = computed(() => ({
       :class="[
         cls,
         'plain-block-editor',
-        { 'plain-block-editor--cb-numbers': settings.codeBlockLineNumbers },
+        {
+          'plain-block-editor--cb-numbers': settings.codeBlockLineNumbers,
+          'plain-block-editor--focus': plainFocusMode,
+        },
       ]"
       :style="plainEditorStyle"
     >
@@ -3351,7 +3567,10 @@ const cls = computed(() => ({
           v-if="index === plainActiveBlock"
           :ref="(el) => setPlainBlockEditor(index, el as HTMLTextAreaElement | null)"
           class="plain-block__textarea"
-          :class="{ 'plain-textarea--wrap': settings.wordWrap }"
+          :class="{
+            'plain-textarea--wrap': settings.wordWrap,
+            'plain-textarea--solid-caret': plainSolidCaretOn,
+          }"
           :spellcheck="props.spellCheck"
           :wrap="settings.wordWrap ? 'soft' : 'off'"
           @keydown="(event) => handlePlainBlockKeydown(index, event)"
@@ -3360,6 +3579,7 @@ const cls = computed(() => ({
           @compositionstart="handlePlainBlockCompositionStart"
           @compositionend="(event) => handlePlainBlockCompositionEnd(index, event)"
           @click.stop
+          @blur="schedulePlainOverlays"
           @keyup="emitPlainCursorAndSelection"
           @mouseup="emitPlainCursorAndSelection"
           @select="emitPlainCursorAndSelection"
@@ -3371,6 +3591,16 @@ const cls = computed(() => ({
           v-html="block.html"
         ></div>
       </div>
+      <div
+        v-if="plainCaretBox"
+        class="plain-caret"
+        aria-hidden="true"
+        :style="{
+          top: plainCaretBox.top + 'px',
+          left: plainCaretBox.left + 'px',
+          height: plainCaretBox.height + 'px',
+        }"
+      ></div>
     </div>
     <div v-else :class="[cls, 'plain-source']" :style="plainEditorStyle">
       <div
@@ -3391,7 +3621,10 @@ const cls = computed(() => ({
       <textarea
         ref="plainEditor"
         class="plain-editor"
-        :class="{ 'plain-textarea--wrap': settings.wordWrap }"
+        :class="{
+          'plain-textarea--wrap': settings.wordWrap,
+          'plain-textarea--solid-caret': plainSolidCaretOn,
+        }"
         :spellcheck="props.spellCheck"
         :wrap="settings.wordWrap ? 'soft' : 'off'"
         @keydown="handlePlainEditorKeydown"
@@ -3399,11 +3632,37 @@ const cls = computed(() => ({
         @input="handlePlainInput"
         @scroll="onPlainScroll"
         @mousedown="clearStrayDocumentSelection($event.currentTarget as HTMLElement)"
+        @blur="schedulePlainOverlays"
         @keyup="emitPlainCursorAndSelection"
         @mouseup="emitPlainCursorAndSelection"
         @select="emitPlainCursorAndSelection"
         @focus="emitPlainCursorAndSelection"
       ></textarea>
+      <!-- #316 — focus mode: a <textarea> can't dim individual lines, so the
+           inactive part of the document is covered in the editor's own
+           background instead. Purely decorative; never takes a click. -->
+      <template v-if="plainFocusBand">
+        <div
+          class="plain-shade"
+          aria-hidden="true"
+          :style="{ top: 0, left: plainShadeLeft, height: Math.max(0, plainFocusBand.top) + 'px' }"
+        ></div>
+        <div
+          class="plain-shade"
+          aria-hidden="true"
+          :style="{ top: Math.max(0, plainFocusBand.bottom) + 'px', left: plainShadeLeft, bottom: 0 }"
+        ></div>
+      </template>
+      <div
+        v-if="plainCaretBox"
+        class="plain-caret"
+        aria-hidden="true"
+        :style="{
+          top: plainCaretBox.top + 'px',
+          left: plainCaretBox.left + 'px',
+          height: plainCaretBox.height + 'px',
+        }"
+      ></div>
     </div>
 
     <!-- In-document find / replace (Ctrl+F). The textarea path has no CodeMirror
@@ -3617,6 +3876,39 @@ const cls = computed(() => ({
 }
 .plain-source {
   display: flex;
+  /* Anchors the focus shade and the drawn caret (#316); clipping keeps a
+     caret that has scrolled out of the textarea from painting over the UI. */
+  position: relative;
+  overflow: hidden;
+}
+/* #316 — focus mode's dimming for the flat textarea. Painted in the editor's
+   own background at 0.65, which reads the same as the 0.35 text opacity the
+   CodeMirror extension applies. */
+.plain-shade {
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  background: var(--bg);
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+/* #316 — the non-blinking caret drawn for 实心光标, matching the 2px accent
+   bar of CodeMirror's .cm-cursor. */
+.plain-caret {
+  position: absolute;
+  width: 2px;
+  z-index: 2;
+  background: var(--accent);
+  pointer-events: none;
+}
+/* Both textareas, and written as a compound selector so it still wins
+   against `.plain-block__textarea { caret-color: var(--accent) }` further
+   down the sheet — at equal specificity the later rule would take it, and
+   the native caret would blink on next to the drawn one. */
+.plain-editor.plain-textarea--solid-caret,
+.plain-block__textarea.plain-textarea--solid-caret {
+  caret-color: transparent;
 }
 .plain-source .plain-editor {
   flex: 1 1 auto;
@@ -3643,6 +3935,8 @@ const cls = computed(() => ({
 }
 .plain-block-editor {
   overflow: auto;
+  /* Anchors the drawn caret (#316). */
+  position: relative;
   padding: 12px 16px 80px;
   box-sizing: border-box;
   font-family: var(--plain-editor-font-family, var(--font-editor, var(--font-mono)));
@@ -3656,6 +3950,16 @@ const cls = computed(() => ({
 }
 .plain-block--active {
   background: var(--bg);
+}
+/* #316 — focus mode in the block live editor: one element per paragraph
+   already exists, so the inactive ones just dim. Same 0.35 the CodeMirror
+   extension uses for a dimmed line. */
+.plain-block-editor--focus .plain-block {
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+.plain-block-editor--focus .plain-block--active {
+  opacity: 1;
 }
 /* Fold chevron for heading blocks. Sits in the left margin so it never
    reflows the heading text; only visible on hover (or while folded) so an
