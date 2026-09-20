@@ -30,7 +30,7 @@ export const t = {
       title1: 'Everything Typora does.',
       title2: 'Free.',
       subtagline: 'Live WYSIWYG preview, tabs, themes, PDF / Word export — plus AI rewrite, folder sync, and native iOS & Android apps. MIT-licensed. No account, no subscription, no ads.',
-      lead: 'Lightweight Markdown editor for macOS, Windows, Linux, Android, and iOS. Offline-first, no accounts, no IAP, no ads. ~15 MB installer, MIT-licensed, zero telemetry by default. 14 BYOK AI providers (Ollama included for fully-local runs).',
+      lead: 'Lightweight Markdown editor for macOS, Windows, Linux, Android, and iOS. Offline-first, no accounts, no IAP, no ads. ~15 MB installer, MIT-licensed, no telemetry. 14 BYOK AI providers (Ollama included for fully-local runs).',
       ctaPrimary: 'Download SoloMD',
       ctaSecondary: 'See all features →',
       ctaAgentsHref: '/agents/',
@@ -68,7 +68,7 @@ export const t = {
         { icon: '🎨', title: 'Rich syntax styling', desc: '13 code-block languages, KaTeX math, Mermaid diagrams, footnotes, YAML front-matter, ==highlight==. 8 themes (Light / Dark / Nord / Solarized / Monokai / Dracula / GitHub Light) + custom CSS.' },
         { icon: '🌏', title: 'Chinese first-class', desc: 'Auto encoding detection (UTF-8 / GBK / Big5 / Shift_JIS) via chardetng. CJK word count, simplified ↔ traditional, pinyin export — none of which Typora or Obsidian do natively.' },
         { icon: '📤', title: 'Pandoc export anywhere', desc: 'PDF (with KaTeX & Mermaid), Word .docx, HTML, EPUB, ODT, LaTeX, RTF. Drop in .docx / .pdf / .xlsx / .pptx / .csv and SoloMD converts them to Markdown on the spot.' },
-        { icon: '🦀', title: 'Tiny & fast', desc: '~15 MB installer (vs Typora 70 MB / Obsidian 110 MB). Tauri 2 + Rust + Vue 3 + CodeMirror 6. Zero telemetry by default. Builds for macOS / Windows / Linux x64 / Linux ARM64.' },
+        { icon: '🦀', title: 'Tiny & fast', desc: '~15 MB installer (vs Typora 70 MB / Obsidian 110 MB). Tauri 2 + Rust + Vue 3 + CodeMirror 6. Zero telemetry. Builds for macOS / Windows / Linux x64 / Linux ARM64.' },
       ],
       qol: {
         heading: 'Quality-of-life touches',
@@ -145,7 +145,7 @@ export const t = {
       items: [
         {
           q: 'Is SoloMD really free?',
-          a: 'Yes. SoloMD is MIT-licensed open-source software at https://github.com/zhitongblog/solomd. There is no paid tier, no subscription, no in-app purchase, no ads, and no telemetry by default. Compare: Typora costs $14.99, iA Writer costs $29.99, Obsidian Sync is $4/month. SoloMD is $0 forever — sponsor the developer if it helps your writing.',
+          a: 'Yes. SoloMD is MIT-licensed open-source software at https://github.com/zhitongblog/solomd. There is no paid tier, no subscription, no in-app purchase, no ads, and no telemetry. Compare: Typora costs $14.99, iA Writer costs $29.99, Obsidian Sync is $4/month. SoloMD is $0 forever — sponsor the developer if it helps your writing.',
         },
         {
           q: 'Is there a free alternative to Typora?',
@@ -299,7 +299,7 @@ export const t = {
         {
           icon: '🚫',
           title: 'No telemetry, no account, no cloud',
-          desc: 'Telemetry is opt-in only and content-free. There is no SoloMD account. The editor does not call home.',
+          desc: 'No usage data is collected and there is no SoloMD account. The only call the editor makes on its own is the update check, and you can switch that off.',
           link: { label: 'How we count things →', href: '/security/' },
         },
         {

@@ -390,13 +390,6 @@ export const fr: I18n = {
     updateAvailable: 'Nouvelle version {version} disponible',
     upToDate: 'Vous êtes à jour',
     updateCheckFailed: 'Impossible de joindre le serveur de mises à jour — vérifier le réseau et réessayer',
-    telemetry: 'Envoyer des données d\'utilisation anonymes',
-    telemetryHint:
-      'Aide à améliorer SoloMD. Pas d\'adresse IP, pas de contenu de fichier, pas d\'informations personnelles.',
-    telemetryNotice:
-      'SoloMD collecte des données d\'utilisation anonymes (utilisation des fonctions, version, OS) pour aider à améliorer le produit. Pas d\'adresse IP, de contenu de fichier ou d\'informations personnelles. Vous pouvez désactiver à tout moment dans les paramètres.',
-    telemetryNoticeOk: 'Compris',
-    telemetryNoticeDisable: 'Désactiver maintenant',
     imageUploaderSection: 'Téléversement d\'images (hébergement d\'images)',
     imageUploader: 'Téléverser les images vers',
     imageUploaderNone: 'Ne pas téléverser — enregistrer localement',

@@ -390,13 +390,6 @@ export const tr: I18n = {
     updateAvailable: 'Yeni sürüm {version} mevcut',
     upToDate: 'Güncelsiniz',
     updateCheckFailed: 'Güncelleme sunucusuna ulaşılamadı — ağınızı denetleyip yeniden deneyin',
-    telemetry: 'Anonim kullanım verisi gönder',
-    telemetryHint:
-      'SoloMD\'yi geliştirmeye yardımcı olur. IP adresi, dosya içeriği veya kişisel bilgi gönderilmez.',
-    telemetryNotice:
-      'SoloMD, ürünü geliştirmeye yardımcı olmak için anonim kullanım verisi (özellik kullanımı, sürüm, işletim sistemi) toplar. IP adresi, dosya içeriği veya kişisel bilgi toplanmaz. Bunu istediğiniz zaman ayarlardan kapatabilirsiniz.',
-    telemetryNoticeOk: 'Anladım',
-    telemetryNoticeDisable: 'Şimdi kapat',
     imageUploaderSection: 'Görsel yükleme (görsel barındırma)',
     imageUploader: 'Görselleri şuraya yükle',
     imageUploaderNone: 'Yükleme — yerel olarak kaydet',

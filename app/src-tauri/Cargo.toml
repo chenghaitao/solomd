@@ -73,10 +73,10 @@ walkdir = "2.5.0"
 # whole separate crate.
 #
 # (Telemetry used to live in `tauri-plugin-aptabase` and pinned this list
-#  for its plugin-setup `tokio::spawn` calls. We migrated telemetry to a
-#  pure-frontend POST to solomd.app/api/track so the plugin is gone, but
-#  the runtime entry in main.rs and these features stay — they're still
-#  needed for the rest of the app's async work.)
+#  for its plugin-setup `tokio::spawn` calls. Telemetry has since been
+#  removed from the product entirely, but the runtime entry in main.rs and
+#  these features stay — they're still needed for the rest of the app's
+#  async work.)
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros"] }
 
 # File-to-Markdown conversion (built-in, no Python needed)

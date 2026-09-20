@@ -390,13 +390,6 @@ export const ja: I18n = {
     updateAvailable: '新バージョン {version} が利用可能',
     upToDate: '最新バージョンです',
     updateCheckFailed: 'アップデートサーバーに接続できません — ネットワークを確認して再試行してください',
-    telemetry: '匿名利用データを送信',
-    telemetryHint:
-      'SoloMD の改善に役立てます。IP アドレス、ファイル内容、個人情報は含まれません。',
-    telemetryNotice:
-      'SoloMD は製品改善のため匿名利用データ（機能の使用状況、バージョン、OS）を収集します。IP アドレス、ファイル内容、個人情報は含まれません。設定からいつでも無効化できます。',
-    telemetryNoticeOk: 'わかりました',
-    telemetryNoticeDisable: '今すぐ無効化',
     imageUploaderSection: '画像アップロード（画像ホスティング）',
     imageUploader: '画像のアップロード先',
     imageUploaderNone: 'アップロードしない — ローカルに保存',

@@ -1653,16 +1653,6 @@ function onSelectPdfFont(v: string) {
         </section>
 
         <section data-cat="advanced">
-          <label>
-            <input type="checkbox" :checked="settings.telemetryEnabled" @change="settings.toggleTelemetry()" />
-            {{ t('settings.telemetry') }}
-          </label>
-          <div style="font-size: 11px; color: var(--text-faint); margin-top: 4px; line-height: 1.5;">
-            {{ t('settings.telemetryHint') }}
-          </div>
-        </section>
-
-        <section data-cat="advanced">
           <label>{{ t('settings.customCss') }}</label>
           <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
             <button @click="pickCustomCss">{{ t('settings.pickCss') }}</button>

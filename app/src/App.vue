@@ -9,7 +9,6 @@ import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-mana
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
 import Toolbar from './components/Toolbar.vue';
-import TelemetryBanner from './components/TelemetryBanner.vue';
 import TileRoot from './components/TileRoot.vue';
 import StatusBar from './components/StatusBar.vue';
 import CommandPalette from './components/CommandPalette.vue';
@@ -76,7 +75,6 @@ import { useI18n } from './i18n';
 import { quickCaptureError } from './lib/quick-capture-status';
 import { tableEditor, closeTableEditor } from './lib/table-editor-bus';
 import { formulaEditor, closeFormulaEditor } from './lib/formula-editor-bus';
-import { track } from './lib/telemetry';
 import { openWelcomeTour } from './lib/welcome-tour';
 import { useWorkspaceStore } from './stores/workspace';
 import { useWorkspaceIndexStore } from './stores/workspaceIndex';
@@ -1090,12 +1088,6 @@ onMounted(async () => {
   window.addEventListener('solomd:open-global-search', onOpenSearchEvent as EventListener);
   window.addEventListener('solomd:open-cjk-proofread', onOpenCjkProofreadEvent as EventListener);
 
-  track('app_launched', {
-    locale: settings.language,
-    theme: settings.theme,
-    live_preview: settings.livePreview ? 1 : 0,
-  });
-
   // OS file association — an OS-level file-open always belongs in the current
   // window (this window was just spawned for it). Bypass new-window routing.
   try {
@@ -1795,7 +1787,6 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
         @open-help="helpOpen = true"
         @open-search="toggleGlobalSearch()"
       />
-      <TelemetryBanner />
       <div class="workspace">
         <!-- #168 — on a phone the side panes float over the editor instead of
              stealing its width; this catches the tap that dismisses them. -->

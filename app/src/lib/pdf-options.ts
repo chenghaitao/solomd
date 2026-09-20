@@ -32,7 +32,7 @@ export interface ResolvedPdfOptions {
    * `pdf:` block. Callers should fall back to the engine's native default.
    */
   pageSizeMm: { width: number; height: number } | null;
-  /** Human-readable preset label (`A4`, `Letter`, `Custom`, …) for telemetry / footer text. */
+  /** Human-readable preset label (`A4`, `Letter`, `Custom`, …) for footer text. */
   pageSizeLabel: string;
   /** Effective margins in mm (top / right / bottom / left). */
   marginMm: { top: number; right: number; bottom: number; left: number } | null;

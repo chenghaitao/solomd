@@ -390,13 +390,6 @@ export const en = {
     updateAvailable: 'New version {version} available',
     upToDate: 'You are up to date',
     updateCheckFailed: "Couldn't reach update server — check your network and try again",
-    telemetry: 'Send anonymous usage data',
-    telemetryHint:
-      'Helps improve SoloMD. No IP address, no file contents, no personal information.',
-    telemetryNotice:
-      'SoloMD collects anonymous usage data (feature usage, version, OS) to help improve the product. No IP address, file contents, or personal information. You can disable this any time in settings.',
-    telemetryNoticeOk: 'Got it',
-    telemetryNoticeDisable: 'Disable now',
     imageUploaderSection: 'Image upload (image hosting)',
     imageUploader: 'Upload images to',
     imageUploaderNone: 'Don\'t upload — save locally',

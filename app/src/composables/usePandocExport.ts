@@ -26,7 +26,6 @@ import { useToastsStore } from '../stores/toasts';
 // the existing store so the shape can be augmented later without changing
 // imports here.
 import { useSettingsStore } from '../stores/settings';
-import { track } from '../lib/telemetry';
 import {
   parseBibFile,
   parseCslJson,
@@ -237,7 +236,6 @@ export function usePandocExport() {
 
     const { bibliography, csl } = resolveCitationFlags(content);
 
-    track('file_exported', { format: `pandoc_${format}` });
     const tid = toasts.info(`Exporting via Pandoc (${format})…`, 0);
     try {
       await invoke('pandoc_export', {

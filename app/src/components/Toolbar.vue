@@ -7,7 +7,6 @@ import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useTilesStore } from '../stores/tiles';
-import { track } from '../lib/telemetry';
 import { getPlainSelection } from '../lib/plain-selection';
 import { useFiles } from '../composables/useFiles';
 import { useViewport } from '../composables/useViewport';
@@ -935,7 +934,7 @@ onBeforeUnmount(() => {
       <button
         class="icon-btn"
         data-phone-primary
-        @click="() => { settings.setViewMode('edit'); track('view_mode', { mode: 'edit' }); }"
+        @click="settings.setViewMode('edit')"
         :class="{ active: settings.viewMode === 'edit' }"
         :title="t('toolbar.editOnly')"
       >
@@ -943,7 +942,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         class="icon-btn"
-        @click="() => { settings.setViewMode('split'); track('view_mode', { mode: 'split' }); }"
+        @click="settings.setViewMode('split')"
         :class="{ active: settings.viewMode === 'split' }"
         :title="tip('toolbar.splitPane', 'view.cycleView')"
       >
@@ -952,7 +951,7 @@ onBeforeUnmount(() => {
       <button
         class="icon-btn"
         data-phone-primary
-        @click="() => { settings.setViewMode('liveEdit'); track('view_mode', { mode: 'liveEdit' }); }"
+        @click="settings.setViewMode('liveEdit')"
         :class="{ active: settings.viewMode === 'liveEdit' }"
         :title="t('toolbar.liveEditMode')"
       >
@@ -961,7 +960,7 @@ onBeforeUnmount(() => {
       <button
         class="icon-btn"
         data-phone-primary
-        @click="() => { settings.setViewMode('preview'); track('view_mode', { mode: 'preview' }); }"
+        @click="settings.setViewMode('preview')"
         :class="{ active: settings.viewMode === 'preview' }"
         :title="t('toolbar.previewOnly')"
       >
@@ -969,7 +968,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         class="icon-btn"
-        @click="() => { settings.setViewMode('reading'); track('view_mode', { mode: 'reading' }); }"
+        @click="settings.setViewMode('reading')"
         :class="{ active: settings.viewMode === 'reading' }"
         :title="tip('toolbar.readingMode', 'view.toggleReading')"
       >
@@ -982,7 +981,7 @@ onBeforeUnmount(() => {
       <button
         v-if="settings.viewMode !== 'preview' && settings.viewMode !== 'liveEdit'"
         class="icon-btn"
-        @click="() => { settings.toggleLivePreview(); track('live_preview_toggled', { on: settings.livePreview ? 1 : 0 }); }"
+        @click="settings.toggleLivePreview()"
         :class="{ active: settings.livePreview }"
         :title="settings.livePreview ? t('toolbar.livePreviewOn') : t('toolbar.livePreviewOff')"
       >
@@ -1065,7 +1064,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         class="icon-btn"
-        @click="() => { settings.toggleTheme(); track('theme_changed', { theme: settings.theme }); }"
+        @click="settings.toggleTheme()"
         :title="settings.theme === 'dark' ? t('toolbar.lightMode') : t('toolbar.darkMode')"
       >
         <Icon :name="settings.theme === 'dark' ? 'theme-light' : 'theme-dark'" />

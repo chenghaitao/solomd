@@ -52,4 +52,4 @@
 ## Tips
 
 - The command palette (`Ctrl+K`) lists **every** command, with current shortcuts. If you forget a binding, this is faster than this cheat sheet.
-- Most settings live in `Ctrl+,`, including font size, telemetry opt-out, "open file in new window", and font family.
+- Most settings live in `Ctrl+,`, including font size, "open file in new window", and font family.

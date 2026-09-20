@@ -25,7 +25,7 @@
 - **原生打印转 PDF**：`Ctrl+Shift+Alt+P` 走系统打印对话框，不走 headless Chrome。
 - **演讲模式**：`Ctrl+Alt+P` 全屏播放当前文档，`---` 行分页。
 - **Front matter 的 `imageRoot`**：每篇文章的粘贴/拖拽图片可写到指定目录。
-- **App Store 版默认无遥测**，其他渠道默认开但可关 —— 你说了算。
+- **完全没有遥测** —— SoloMD 不收集任何使用数据，也没有可以用来上报的统计接口。
 
 > 提示：按 `Ctrl+K`（Mac 上 `Cmd+K`）打开 **命令面板** —— SoloMD 能干什么，这里都有。
 

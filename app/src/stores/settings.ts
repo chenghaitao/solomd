@@ -98,10 +98,6 @@ interface Settings {
   limitEditorWidth: boolean;
   // Custom CSS theme override (path to a .css file on disk)
   customCssPath: string;
-  // Anonymous telemetry (Aptabase). Defaults true but user can opt out.
-  telemetryEnabled: boolean;
-  // First-run banner dismissal. Shown once, never again.
-  telemetryNoticeAck: boolean;
   // Restore previously-open tabs + pane layout at startup (default: true).
   restoreSession: boolean;
   // Scope open tabs to the active workspace folder (default: true). Each
@@ -527,8 +523,6 @@ function defaults(): Settings {
     plantumlServer: 'https://www.plantuml.com/plantuml',
     limitEditorWidth: false,
     customCssPath: '',
-    telemetryEnabled: true,
-    telemetryNoticeAck: false,
     restoreSession: true,
     perWorkspaceTabs: true,
     autoReloadExternalChanges: true,
@@ -730,6 +724,12 @@ function load(): Settings {
         if (isMobile()) merged.rightSidebarHidden = true;
         merged.v491MobileLayoutMigrated = true;
       }
+      // Anonymous telemetry was removed from the product. The merge above is
+      // `{ ...defaults(), ...parsed }`, so an existing blob's two telemetry keys
+      // would survive into `merged` and be written back on every save forever.
+      // Drop them once; nothing reads them any more.
+      delete (merged as unknown as Record<string, unknown>).telemetryEnabled;
+      delete (merged as unknown as Record<string, unknown>).telemetryNoticeAck;
       return merged;
     }
   } catch {}
@@ -962,14 +962,6 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleAutoCheckUpdate() {
       this.autoCheckUpdate = !this.autoCheckUpdate;
-      this.persist();
-    },
-    toggleTelemetry() {
-      this.telemetryEnabled = !this.telemetryEnabled;
-      this.persist();
-    },
-    ackTelemetryNotice() {
-      this.telemetryNoticeAck = true;
       this.persist();
     },
     toggleRestoreSession() {

@@ -2,7 +2,15 @@ name = "solomd-web"
 compatibility_date = "2025-01-15"
 pages_build_output_dir = "./dist"
 
-# D1 binding for /api/track + /api/admin/stats.
+# D1 binding. Used by /api/stats for its `stats_cache` fallback row — NOT for
+# analytics: the telemetry pipeline (/api/track, /api/admin/stats and the
+# /admin dashboard) was removed from the product, so nothing writes usage
+# events any more. The database keeps its old `solomd-analytics` name because
+# renaming a live D1 database means recreating it, and `stats_cache` lives in
+# this one; migrations/0001_init_events.sql is likewise kept only as history
+# (its `events` table is no longer read or written — the rows already in it
+# were left untouched).
+#
 # After running `wrangler d1 create solomd-analytics` the CLI prints a
 # database_id — paste it below. Same DB is used by local `wrangler pages
 # dev` (via --local) and the deployed Pages project (bound via the
@@ -13,8 +21,8 @@ database_name = "solomd-analytics"
 database_id = "c2fadaa6-d25d-42d5-b7dc-413e8123a075"
 migrations_dir = "migrations"
 
-# ADMIN_TOKEN is the bearer token required by /api/admin/stats.
-# Set via `wrangler pages secret put ADMIN_TOKEN` (production)
-# or in a .dev.vars file at the web/ root for local dev:
-#     ADMIN_TOKEN=dev-anything-you-like
-# .dev.vars is gitignored; never commit a real production token.
+# ADMIN_TOKEN used to gate /api/admin/stats, which no longer exists. The
+# secret is now unused — delete it with
+#     wrangler pages secret delete ADMIN_TOKEN --project-name solomd-web
+# (left in place here rather than silently dropped, since this file cannot
+# remove a deployed secret).

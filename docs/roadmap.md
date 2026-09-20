@@ -12,7 +12,7 @@ This document is the source of truth for what we're building, in what order, and
 2. **Local-first, plain `.md`.** Files stay yours. No proprietary database, no required cloud, no lock-in. Sync is opt-in (and a paid tier candidate later); the core experience never depends on it.
 3. **Cross-platform is the moat.** Most credible competitors (Tolaria, Moraya, Bear, MiaoYan, iA Writer) are Mac-only or Mac+Linux. We ship Mac + Windows + Linux x64/ARM64 + iPad. **Don't sacrifice this for any feature.**
 4. **CJK first-class.** Encoding auto-detect, simplified↔traditional, pinyin export, multi-language UI. SiYuan dominates simplified-Chinese power users; we own writer/academic Chinese, plus Japanese/Korean/Traditional which SiYuan does less well.
-5. **Privacy by default.** No telemetry without explicit consent. App Store builds disable it entirely. AI features are opt-in; keys live in OS keychain.
+5. **Privacy by default.** No telemetry at all — no usage events, no identifiers, no analytics endpoint to send them to. AI features are opt-in; keys live in OS keychain.
 6. **Combination > single feature.** No single feature wins (Tolaria has AutoGit, Moraya has MCP, Khoj has RAG, AFFiNE has canvas). The *combination* of small-installer + 14 AI + Pandoc + iPad + AutoGit + MCP — that's the moat.
 7. **Write less code that we have to maintain forever.** Prefer Hunspell / Pandoc / git2 / rmcp / Ollama over rolling our own.
 

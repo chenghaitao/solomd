@@ -390,13 +390,6 @@ export const nl: I18n = {
     updateAvailable: 'Nieuwe versie {version} beschikbaar',
     upToDate: 'Je bent up-to-date',
     updateCheckFailed: 'Kon de updateserver niet bereiken — controleer je netwerk en probeer opnieuw',
-    telemetry: 'Anonieme gebruiksgegevens versturen',
-    telemetryHint:
-      'Helpt SoloMD verbeteren. Geen IP-adres, geen bestandsinhoud, geen persoonlijke informatie.',
-    telemetryNotice:
-      'SoloMD verzamelt anonieme gebruiksgegevens (functiegebruik, versie, OS) om het product te verbeteren. Geen IP-adres, bestandsinhoud of persoonlijke informatie. Je kunt dit op elk moment uitschakelen in de instellingen.',
-    telemetryNoticeOk: 'Begrepen',
-    telemetryNoticeDisable: 'Nu uitschakelen',
     imageUploaderSection: 'Afbeeldingen uploaden (afbeeldingshosting)',
     imageUploader: 'Afbeeldingen uploaden naar',
     imageUploaderNone: 'Niet uploaden — lokaal opslaan',

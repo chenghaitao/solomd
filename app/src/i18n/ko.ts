@@ -390,13 +390,6 @@ export const ko: I18n = {
     updateAvailable: '새 버전 {version} 사용 가능',
     upToDate: '최신 버전입니다',
     updateCheckFailed: '업데이트 서버에 연결할 수 없습니다 — 네트워크를 확인하고 다시 시도하세요',
-    telemetry: '익명 사용 데이터 전송',
-    telemetryHint:
-      'SoloMD 개선에 도움이 됩니다. IP 주소, 파일 내용, 개인정보는 포함되지 않습니다.',
-    telemetryNotice:
-      'SoloMD는 제품 개선을 위해 익명 사용 데이터(기능 사용, 버전, OS)를 수집합니다. IP 주소, 파일 내용, 개인정보는 포함되지 않습니다. 설정에서 언제든 끌 수 있습니다.',
-    telemetryNoticeOk: '확인',
-    telemetryNoticeDisable: '지금 끄기',
     imageUploaderSection: '이미지 업로드 (이미지 호스팅)',
     imageUploader: '이미지 업로드 위치',
     imageUploaderNone: '업로드 안 함 — 로컬에 저장',

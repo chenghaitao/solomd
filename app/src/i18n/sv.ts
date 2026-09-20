@@ -390,13 +390,6 @@ export const sv: I18n = {
     updateAvailable: 'Ny version {version} tillgänglig',
     upToDate: 'Du har den senaste versionen',
     updateCheckFailed: 'Kunde inte nå uppdateringsservern — kontrollera ditt nätverk och försök igen',
-    telemetry: 'Skicka anonym användardata',
-    telemetryHint:
-      'Hjälper till att förbättra SoloMD. Ingen IP-adress, inget filinnehåll, ingen personlig information.',
-    telemetryNotice:
-      'SoloMD samlar in anonym användardata (funktionsanvändning, version, OS) för att förbättra produkten. Ingen IP-adress, inget filinnehåll och ingen personlig information. Du kan stänga av detta när som helst i inställningarna.',
-    telemetryNoticeOk: 'Uppfattat',
-    telemetryNoticeDisable: 'Stäng av nu',
     imageUploaderSection: 'Bilduppladdning (bildhotell)',
     imageUploader: 'Ladda upp bilder till',
     imageUploaderNone: 'Ladda inte upp — spara lokalt',

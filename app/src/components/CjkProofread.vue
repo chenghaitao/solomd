@@ -31,7 +31,6 @@ import { useTabsStore } from '../stores/tabs';
 import { useToastsStore } from '../stores/toasts';
 import { useTilesStore } from '../stores/tiles';
 import { useI18n } from '../i18n';
-import { track } from '../lib/telemetry';
 
 interface Issue {
   line: number;
@@ -68,7 +67,6 @@ watch(
     if (v) {
       await nextTick();
       await rescan();
-      track('cjk_proofread_opened');
     }
   },
 );
@@ -193,7 +191,6 @@ function applyOne(issue: Issue) {
   const next = before + issue.suggestion + after;
   tabs.setContent(tab.id, next);
   toasts.success(t('proofread.appliedToast', { n: 1 }));
-  track('cjk_proofread_apply', { category: issue.category, severity: issue.severity });
   // The watcher on `tab.content` will trigger a rescan automatically.
 }
 
@@ -240,7 +237,6 @@ function applyAll(severity: 'high' | 'medium' | 'low' | 'all') {
   if (next === tab.content) return;
   tabs.setContent(tab.id, next);
   toasts.success(t('proofread.appliedToast', { n: applied }));
-  track('cjk_proofread_apply_all', { severity, count: applied });
 }
 
 function onKey(e: KeyboardEvent) {

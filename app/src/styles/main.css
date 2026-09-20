@@ -590,26 +590,6 @@ button:disabled {
   display: none;
 }
 
-/* First-run telemetry notice: four lines of small print plus two buttons is
-   ~90px of a 780px screen. Clamp it to two lines (the full text stays in
-   Settings, where the toggle lives) and keep the buttons finger-sized. */
-:root.narrow-viewport .telemetry-banner {
-  padding: 6px 8px;
-  gap: 8px;
-}
-:root.narrow-viewport .telemetry-banner__text {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 11px;
-  line-height: 1.35;
-}
-:root.narrow-viewport .telemetry-banner__btn {
-  min-height: 34px;
-  white-space: nowrap;
-}
-
 /* Dialogs: a desktop modal is a card floating over the document. On a phone
    that card is the task — give it the screen instead of centring a 298px box
    in a 390px viewport with the width going to margins. Kept as a sheet with

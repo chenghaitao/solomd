@@ -390,13 +390,6 @@ export const pl: I18n = {
     updateAvailable: 'Dostępna nowa wersja {version}',
     upToDate: 'Masz najnowszą wersję',
     updateCheckFailed: 'Nie udało się połączyć z serwerem aktualizacji — sprawdź sieć i spróbuj ponownie',
-    telemetry: 'Wysyłaj anonimowe dane użytkowania',
-    telemetryHint:
-      'Pomaga ulepszać SoloMD. Bez adresu IP, bez treści plików, bez danych osobowych.',
-    telemetryNotice:
-      'SoloMD zbiera anonimowe dane użytkowania (używane funkcje, wersja, system) aby pomóc ulepszać produkt. Bez adresu IP, treści plików ani danych osobowych. Możesz to wyłączyć w każdej chwili w ustawieniach.',
-    telemetryNoticeOk: 'OK',
-    telemetryNoticeDisable: 'Wyłącz teraz',
     imageUploaderSection: 'Przesyłanie obrazów (hosting obrazów)',
     imageUploader: 'Przesyłaj obrazy do',
     imageUploaderNone: 'Nie przesyłaj — zapisz lokalnie',
