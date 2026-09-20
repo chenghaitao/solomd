@@ -1,0 +1,11 @@
+# cmd.exe's batch parser expects CRLF line endings. Whether a checkout gets
+# them otherwise depends on the per-clone `core.autocrlf` setting: a clone made
+# with `autocrlf=input` (or false) writes these files out LF-only, and cmd.exe
+# then loses its line offsets and starts executing fragments of lines - the bug
+# fixed alongside this file. `text eol=crlf` normalises to LF in the repository
+# and always writes CRLF on checkout, whatever the clone's settings are.
+#
+# Keep the .bat files ASCII-only as well: cmd.exe decodes a batch file with the
+# active console codepage (936 on a Chinese Windows), so a UTF-8 comment can
+# consume a CR byte even with the endings right. See the header of build.bat.
+*.bat text eol=crlf
