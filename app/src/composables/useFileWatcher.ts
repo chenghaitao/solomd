@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
+import { useTilesStore } from '../stores/tiles';
 import type { FileReadResult } from '../types';
 
 type FileChangedAction = 'reload' | 'overwrite' | 'cancel';
@@ -11,6 +12,7 @@ type ShowDialog = (fileName: string) => Promise<FileChangedAction>;
 export function useFileWatcher(showDialog: ShowDialog) {
   const tabs = useTabsStore();
   const settings = useSettingsStore();
+  const tiles = useTilesStore();
   const watchedPaths = new Set<string>();
   let unlisten: UnlistenFn | null = null;
   const pendingPaths = new Set<string>();
@@ -19,6 +21,11 @@ export function useFileWatcher(showDialog: ShowDialog) {
   let revalidating = false;
   let lastRevalidateAt = 0;
   const REVALIDATE_THROTTLE_MS = 1500;
+  /** #317 — how often the watchdog re-checks the tabs on screen. Slow enough
+   *  to be free (one read per visible pane), fast enough that a dropped
+   *  OneDrive event is not stale for long. */
+  const WATCHDOG_INTERVAL_MS = 30_000;
+  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   async function syncWatchedPaths() {
     const currentPaths = new Set<string>();
@@ -135,15 +142,27 @@ export function useFileWatcher(showDialog: ShowDialog) {
    *
    * `startup` adopts the file silently for clean tabs and leaves dirty ones
    * alone: nothing the user typed is at stake, the buffer is simply out of
-   * date. `focus` routes changes through the ordinary conflict path instead,
-   * so the auto-reload preference and the "file changed" dialog still decide.
+   * date. `focus` and `watchdog` route changes through the ordinary conflict
+   * path instead, so the auto-reload preference and the "file changed" dialog
+   * still decide.
+   *
+   * `onlyTabIds` narrows the sweep to a subset. The watchdog passes just the
+   * tabs on screen: nobody can be misled by a document they are not looking
+   * at, and that holds the cost to one read per visible pane per interval
+   * instead of one per open tab.
    */
-  async function revalidateTabs(mode: 'startup' | 'focus') {
+  async function revalidateTabs(
+    mode: 'startup' | 'focus' | 'watchdog',
+    onlyTabIds?: Set<string>,
+  ) {
     if (revalidating) return;
     revalidating = true;
     try {
+      const candidates = onlyTabIds
+        ? tabs.tabs.filter((t) => onlyTabIds.has(t.id))
+        : tabs.tabs;
       const paths = [
-        ...new Set(tabs.tabs.map((t) => t.filePath).filter(Boolean) as string[]),
+        ...new Set(candidates.map((t) => t.filePath).filter(Boolean) as string[]),
       ];
       for (const filePath of paths) {
         if (pendingPaths.has(filePath)) continue;
@@ -161,6 +180,19 @@ export function useFileWatcher(showDialog: ShowDialog) {
         }
         if (matching.every((t) => t.savedContent === read.normalized)) {
           lastPrompted.delete(filePath);
+          continue;
+        }
+        // A dirty tab whose buffer already equals the disk revision is not
+        // stale: our own save is in flight, or an external app wrote exactly
+        // the text we hold. Prompting would offer to discard edits that are
+        // already the file. This compares `content`, not `savedContent`, which
+        // is the point — a sweep racing markSaved() would otherwise fire the
+        // dialog the instant the user saves.
+        if (
+          matching.some(
+            (t) => t.content !== t.savedContent && t.content === read.normalized,
+          )
+        ) {
           continue;
         }
         if (mode === 'startup') {
@@ -184,7 +216,11 @@ export function useFileWatcher(showDialog: ShowDialog) {
     }
   }
 
-  function revalidateSoon(mode: 'startup' | 'focus') {
+  function revalidateSoon(mode: 'focus') {
+    // A sweep already in flight (the watchdog, or another focus) will see this
+    // anyway — stamping the throttle here would swallow the focus that caused
+    // it and push the refresh out to the next trigger.
+    if (revalidating) return;
     const now = Date.now();
     if (now - lastRevalidateAt < REVALIDATE_THROTTLE_MS) return;
     lastRevalidateAt = now;
@@ -195,6 +231,40 @@ export function useFileWatcher(showDialog: ShowDialog) {
   const onVisibility = () => {
     if (document.visibilityState === 'visible') revalidateSoon('focus');
   };
+
+  /**
+   * #317 — the slow watchdog, for what neither the OS watcher nor the focus
+   * sweep can cover: a change that landed inside SoloMD's own suppression
+   * window (an mtime within tolerance of a save, the 30s rewrite window after
+   * a git pull) while the user stayed in the app, and vaults on OneDrive or a
+   * network share, where the platform watcher drops events silently. Startup
+   * plus focus only ever ran when the window came back — which never happens
+   * for someone who never left.
+   *
+   * Scoped to the tabs on screen, and skipped entirely while the document is
+   * hidden (mobile, another tab), so nothing pops up behind the user's back.
+   * Dirty tabs still go through the ordinary conflict path, and the bytes the
+   * user already dismissed are remembered, so a 30s heartbeat cannot turn into
+   * a 30s dialog.
+   */
+  function startWatchdog() {
+    if (watchdogTimer !== null) return;
+    watchdogTimer = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      const onScreen = new Set(
+        tiles.allLeaves.map((l) => l.activeTabId).filter(Boolean) as string[],
+      );
+      if (onScreen.size === 0) return;
+      void revalidateTabs('watchdog', onScreen);
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  function stopWatchdog() {
+    if (watchdogTimer !== null) {
+      clearInterval(watchdogTimer);
+      watchdogTimer = null;
+    }
+  }
 
   // Watch tabs for path changes
   const stopWatcher = watch(
@@ -218,10 +288,13 @@ export function useFileWatcher(showDialog: ShowDialog) {
     void revalidateTabs('startup');
     window.addEventListener('focus', onWindowFocus);
     document.addEventListener('visibilitychange', onVisibility);
+    // ...and keep looking, for the changes no event will ever announce.
+    startWatchdog();
   });
 
   onBeforeUnmount(async () => {
     stopWatcher();
+    stopWatchdog();
     window.removeEventListener('focus', onWindowFocus);
     document.removeEventListener('visibilitychange', onVisibility);
     if (unlisten) {
