@@ -17,6 +17,7 @@ import {
   conflictFor,
   eventToCombo,
   formatCombo,
+  interceptedBindings,
   type KeyActionDef,
 } from '../lib/keybindings';
 import { isMacOS } from '../lib/platform';
@@ -113,6 +114,27 @@ function isCustomised(action: KeyActionDef): boolean {
   // that doesn't exist yet), which would leave Reset disabled after a rebind.
   return action.id in settings.keybindings;
 }
+/**
+ * Shortcuts another program takes over before SoloMD sees them — AMD
+ * Software's global hotkeys own most of the Ctrl+Shift row, Microsoft Pinyin
+ * takes one more. Nothing can be detected at runtime (the chord never
+ * arrives), so the panel names them and offers somewhere else to put the
+ * commands. Empty on every platform but Windows, and empty once the user has
+ * moved them.
+ */
+const intercepted = computed(() => interceptedBindings(settings.keybindings));
+const interceptedIds = computed(() => new Set(intercepted.value.map((b) => b.action.id)));
+
+function interceptionFor(action: KeyActionDef) {
+  return intercepted.value.find((b) => b.action.id === action.id) ?? null;
+}
+
+function applyHotkeyCompatPreset(): void {
+  const moves = intercepted.value;
+  for (const b of moves) settings.setKeybinding(b.action.id, b.alternative);
+  toasts.success(t('settings.keysCompatApplied', { count: String(moves.length) }));
+}
+
 function startRecording(actionId: string): void {
   recordError.value = null;
   recordingAction.value = actionId;
@@ -1352,6 +1374,22 @@ function onSelectPdfFont(v: string) {
 
         <section data-cat="keys">
           <p class="setting-hint" style="margin-top:0;">{{ t('settings.keysHint') }}</p>
+          <div v-if="intercepted.length" class="kb-clash">
+            <p class="kb-clash__title">⚠ {{ t('settings.keysInterceptedTitle') }}</p>
+            <p class="kb-clash__body">{{ t('settings.keysInterceptedBody') }}</p>
+            <ul class="kb-clash__list">
+              <li v-for="b in intercepted" :key="b.action.id">
+                <kbd class="kb-chip">{{ formatCombo(b.combo, macKeys) }}</kbd>
+                {{ actionLabel(b.action) }}
+                <span class="kb-clash__source">— {{ b.source }}</span>
+                <span class="kb-clash__arrow">→</span>
+                <kbd class="kb-chip">{{ formatCombo(b.alternative, macKeys) }}</kbd>
+              </li>
+            </ul>
+            <button class="kb-btn kb-btn--wide" @click="applyHotkeyCompatPreset()">
+              {{ t('settings.keysApplyCompat') }}
+            </button>
+          </div>
           <div v-for="group in keyGroups" :key="group.key" class="kb-group">
             <h4 class="kb-group__title">{{ t('settings.keysCat' + group.key.charAt(0).toUpperCase() + group.key.slice(1)) }}</h4>
             <div v-for="action in group.items" :key="action.id" class="kb-row">
@@ -1361,7 +1399,17 @@ function onSelectPdfFont(v: string) {
                   <kbd class="kb-chip kb-chip--recording">{{ t('settings.keysRecording') }}</kbd>
                 </template>
                 <template v-else-if="actionCombos(action).length">
-                  <kbd v-for="c in actionCombos(action)" :key="c" class="kb-chip">{{ c }}</kbd>
+                  <kbd
+                    v-for="c in actionCombos(action)"
+                    :key="c"
+                    class="kb-chip"
+                    :class="{ 'kb-chip--intercepted': interceptedIds.has(action.id) }"
+                    :title="
+                      interceptedIds.has(action.id)
+                        ? t('settings.keysInterceptedBy', { source: interceptionFor(action)?.source || '' })
+                        : undefined
+                    "
+                  >{{ c }}<span v-if="interceptedIds.has(action.id)" class="kb-chip__warn">⚠</span></kbd>
                 </template>
                 <span v-else class="kb-row__unbound">{{ t('settings.keysUnbound') }}</span>
               </span>
@@ -1706,6 +1754,47 @@ function onSelectPdfFont(v: string) {
 
 <style scoped>
 /* #180 shortcut editor */
+.kb-clash {
+  border: 1px solid var(--warning-border, rgba(214, 145, 22, 0.45));
+  background: var(--warning-bg, rgba(214, 145, 22, 0.08));
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kb-clash__title {
+  margin: 0;
+  font-weight: 600;
+}
+.kb-clash__body {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.kb-clash__list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.kb-clash__source {
+  opacity: 0.7;
+}
+.kb-clash__arrow {
+  opacity: 0.6;
+  padding: 0 2px;
+}
+.kb-chip--intercepted {
+  border-color: var(--warning-border, rgba(214, 145, 22, 0.6));
+}
+.kb-chip__warn {
+  margin-left: 3px;
+  font-size: 10px;
+}
 .kb-group { margin-bottom: 14px; }
 .kb-group__title {
   margin: 12px 0 6px;

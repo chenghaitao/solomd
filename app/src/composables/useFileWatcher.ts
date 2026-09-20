@@ -3,39 +3,22 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
-import { useTilesStore } from '../stores/tiles';
-import type { FileReadResult, Tab } from '../types';
+import type { FileReadResult } from '../types';
 
 type FileChangedAction = 'reload' | 'overwrite' | 'cancel';
 type ShowDialog = (fileName: string) => Promise<FileChangedAction>;
 
-/// Minimum gap between two focus-driven revalidation sweeps. Switching apps is
-/// chatty (Spotlight, screen recording, the OS file picker…) and each sweep
-/// re-reads every open tab from disk.
-const FOCUS_REVALIDATE_THROTTLE_MS = 1_500;
-
-/// Watchdog sweep interval — see `startWatchdog`.
-const WATCHDOG_INTERVAL_MS = 30_000;
-
 export function useFileWatcher(showDialog: ShowDialog) {
   const tabs = useTabsStore();
   const settings = useSettingsStore();
-  const tiles = useTilesStore();
   const watchedPaths = new Set<string>();
   let unlisten: UnlistenFn | null = null;
   const pendingPaths = new Set<string>();
-  /// path → the exact disk revision we already reacted to. Without this a
-  /// focus sweep would re-prompt for the same untouched external edit every
-  /// time the user comes back after answering "cancel".
-  const lastHandledDisk = new Map<string, string>();
-  let lastFocusRevalidateAt = 0;
+  /** Disk bytes the user has already been asked about, per path. */
+  const lastPrompted = new Map<string, string>();
   let revalidating = false;
-  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
-
-  /// CRLF→LF, mirroring CodeMirror's own doc normalization. Comparing raw
-  /// disk bytes against a normalized buffer would report a phantom change on
-  /// every Windows (CRLF) file.
-  const normalize = (s: string) => (s.includes('\r\n') ? s.replace(/\r\n/g, '\n') : s);
+  let lastRevalidateAt = 0;
+  const REVALIDATE_THROTTLE_MS = 1500;
 
   async function syncWatchedPaths() {
     const currentPaths = new Set<string>();
@@ -69,147 +52,22 @@ export function useFileWatcher(showDialog: ShowDialog) {
 
   async function reloadTab(tabId: string, filePath: string) {
     const result = await invoke<FileReadResult>('read_file', { path: filePath });
-    // `applyDiskRead` normalizes CRLF→LF so reloads behave like fresh opens
-    // (CodeMirror does the same normalization internally, otherwise a re-read
-    // of a CRLF file leaves savedContent=CRLF but the editor's doc=LF and
-    // dirty flips on without edits — same bug as openFromDisk).
+    // CRLF→LF normalization, encoding, BOM and line-ending all live in
+    // `applyDiskRead` so a reload and a fresh open cannot drift apart.
     tabs.applyDiskRead(tabId, {
       content: result.content,
       encoding: result.encoding,
       hadBom: result.had_bom,
-      language: result.language,
     });
-    lastHandledDisk.set(filePath, normalize(result.content));
   }
 
-  /**
-   * Stale-buffer sweep — the reason this exists.
-   *
-   * The OS file watcher only reports changes that happen *while SoloMD is
-   * running* and *while the path is registered*, and the Rust side additionally
-   * suppresses events it believes are self-writes (a ±2s mtime epsilon around
-   * our own save, plus a 30s "this whole subtree is being rewritten" window
-   * opened by a git pull). Anything written outside those windows — the far
-   * more common case of editing the file in VS Code while SoloMD is closed, or
-   * a sync client landing a change right after a pull — is invisible to it, so
-   * a tab restored from the previous session could sit on yesterday's bytes
-   * forever and re-opening the file appeared to do nothing.
-   *
-   * Reading each open file once at startup, and again whenever the window
-   * regains focus, closes that hole.
-   *
-   * `promptDirty` decides what to do about a tab with unsaved edits whose disk
-   * copy also moved: `true` routes it through the same dialog the watcher uses,
-   * `false` leaves it strictly alone (startup — SoloMD may have been closed for
-   * days, and a modal about a file nobody has touched yet this session is worse
-   * than the user noticing the unsaved-changes dot).
-   *
-   * `tabIds` narrows the sweep to a subset (the watchdog only checks the tabs
-   * currently on screen) — omitted means every open file.
-   */
-  async function revalidateTabs(opts: { promptDirty?: boolean; tabIds?: Set<string> } = {}) {
-    if (revalidating) return;
-    revalidating = true;
-    try {
-      const candidates = opts.tabIds
-        ? tabs.tabs.filter((t) => opts.tabIds!.has(t.id))
-        : tabs.tabs;
-      const paths = [
-        ...new Set(
-          candidates
-            .filter((t): t is Tab & { filePath: string } => !!t.filePath)
-            .map((t) => t.filePath),
-        ),
-      ];
-
-      for (const path of paths) {
-        const matching = tabs.tabs.filter((t) => t.filePath === path);
-        if (matching.length === 0) continue;
-
-        let result: FileReadResult;
-        try {
-          result = await invoke<FileReadResult>('read_file', { path });
-        } catch {
-          // Unreadable: deleted, moved, an Android `content://` vault URI
-          // (Rust fs can't open those), or a permission prompt is pending. A
-          // failed read must never touch the buffer.
-          continue;
-        }
-        const disk = normalize(result.content);
-
-        // Nothing to do unless some tab's last-known-disk bytes differ from
-        // what is actually on disk now. This is also what keeps a plain focus
-        // sweep free of false positives for files SoloMD itself just saved.
-        if (!matching.some((t) => t.savedContent !== disk)) continue;
-        if (lastHandledDisk.get(path) === disk) continue;
-        // A dirty tab whose buffer already equals the disk revision is a save
-        // of ours still in flight (or an external app that wrote exactly our
-        // text). Nothing is stale, and reloading/prompting here would drop the
-        // edits markSaved() is about to legitimize.
-        if (matching.some((t) => t.content !== t.savedContent && normalize(t.content) === disk)) {
-          continue;
-        }
-
-        if (opts.promptDirty) {
-          await handleFileChanged(path);
-        } else {
-          for (const t of matching) {
-            if (t.content !== t.savedContent) continue; // keep unsaved work
-            tabs.applyDiskRead(t.id, {
-              content: result.content,
-              encoding: result.encoding,
-              hadBom: result.had_bom,
-              language: result.language,
-            });
-          }
-        }
-        lastHandledDisk.set(path, disk);
-      }
-    } finally {
-      revalidating = false;
-    }
-  }
-
-  function onWindowFocus() {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-    const now = Date.now();
-    if (now - lastFocusRevalidateAt < FOCUS_REVALIDATE_THROTTLE_MS) return;
-    lastFocusRevalidateAt = now;
-    void revalidateTabs({ promptDirty: true });
-  }
-
-  /// Mobile / tab-switching equivalent of `focus`. Desktop fires both when
-  /// coming back from another app, which the throttle collapses into one sweep.
-  function onVisibilityChange() {
-    if (document.visibilityState === 'visible') onWindowFocus();
-  }
-
-  /**
-   * Slow watchdog for the cases neither the OS watcher nor the focus sweep can
-   * cover: a change that landed inside SoloMD's own suppression window (30s
-   * after a git pull rewrote the subtree) while the user stayed in the app, and
-   * vaults on OneDrive / network shares, where the platform watcher silently
-   * drops events.
-   *
-   * Deliberately scoped to the tabs actually on screen — the user can only be
-   * misled by a document they are looking at, and that keeps the cost at one
-   * read per visible pane per interval instead of one per open tab.
-   */
-  function startWatchdog() {
-    if (watchdogTimer !== null) return;
-    watchdogTimer = setInterval(() => {
-      if (document.visibilityState === 'hidden') return;
-      const onScreen = new Set(tiles.allLeaves.map((l) => l.activeTabId).filter(Boolean));
-      if (onScreen.size === 0) return;
-      void revalidateTabs({ promptDirty: true, tabIds: onScreen });
-    }, WATCHDOG_INTERVAL_MS);
-  }
-
-  function stopWatchdog() {
-    if (watchdogTimer !== null) {
-      clearInterval(watchdogTimer);
-      watchdogTimer = null;
-    }
+  /** A file's current bytes, normalized the way a tab stores them. */
+  async function readNormalized(filePath: string) {
+    const result = await invoke<FileReadResult>('read_file', { path: filePath });
+    const normalized = result.content.includes('\r\n')
+      ? result.content.replace(/\r\n/g, '\n')
+      : result.content;
+    return { result, normalized };
   }
 
   async function handleFileChanged(filePath: string) {
@@ -240,12 +98,11 @@ export function useFileWatcher(showDialog: ShowDialog) {
 
       // Dirty tab in edit/split mode — show dialog
       pendingPaths.add(filePath);
-      let decided: FileChangedAction | null = null;
       try {
-        decided = await showDialog(tab.fileName);
-        if (decided === 'reload') {
+        const action = await showDialog(tab.fileName);
+        if (action === 'reload') {
           await reloadTab(tab.id, filePath);
-        } else if (decided === 'overwrite') {
+        } else if (action === 'overwrite') {
           const payload =
             tab.lineEnding === 'crlf' ? tab.content.replace(/\n/g, '\r\n') : tab.content;
           await invoke('write_file', {
@@ -259,21 +116,85 @@ export function useFileWatcher(showDialog: ShowDialog) {
         console.warn('file-changed dialog action failed:', e);
       } finally {
         pendingPaths.delete(filePath);
-        // "Cancel" leaves disk ahead of the buffer on purpose, so record the
-        // revision the user just declined. The focus / watchdog sweeps
-        // compare against this map and would otherwise re-open the same
-        // dialog every time the window regained focus.
-        if (decided !== 'reload') {
-          try {
-            const latest = await invoke<FileReadResult>('read_file', { path: filePath });
-            lastHandledDisk.set(filePath, normalize(latest.content));
-          } catch {
-            // File vanished / unreadable — nothing to remember.
-          }
-        }
       }
     }
   }
+
+  /**
+   * #317 — re-read every open file and pick up what the watcher structurally
+   * cannot see.
+   *
+   * Tabs are persisted with their text, so what you see after a restart is
+   * what was in the buffer when SoloMD closed — never compared against the
+   * file. The Rust watcher only reports changes while the app is running and
+   * the path is registered, and it deliberately filters events that look like
+   * our own writes (an mtime within tolerance of a save, and a 30s window
+   * after a sync rewrite). So a file edited in another editor while SoloMD
+   * was closed — the reported case — was shown stale forever, and the obvious
+   * remedy of opening the file again did nothing either.
+   *
+   * `startup` adopts the file silently for clean tabs and leaves dirty ones
+   * alone: nothing the user typed is at stake, the buffer is simply out of
+   * date. `focus` routes changes through the ordinary conflict path instead,
+   * so the auto-reload preference and the "file changed" dialog still decide.
+   */
+  async function revalidateTabs(mode: 'startup' | 'focus') {
+    if (revalidating) return;
+    revalidating = true;
+    try {
+      const paths = [
+        ...new Set(tabs.tabs.map((t) => t.filePath).filter(Boolean) as string[]),
+      ];
+      for (const filePath of paths) {
+        if (pendingPaths.has(filePath)) continue;
+        const matching = tabs.tabs.filter((t) => t.filePath === filePath);
+        if (!matching.length) continue;
+        const anyDirty = matching.some((t) => t.content !== t.savedContent);
+        if (mode === 'startup' && anyDirty) continue;
+        let read: { result: FileReadResult; normalized: string };
+        try {
+          read = await readNormalized(filePath);
+        } catch {
+          // Deleted, renamed, or on a drive that is not mounted right now —
+          // none of which this pass should act on.
+          continue;
+        }
+        if (matching.every((t) => t.savedContent === read.normalized)) {
+          lastPrompted.delete(filePath);
+          continue;
+        }
+        if (mode === 'startup') {
+          for (const t of matching) {
+            tabs.applyDiskRead(t.id, {
+              content: read.result.content,
+              encoding: read.result.encoding,
+              hadBom: read.result.had_bom,
+            });
+          }
+          continue;
+        }
+        // Asking again about the same bytes the user already dismissed turns
+        // every window focus into the same dialog.
+        if (lastPrompted.get(filePath) === read.normalized) continue;
+        lastPrompted.set(filePath, read.normalized);
+        await handleFileChanged(filePath);
+      }
+    } finally {
+      revalidating = false;
+    }
+  }
+
+  function revalidateSoon(mode: 'startup' | 'focus') {
+    const now = Date.now();
+    if (now - lastRevalidateAt < REVALIDATE_THROTTLE_MS) return;
+    lastRevalidateAt = now;
+    void revalidateTabs(mode);
+  }
+
+  const onWindowFocus = () => revalidateSoon('focus');
+  const onVisibility = () => {
+    if (document.visibilityState === 'visible') revalidateSoon('focus');
+  };
 
   // Watch tabs for path changes
   const stopWatcher = watch(
@@ -292,26 +213,17 @@ export function useFileWatcher(showDialog: ShowDialog) {
       console.warn('file-changed listener failed:', e);
     }
 
-    // Restored tabs carry the content they had when the app last closed, and
-    // no watcher event will ever arrive for what happened while it was down —
-    // re-read every open file once so those edits (and any change the Rust
-    // side suppressed as a self-write) actually show up.
-    void revalidateTabs({ promptDirty: false });
-
-    // Cheap safety net for the same class of miss while we ARE running: a
-    // dropped/suppressed watcher event, or an external write that landed
-    // during SoloMD's own 30s post-pull rewrite window. Focus is the moment
-    // the user looks at the app again, so it is the right time to re-check.
+    // #317 — the restored buffers are whatever was open last time; check them
+    // against disk before the user reads a stale document.
+    void revalidateTabs('startup');
     window.addEventListener('focus', onWindowFocus);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    startWatchdog();
+    document.addEventListener('visibilitychange', onVisibility);
   });
 
   onBeforeUnmount(async () => {
     stopWatcher();
-    stopWatchdog();
     window.removeEventListener('focus', onWindowFocus);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
+    document.removeEventListener('visibilitychange', onVisibility);
     if (unlisten) {
       unlisten();
       unlisten = null;

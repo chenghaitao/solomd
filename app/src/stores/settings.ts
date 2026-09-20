@@ -459,6 +459,34 @@ export function defaultPdfDefaults(): PdfDefaults {
   };
 }
 
+/**
+ * Make sure the right sidebar has something to draw, and report whether it
+ * now does. Supplied by the shell (App.vue), which owns the per-pane rules —
+ * asking it beats re-deriving them here, and it keeps this store from
+ * importing the tabs store it already imports back.
+ *
+ * Why it exists: the strip only renders when at least one pane can draw, and
+ * most panes need a workspace folder (Backlinks also needs a markdown tab).
+ * On a fresh install with no folder open, Backlinks and Tags — the two panes
+ * on by default — can draw nothing, so toggling the strip flipped a flag and
+ * changed nothing on screen in either direction. The toolbar button, its
+ * shortcut and the palette entry all read as dead until the user happened to
+ * switch on the Outline, the one pane that needs only a markdown tab.
+ */
+let rightSidebarShell: {
+  /** Is the strip on screen right now? */
+  visible: () => boolean;
+  /** Switch something on that can actually draw; false if nothing can. */
+  ensureRenderable: () => boolean;
+} | null = null;
+
+export function setRightSidebarShell(shell: {
+  visible: () => boolean;
+  ensureRenderable: () => boolean;
+}) {
+  rightSidebarShell = shell;
+}
+
 function defaults(): Settings {
   const prefersDark =
     typeof window !== 'undefined' &&
@@ -885,7 +913,16 @@ export const useSettingsStore = defineStore('settings', {
       // toggling back on can restore the exact layout instead of a blank
       // sidebar; when restoring, ensure at least one pane is on so the
       // sidebar isn't empty.
-      if (!this.rightSidebarHidden) {
+      //
+      // Which way to go is decided by what is on screen, not by this flag.
+      // The two differ whenever the flag says "shown" but every pane in the
+      // strip is gated off (no workspace folder), and then a press took the
+      // hide branch and changed nothing visible — the reported dead button,
+      // which needed a second press to do anything at all.
+      const onScreen = rightSidebarShell
+        ? rightSidebarShell.visible()
+        : !this.rightSidebarHidden;
+      if (onScreen) {
         this._rsPanesBeforeHide = {
           showBacklinks: this.showBacklinks,
           showRelationships: this.showRelationships,
@@ -913,8 +950,21 @@ export const useSettingsStore = defineStore('settings', {
           this.showBacklinks = true;
           this.showTagsPanel = true;
         }
+        // Switching those flags on is not enough to make the strip appear:
+        // they are gated on a workspace folder. Ask the shell to find
+        // something that can actually draw (it falls back to the Outline,
+        // which needs only a markdown tab).
+        if (rightSidebarShell && !rightSidebarShell.ensureRenderable()) {
+          // Nothing in the strip can draw anything: no folder, no markdown
+          // document. Stay hidden rather than leave a button that looks
+          // broken, and let the caller say why out loud.
+          this.rightSidebarHidden = true;
+          this.persist();
+          return false;
+        }
       }
       this.persist();
+      return !this.rightSidebarHidden;
     },
     /** v4.3.0 PR #75 — called when the user toggles off the last visible
      *  pane via the right-click context menu; auto-hides the sidebar and

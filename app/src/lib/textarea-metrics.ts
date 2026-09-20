@@ -90,8 +90,12 @@ export function measureLineHeights(el: HTMLTextAreaElement, text: string): numbe
   }
 }
 
-/** Y offset (px, from content top) of the caret placed at `pos` in `text`. */
-function caretTopAt(mirror: HTMLDivElement, text: string, pos: number): number {
+/** X/Y offset (px, from content top-left) of the caret placed at `pos`. */
+function caretPointAt(
+  mirror: HTMLDivElement,
+  text: string,
+  pos: number,
+): { left: number; top: number } {
   mirror.textContent = '';
   const before = document.createElement('span');
   before.textContent = text.slice(0, pos);
@@ -100,7 +104,12 @@ function caretTopAt(mirror: HTMLDivElement, text: string, pos: number): number {
   const after = document.createElement('span');
   after.textContent = text.slice(pos);
   mirror.append(before, marker, after);
-  return marker.offsetTop;
+  return { left: marker.offsetLeft, top: marker.offsetTop };
+}
+
+/** Y offset (px, from content top) of the caret placed at `pos` in `text`. */
+function caretTopAt(mirror: HTMLDivElement, text: string, pos: number): number {
+  return caretPointAt(mirror, text, pos).top;
 }
 
 /**
@@ -120,56 +129,50 @@ export function caretTopPx(el: HTMLTextAreaElement, text: string, pos: number): 
   }
 }
 
-export interface CaretOffsetInLine {
-  /** x of the caret within its *visual* row, px from the content's left edge. */
+export interface CaretPoint {
+  /** Px from the left edge of the text flow (padding excluded). */
   left: number;
-  /** y of the caret's visual row, px from the *logical line's* top. */
-  rowTop: number;
-  /** Height of one visual row (the drawn caret's height). */
+  /** Px from the top of the text flow (padding and scroll excluded). */
+  top: number;
+  /** Row height at the caret — the drawn caret's height. */
   height: number;
 }
 
 /**
- * Caret x and row-offset inside a single logical line, soft wrap included.
+ * Where to draw a caret of our own. The native <textarea> caret always
+ * blinks — no CSS turns that off — so 实心光标 (#316) hides it and paints a
+ * non-blinking bar at these coordinates, the same 2px accent bar that
+ * CodeMirror's drawSelection() gives the other editor path.
  *
- * `caretTopPx` mirrors the *entire* document, which is fine for a one-off
- * autocomplete anchor but far too expensive for the drawn caret of #316: that
- * one is recomputed on every keystroke, caret move and scroll event. Mirroring
- * one line keeps the layout cost proportional to that line, not the document —
- * and every visual row starts at x = 0, so the marker's own offsetLeft is the
- * caret's x within its row no matter how the line wrapped.
- *
- * `rowTop` is deliberately NOT the marker's offsetTop. An inline box is
- * vertically centred inside its line box, so offsetTop lands
- * `(lineHeight - inlineBoxHeight) / 2` below the row's top — measured at 2px
- * for the default 14px/1.6 editor font, which put the drawn caret 2px low.
- * Subtracting that half-leading yields the row top the caret has to cover.
+ * Callers add back the textarea's padding and subtract its scroll offsets.
+ * Pass the *current logical line* rather than the whole document when the
+ * textarea holds a large one: the mirror lays out every character it is
+ * given, and this runs on every keystroke.
  */
-export function caretOffsetInLine(
-  el: HTMLTextAreaElement,
-  lineText: string,
-  column: number,
-): CaretOffsetInLine {
-  const col = Math.max(0, Math.min(column, lineText.length));
+export function caretPointPx(el: HTMLTextAreaElement, text: string, pos: number): CaretPoint {
   const mirror = createMirror(el);
+  const lh = lineHeightPx(el);
   try {
-    const row = document.createElement('div');
+    const at = Math.max(0, Math.min(pos, text.length));
+    mirror.textContent = '';
     const before = document.createElement('span');
-    before.textContent = lineText.slice(0, col);
-    // Zero-width space: gives the caret a measurable box without widening the
-    // text — same trick `caretTopAt` uses.
+    before.textContent = text.slice(0, at);
     const marker = document.createElement('span');
-    marker.textContent = '\u200B';
+    marker.textContent = '​';
     const after = document.createElement('span');
-    after.textContent = lineText.slice(col);
-    row.append(before, marker, after);
-    mirror.appendChild(row);
-    const height = lineHeightPx(el);
-    const inlineBox = marker.getBoundingClientRect().height;
+    after.textContent = text.slice(at);
+    mirror.append(before, marker, after);
+    // Rects, not offsetTop/offsetLeft: those are integers, and a caret that
+    // rounds is a caret that sits half a pixel off its own glyphs. The marker
+    // spans the *glyph* box, so lift it by the half-leading to get the top of
+    // the line box — where a full-line-height caret starts, same as the
+    // CodeMirror one.
+    const base = mirror.getBoundingClientRect();
+    const rect = marker.getBoundingClientRect();
     return {
-      left: marker.offsetLeft,
-      rowTop: marker.offsetTop - (height - inlineBox) / 2,
-      height,
+      left: rect.left - base.left,
+      top: rect.top - base.top - Math.max(0, (lh - rect.height) / 2),
+      height: lh,
     };
   } finally {
     mirror.remove();

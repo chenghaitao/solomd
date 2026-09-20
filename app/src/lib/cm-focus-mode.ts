@@ -7,10 +7,6 @@
  *     that class.
  *   - typewriterModeExtension(): keeps the current cursor line vertically
  *     centered in the viewport on every selection change.
- *
- * #316 — the "which lines are a paragraph" rule lives in
- * `lib/focus-paragraph.ts` so the Windows plain-<textarea> editors dim exactly
- * the same lines as this extension does. Do not re-inline it here.
  */
 
 import { RangeSetBuilder } from '@codemirror/state';
@@ -22,15 +18,10 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 
-import { activeParagraphLines, type LineSource } from './focus-paragraph';
-
 const dimmedLine = Decoration.line({ class: 'cm-line-dimmed' });
 
-/** The opacity the plain-editor paths have to reproduce with paint. */
-export const FOCUS_DIM_OPACITY = 0.35;
-
 const dimTheme = EditorView.theme({
-  '.cm-line-dimmed': { opacity: String(FOCUS_DIM_OPACITY) },
+  '.cm-line-dimmed': { opacity: '0.35' },
 });
 
 const focusPlugin = ViewPlugin.fromClass(
@@ -54,20 +45,27 @@ const focusPlugin = ViewPlugin.fromClass(
     build(view: EditorView): DecorationSet {
       const builder = new RangeSetBuilder<Decoration>();
       const doc = view.state.doc;
-      // Probed lazily: the shared rule asks `isBlank` only for the lines it
-      // actually walks, so this stays as cheap as the hand-rolled loop it
-      // replaced — no string[] is built for the whole document.
-      const source: LineSource = {
-        count: doc.lines,
-        isBlank: (n) => doc.line(n).text.trim().length === 0,
-      };
-      const activeLines = activeParagraphLines(
-        source,
-        view.state.selection.ranges.map((range) => ({
-          from: doc.lineAt(range.from).number,
-          to: doc.lineAt(range.to).number,
-        })),
-      );
+      // Expand active line set to the full paragraph (block of contiguous
+      // non-empty lines) the cursor is in. Empty lines act as separators.
+      const activeLines = new Set<number>();
+      const isBlank = (n: number) => doc.line(n).text.trim().length === 0;
+      for (const range of view.state.selection.ranges) {
+        const from = doc.lineAt(range.from).number;
+        const to = doc.lineAt(range.to).number;
+        for (let n = from; n <= to; n++) activeLines.add(n);
+        // Walk up until a blank line (paragraph start).
+        let up = from - 1;
+        while (up >= 1 && !isBlank(up)) {
+          activeLines.add(up);
+          up--;
+        }
+        // Walk down until a blank line (paragraph end).
+        let down = to + 1;
+        while (down <= doc.lines && !isBlank(down)) {
+          activeLines.add(down);
+          down++;
+        }
+      }
 
       for (const { from, to } of view.visibleRanges) {
         let pos = from;

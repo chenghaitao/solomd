@@ -205,15 +205,13 @@ export const useTabsStore = defineStore('tabs', {
       const existing = this.tabs.find((t) => t.filePath === payload.filePath);
       if (existing) {
         this.activeId = existing.id;
-        // Stale-buffer fix — the caller has *just* read this file off disk
-        // (`useFiles.openPath` reads before it routes here), so a tab that
-        // still holds an older revision must not keep showing it. This is the
-        // path that used to just focus the tab and return: a file edited by
-        // another app while SoloMD was closed (or during a window where the OS
-        // watcher event was suppressed) stayed stale forever, and re-opening
-        // the file from the tree / recents / quick-switcher did nothing.
-        // Only clean tabs are adopted — unsaved edits are never discarded
-        // here; the watcher/revalidation prompt owns that decision.
+        // #317 — and adopt what the caller just read off disk. Opening a file
+        // that is already open used to only focus the tab and throw the fresh
+        // read away, so a document another editor had changed kept showing the
+        // stale copy with no way to refresh it from inside the app — opening
+        // it again, the obvious move, did nothing. Unsaved edits are never
+        // discarded: a dirty tab keeps its text and the watcher's conflict
+        // dialog owns that case.
         if (existing.content === existing.savedContent) {
           this.applyDiskRead(existing.id, payload);
         }
@@ -248,6 +246,28 @@ export const useTabsStore = defineStore('tabs', {
       this.activeId = tab.id;
       return tab;
     },
+    /** #317 — apply a fresh read of the file to an open tab. The tab ends up
+     *  clean, because what it shows is exactly what the file holds. Line
+     *  endings are normalized the way `openFromDisk` does, or the tab would
+     *  read as dirty the moment the editor touched it. Returns whether
+     *  anything actually changed. */
+    applyDiskRead(
+      id: string,
+      payload: { content: string; encoding: string; hadBom: boolean },
+    ): boolean {
+      const t = this.tabs.find((x) => x.id === id);
+      if (!t) return false;
+      const lineEnding: 'lf' | 'crlf' = payload.content.includes('\r\n') ? 'crlf' : 'lf';
+      const normalized =
+        lineEnding === 'crlf' ? payload.content.replace(/\r\n/g, '\n') : payload.content;
+      const changed = t.content !== normalized || t.savedContent !== normalized;
+      t.content = normalized;
+      t.savedContent = normalized;
+      t.encoding = payload.encoding;
+      t.hadBom = payload.hadBom;
+      t.lineEnding = lineEnding;
+      return changed;
+    },
     setContent(id: string, content: string) {
       const t = this.tabs.find((x) => x.id === id);
       if (t) t.content = content;
@@ -263,37 +283,6 @@ export const useTabsStore = defineStore('tabs', {
       if (!t) return;
       t.content = content;
       t.savedContent = content;
-    },
-    /** Replace a tab's buffer with a fresh `read_file` payload AND refresh the
-     *  encoding metadata, clearing the dirty flag because the bytes now match
-     *  disk exactly. Shared by the file watcher's auto-reload, the
-     *  startup/focus revalidation sweep and `openFromDisk`'s already-open
-     *  branch — all three read the same `FileReadResult` shape.
-     *
-     *  CRLF→LF normalization is mandatory here (not just cosmetic): CodeMirror
-     *  normalizes the doc it is handed, so pushing raw CRLF text into `content`
-     *  while `savedContent` keeps the LF form would make the tab read as dirty
-     *  with zero edits. */
-    applyDiskRead(
-      id: string,
-      payload: {
-        content: string;
-        encoding: string;
-        hadBom: boolean;
-        language?: Language;
-      },
-    ) {
-      const t = this.tabs.find((x) => x.id === id);
-      if (!t) return;
-      const lineEnding: 'lf' | 'crlf' = payload.content.includes('\r\n') ? 'crlf' : 'lf';
-      const normalized =
-        lineEnding === 'crlf' ? payload.content.replace(/\r\n/g, '\n') : payload.content;
-      t.content = normalized;
-      t.savedContent = normalized;
-      t.encoding = payload.encoding;
-      t.hadBom = payload.hadBom;
-      t.lineEnding = lineEnding;
-      if (payload.language) t.language = payload.language;
     },
     /** #91 — repoint a tab at a new path WITHOUT touching `savedContent`.
      *  Used when a file is renamed while it has unsaved edits: the on-disk

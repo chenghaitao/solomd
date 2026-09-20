@@ -128,10 +128,40 @@ if [ "$DEBUG" -eq 0 ]; then
   unsigned=0
   while read -r f; do
     if ! python3 - "$f" <<'PYCHECK'
-import sys, zipfile
-with zipfile.ZipFile(sys.argv[1]) as z:
-    sys.exit(0 if any(n.upper().endswith((".RSA", ".EC", ".DSA")) and n.startswith("META-INF/")
-                      for n in z.namelist()) else 1)
+import sys, zipfile, struct
+
+# An APK and an AAB are signed differently, and checking only one way reports a
+# perfectly good build as unsigned — which is exactly what this check did on its
+# first real run. An AAB carries a JAR signature (META-INF/*.RSA). An APK built
+# today carries APK Signature Scheme v2/v3, which is a block appended just
+# before the central directory and leaves NOTHING in META-INF. Accept either.
+path = sys.argv[1]
+
+with zipfile.ZipFile(path) as z:
+    jar_signed = any(
+        n.startswith("META-INF/") and n.upper().endswith((".RSA", ".EC", ".DSA"))
+        for n in z.namelist()
+    )
+
+def apk_sig_block(path):
+    """True if the APK Signing Block magic sits right before the central directory."""
+    with open(path, "rb") as fh:
+        fh.seek(0, 2)
+        size = fh.tell()
+        # Walk back over the End Of Central Directory record (22 bytes + comment).
+        window = min(size, 65535 + 22)
+        fh.seek(size - window)
+        tail = fh.read(window)
+        i = tail.rfind(b"PK\x05\x06")
+        if i < 0:
+            return False
+        cd_offset = struct.unpack_from("<I", tail, i + 16)[0]
+        if cd_offset < 16 or cd_offset > size:
+            return False
+        fh.seek(cd_offset - 16)
+        return fh.read(16) == b"APK Sig Block 42"
+
+sys.exit(0 if jar_signed or apk_sig_block(path) else 1)
 PYCHECK
     then
       echo "    UNSIGNED: $f" >&2
