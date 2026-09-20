@@ -45,7 +45,7 @@ pub struct ExportArgs {
     /// Pandoc output format, e.g. `epub`, `odt`, `latex`, `rtf`, or any
     /// `--to` format Pandoc supports. We don't pass this to `--to` directly
     /// because pandoc auto-detects from the output extension; it's used for
-    /// telemetry / informational purposes by the caller.
+    /// informational purposes by the caller.
     pub format: String,
     /// Absolute path of the output file. Pandoc derives the format from the
     /// extension (`.epub`, `.odt`, `.tex`, `.rtf`, …).

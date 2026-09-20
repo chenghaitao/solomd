@@ -89,10 +89,9 @@ fn main() {
     // panic terminates the entire app at startup.
     //
     // First seen as the v1.1.2 Windows launch crash with the (now-gone)
-    // tauri-plugin-aptabase. The defensive guard stays after the
-    // telemetry migration to solomd.app/api/track because reqwest
-    // streaming + autogit + RAG all rely on the same multi-thread
-    // runtime being available.
+    // tauri-plugin-aptabase. The defensive guard stays after telemetry was
+    // removed from the product, because reqwest streaming + autogit + RAG all
+    // rely on the same multi-thread runtime being available.
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

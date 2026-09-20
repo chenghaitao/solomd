@@ -54,10 +54,13 @@
 				<string>85F4.1</string>
 			</array>
 		</dict>
-		<!-- System boot time is used by recent telemetry plumbing (still
-		     opt-in, content-free) to detect cold launches versus relaunches.
-		     If telemetry stays off it's a no-op, but the API is technically
-		     reachable, so we declare it. -->
+		<!-- Historical declaration. This API was reached by the telemetry
+		     plugin, which used boot time to tell a cold launch from a
+		     relaunch. Telemetry was removed from the product, so nothing is
+		     expected to call it any more. The declaration is kept rather
+		     than dropped: over-declaring is harmless at review time, and
+		     dropping it would under-declare if a dependency still reads it.
+		     No change to what the app does — only to why this is here. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
