@@ -294,7 +294,7 @@ export const zh: I18n = {
     showFileTree: '显示文件树',
     showBacklinks: '显示反向链接面板 —— 列出引用本文档的笔记（需先打开文件夹）',
     showTagsPanel: '显示标签面板 —— 索引工作区内所有 #tag',
-    spellcheckEnabled: '拼写检查（Hunspell, en_US）—— 默认关闭，首次启用约占 3 MB',
+    spellcheckEnabled: '拼写检查（Hunspell）—— 默认关闭，首次启用约占 3 MB',
     bibliography: '参考文献库（BibTeX / CSL-JSON）',
     bibliographyHint: '用于 @citekey 自动补全，导出时作为 Pandoc 的 --bibliography 参数。',
     pickBibliography: '选择 .bib / .csl-json 文件…',

@@ -293,7 +293,7 @@ export const ko: I18n = {
     showFileTree: '파일 트리 표시',
     showBacklinks: '백링크 패널 표시 — 이 노트로 연결된 노트 표시(폴더 필요)',
     showTagsPanel: '태그 패널 표시 — 워크스페이스의 모든 #태그 인덱싱',
-    spellcheckEnabled: '맞춤법 검사(Hunspell, en_US) — 옵트인. 첫 실행 시 ~3 MB 추가.',
+    spellcheckEnabled: '맞춤법 검사(Hunspell) — 옵트인. 첫 실행 시 ~3 MB 추가.',
     bibliography: '참고문헌(BibTeX / CSL-JSON)',
     bibliographyHint: '@citekey 자동완성과 내보내기 시 Pandoc --bibliography로 사용됩니다.',
     pickBibliography: '.bib / .csl-json 선택…',

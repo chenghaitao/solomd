@@ -293,7 +293,7 @@ export const pl: I18n = {
     showFileTree: 'Pokaż drzewo plików',
     showBacklinks: 'Pokaż panel linków zwrotnych — pokazuje notatki linkujące tutaj (wymaga folderu)',
     showTagsPanel: 'Pokaż panel tagów — indeksuje każdy #tag w obszarze roboczym',
-    spellcheckEnabled: 'Sprawdzanie pisowni (Hunspell, en_US) — opcjonalne. Pierwsze uruchomienie pobiera ~3 MB.',
+    spellcheckEnabled: 'Sprawdzanie pisowni (Hunspell) — opcjonalne. Pierwsze uruchomienie pobiera ~3 MB.',
     bibliography: 'Bibliografia (BibTeX / CSL-JSON)',
     bibliographyHint: 'Używana do autouzupełniania @citekey i jako Pandoc --bibliography przy eksporcie.',
     pickBibliography: 'Wybierz .bib / .csl-json…',

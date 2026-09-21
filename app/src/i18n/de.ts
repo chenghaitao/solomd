@@ -293,7 +293,7 @@ export const de: I18n = {
     showFileTree: 'Dateibaum anzeigen',
     showBacklinks: 'Backlinks-Panel anzeigen — Notizen anzeigen, die hierher verlinken (Ordner erforderlich)',
     showTagsPanel: 'Tags-Panel anzeigen — alle #Tags im Workspace indizieren',
-    spellcheckEnabled: 'Rechtschreibprüfung (Hunspell, en_US) — Opt-in. Beim ersten Start ca. 3 MB zusätzlich.',
+    spellcheckEnabled: 'Rechtschreibprüfung (Hunspell) — Opt-in. Beim ersten Start ca. 3 MB zusätzlich.',
     bibliography: 'Literaturverzeichnis (BibTeX / CSL-JSON)',
     bibliographyHint: 'Wird für @citekey-Autovervollständigung und beim Export als Pandoc --bibliography verwendet.',
     pickBibliography: '.bib / .csl-json auswählen…',

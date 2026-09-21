@@ -922,6 +922,26 @@ function onSelectPdfFont(v: string) {
             <input type="checkbox" :checked="settings.spellcheckEnabled" @change="settings.toggleSpellcheckEnabled()" />
             {{ t('settings.spellcheckEnabled') }}
           </label>
+          <!-- #246 — only en_US ships with the app; anything the user drops in
+               `<config>/dictionaries/` shows up here. Without this the checker
+               flagged every word for non-English writers. It belongs to the
+               Hunspell checkbox: it used to hang off the browser spell-check
+               toggle below, so ticking this box revealed nothing. -->
+          <div v-if="settings.spellcheckEnabled" class="ghs-row" style="align-items:center; gap:8px; margin-top:6px;">
+            <span>{{ t('settings.spellcheckLang') }}</span>
+            <select
+              class="ghs-select"
+              :value="settings.spellcheckLang"
+              @focus="refreshSpellDicts"
+              @change="settings.setSpellcheckLang(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="code in spellDicts" :key="code" :value="code">{{ code }}</option>
+            </select>
+            <button type="button" class="link-button" @click="openDictsFolder">
+              {{ t('settings.spellcheckAddDict') }}
+            </button>
+          </div>
+          <p v-if="settings.spellcheckEnabled" class="setting-hint">{{ t('settings.spellcheckLangHint') }}</p>
         </section>
 
         <section data-cat="integrations">
@@ -1486,23 +1506,6 @@ function onSelectPdfFont(v: string) {
             <input type="checkbox" :checked="settings.spellCheck" @change="settings.toggleSpellCheck()" />
             {{ t('settings.spellCheck') }}
           </label>
-          <!-- #246 — only en_US ships with the app; anything the user drops in
-               `<config>/dictionaries/` shows up here. Without this the checker
-               flagged every word for non-English writers. -->
-          <div v-if="settings.spellCheck" class="ghs-row" style="align-items:center; gap:8px; margin-top:6px;">
-            <span>{{ t('settings.spellcheckLang') }}</span>
-            <select
-              class="ghs-select"
-              :value="settings.spellcheckLang"
-              @change="settings.setSpellcheckLang(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="code in spellDicts" :key="code" :value="code">{{ code }}</option>
-            </select>
-            <button type="button" class="link-button" @click="openDictsFolder">
-              {{ t('settings.spellcheckAddDict') }}
-            </button>
-          </div>
-          <p v-if="settings.spellCheck" class="setting-hint">{{ t('settings.spellcheckLangHint') }}</p>
         </section>
 
         <section data-cat="writing">

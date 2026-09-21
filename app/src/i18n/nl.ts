@@ -293,7 +293,7 @@ export const nl: I18n = {
     showFileTree: 'Bestandsboom tonen',
     showBacklinks: 'Backlinks-paneel tonen — toont notities die hierheen linken (map vereist)',
     showTagsPanel: 'Tags-paneel tonen — indexeert elke #tag in de werkruimte',
-    spellcheckEnabled: 'Spellingcontrole (Hunspell, en_US) — opt-in. Voegt ~3 MB toe bij eerste gebruik.',
+    spellcheckEnabled: 'Spellingcontrole (Hunspell) — opt-in. Voegt ~3 MB toe bij eerste gebruik.',
     bibliography: 'Bibliografie (BibTeX / CSL-JSON)',
     bibliographyHint: 'Gebruikt voor @citekey-autoaanvulling en als Pandoc --bibliography bij export.',
     pickBibliography: 'Kies .bib / .csl-json…',

@@ -293,7 +293,7 @@ export const ja: I18n = {
     showFileTree: 'ファイルツリーを表示',
     showBacklinks: 'バックリンクパネルを表示 — このメモにリンクしているノートを表示（フォルダ必須）',
     showTagsPanel: 'タグパネルを表示 — ワークスペース内の #タグをすべてインデックス',
-    spellcheckEnabled: 'スペルチェック (Hunspell, en_US) — オプトイン。初回に約 3 MB を追加。',
+    spellcheckEnabled: 'スペルチェック (Hunspell) — オプトイン。初回に約 3 MB を追加。',
     bibliography: '参考文献 (BibTeX / CSL-JSON)',
     bibliographyHint: '@citekey 自動補完、エクスポート時の Pandoc --bibliography に使用されます。',
     pickBibliography: '.bib / .csl-json を選択…',

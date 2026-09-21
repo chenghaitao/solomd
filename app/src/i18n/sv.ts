@@ -293,7 +293,7 @@ export const sv: I18n = {
     showFileTree: 'Visa filträd',
     showBacklinks: 'Visa bakåtlänkspanel — visa anteckningar som länkar hit (mapp krävs)',
     showTagsPanel: 'Visa taggpanel — indexera varje #tagg i arbetsytan',
-    spellcheckEnabled: 'Stavningskontroll (Hunspell, en_US) — frivillig. Lägger till ~3 MB vid första körning.',
+    spellcheckEnabled: 'Stavningskontroll (Hunspell) — frivillig. Lägger till ~3 MB vid första körning.',
     bibliography: 'Bibliografi (BibTeX / CSL-JSON)',
     bibliographyHint: 'Används för @citekey-autokomplettering och som Pandoc --bibliography vid export.',
     pickBibliography: 'Välj .bib / .csl-json…',

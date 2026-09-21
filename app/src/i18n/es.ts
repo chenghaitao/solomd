@@ -293,7 +293,7 @@ export const es: I18n = {
     showFileTree: 'Mostrar árbol de archivos',
     showBacklinks: 'Mostrar panel de Backlinks — notas que enlazan aquí (carpeta requerida)',
     showTagsPanel: 'Mostrar panel de Tags — indexar cada #etiqueta del workspace',
-    spellcheckEnabled: 'Corrector ortográfico (Hunspell, en_US) — opt-in. Añade ~3 MB en el primer arranque.',
+    spellcheckEnabled: 'Corrector ortográfico (Hunspell) — opt-in. Añade ~3 MB en el primer arranque.',
     bibliography: 'Bibliografía (BibTeX / CSL-JSON)',
     bibliographyHint: 'Usada para autocompletado @citekey y como Pandoc --bibliography al exportar.',
     pickBibliography: 'Elegir .bib / .csl-json…',

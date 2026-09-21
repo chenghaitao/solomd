@@ -293,7 +293,7 @@ export const uk: I18n = {
     showFileTree: 'Показувати дерево файлів',
     showBacklinks: 'Показувати панель зворотних посилань — нотатки, що посилаються сюди (потрібна тека)',
     showTagsPanel: 'Показувати панель тегів — індексувати кожен #тег у робочому просторі',
-    spellcheckEnabled: 'Перевірка правопису (Hunspell, en_US) — за згодою. Додає ~3 МБ при першому запуску.',
+    spellcheckEnabled: 'Перевірка правопису (Hunspell) — за згодою. Додає ~3 МБ при першому запуску.',
     bibliography: 'Бібліографія (BibTeX / CSL-JSON)',
     bibliographyHint: 'Використовується для автодоповнення @citekey і як Pandoc --bibliography під час експорту.',
     pickBibliography: 'Вибрати .bib / .csl-json…',

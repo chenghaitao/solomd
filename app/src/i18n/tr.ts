@@ -293,7 +293,7 @@ export const tr: I18n = {
     showFileTree: 'Dosya Ağacını Göster',
     showBacklinks: 'Geri Bağlantı panelini göster — buraya bağlantı veren notları göster (klasör gerekli)',
     showTagsPanel: 'Etiketler panelini göster — çalışma alanındaki her #etiket dizine alınır',
-    spellcheckEnabled: 'Yazım denetimi (Hunspell, en_US) — isteğe bağlı. İlk çalıştırmada ~3 MB ekler.',
+    spellcheckEnabled: 'Yazım denetimi (Hunspell) — isteğe bağlı. İlk çalıştırmada ~3 MB ekler.',
     bibliography: 'Kaynakça (BibTeX / CSL-JSON)',
     bibliographyHint: '@citekey otomatik tamamlama ve dışa aktarmada Pandoc --bibliography için kullanılır.',
     pickBibliography: '.bib / .csl-json seç…',

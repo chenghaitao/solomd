@@ -293,7 +293,7 @@ export const en = {
     showFileTree: 'Show File Tree',
     showBacklinks: 'Show Backlinks panel — show notes that link here (folder required)',
     showTagsPanel: 'Show Tags panel — index every #tag in the workspace',
-    spellcheckEnabled: 'Spell-check (Hunspell, en_US) — opt-in. Adds ~3 MB on first run.',
+    spellcheckEnabled: 'Spell-check (Hunspell) — opt-in. Adds ~3 MB on first run.',
     bibliography: 'Bibliography (BibTeX / CSL-JSON)',
     bibliographyHint: 'Used for @citekey autocomplete and as Pandoc --bibliography on export.',
     pickBibliography: 'Pick .bib / .csl-json…',

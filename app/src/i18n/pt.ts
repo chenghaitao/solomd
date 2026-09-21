@@ -295,7 +295,7 @@ export const pt: I18n = {
     showFileTree: 'Mostrar árvore de arquivos',
     showBacklinks: 'Mostrar painel Backlinks — notas que apontam para cá (pasta requerida)',
     showTagsPanel: 'Mostrar painel Tags — indexar cada #tag do workspace',
-    spellcheckEnabled: 'Verificação ortográfica (Hunspell, en_US) — opt-in. Adiciona ~3 MB no primeiro uso.',
+    spellcheckEnabled: 'Verificação ortográfica (Hunspell) — opt-in. Adiciona ~3 MB no primeiro uso.',
     bibliography: 'Bibliografia (BibTeX / CSL-JSON)',
     bibliographyHint: 'Usada para autocompletar @citekey e como Pandoc --bibliography ao exportar.',
     pickBibliography: 'Escolher .bib / .csl-json…',
