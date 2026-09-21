@@ -1439,7 +1439,19 @@ function selectPlainRange(start: number, end: number) {
       const s = Math.max(0, Math.min(start - b.start, el.value.length));
       const e = Math.max(s, Math.min(end - b.start, el.value.length));
       el.setSelectionRange(s, e);
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // Centre the *match*, not the block: a block can be a several-screen
+      // code fence or paragraph, and centring that leaves the match off-screen.
+      // Size it first — a just-mounted textarea is still two rows tall, and the
+      // host would clamp the scroll to a document that short.
+      autoSizePlainBlock(el);
+      const host = plainLiveHost.value;
+      if (host) {
+        const y = el.getBoundingClientRect().top - host.getBoundingClientRect().top
+          + plainPaddingTopPx(el) + caretTopPx(el, el.value, s);
+        host.scrollTop = Math.max(0, host.scrollTop + y - host.clientHeight / 2);
+      } else {
+        el.scrollIntoView({ block: 'center' });
+      }
       emitPlainCursorAndSelection();
     });
     return;
@@ -1448,6 +1460,9 @@ function selectPlainRange(start: number, end: number) {
   if (!el) return;
   el.focus();
   el.setSelectionRange(start, end);
+  // #255 — setSelectionRange() selects but never scrolls a <textarea>, so in a
+  // long document the counter moved ("3/12") while the view stayed put.
+  el.scrollTop = Math.max(0, plainPaddingTopPx(el) + caretTopPx(el, el.value, start) - el.clientHeight / 2);
   emitPlainCursorAndSelection();
 }
 
@@ -2097,7 +2112,12 @@ function activatePlainBlockFromClick(index: number, event: MouseEvent) {
     return;
   }
   if (index === plainActiveBlock.value) return;
-  activatePlainBlock(index, estimatePlainBlockCaretFromClick(index, event));
+  // #300 — a drag that selected rendered text ends in a click too. Turning
+  // the block into a textarea at that point throws the selection away and
+  // moves the page under someone who was only reading (or about to copy).
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
+  activatePlainBlock(index, estimatePlainBlockCaretFromClick(index, event), true);
 }
 
 /** Flip the `ordinal`-th task checkbox marker in a block's source, in place. */
@@ -2120,17 +2140,34 @@ function togglePlainTask(index: number, ordinal: number) {
   tabs.setContent(props.tab.id, next);
 }
 
-function activatePlainBlock(index: number, caret?: number) {
-  plainActiveBlock.value = Math.max(0, Math.min(index, plainBlocks.value.length - 1));
+/**
+ * `holdScroll` is for activation by mouse: the block under the pointer must
+ * stay under the pointer. Two things used to move it (#300) — the previously
+ * active block re-rendering to a different height somewhere above, and
+ * focus() scrolling the new textarea into view before it had been sized.
+ * Keyboard navigation leaves it off, because there following the caret is the
+ * point.
+ */
+function activatePlainBlock(index: number, caret?: number, holdScroll = false) {
+  const target = Math.max(0, Math.min(index, plainBlocks.value.length - 1));
+  const host = plainLiveHost.value;
+  const blockEl = holdScroll && host
+    ? host.querySelectorAll<HTMLElement>(':scope > .plain-block')[target] ?? null
+    : null;
+  const topBefore = blockEl ? blockEl.getBoundingClientRect().top : 0;
+  plainActiveBlock.value = target;
   nextTick(() => {
     const el = plainBlockEditors.value[plainActiveBlock.value];
     if (!el) return;
-    el.focus();
+    el.focus({ preventScroll: holdScroll });
     if (caret != null) {
       const pos = Math.max(0, Math.min(caret, el.value.length));
       el.setSelectionRange(pos, pos);
     }
     autoSizePlainBlock(el);
+    if (blockEl && host && blockEl.isConnected) {
+      host.scrollTop += blockEl.getBoundingClientRect().top - topBefore;
+    }
     emitPlainCursorAndSelection();
   });
 }
@@ -2144,8 +2181,15 @@ function setPlainBlockEditor(index: number, el: HTMLTextAreaElement | null) {
 }
 
 function autoSizePlainBlock(el: HTMLTextAreaElement) {
+  // Collapsing to `auto` to measure shortens the whole document for an
+  // instant, and the host clamps its scrollTop to that shorter document and
+  // does not give it back. Deep inside a tall block (a long code fence) that
+  // threw the view a screenful or more upwards (#255, #300).
+  const host = plainLiveHost.value;
+  const keep = host ? host.scrollTop : 0;
   el.style.height = 'auto';
   el.style.height = `${Math.max(plainLineHeightPx(), el.scrollHeight)}px`;
+  if (host && host.scrollTop !== keep) host.scrollTop = keep;
 }
 
 function handlePlainBlockInput(index: number, event: Event) {
