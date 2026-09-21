@@ -93,6 +93,27 @@ export const KEY_ACTIONS: KeyActionDef[] = [
 
   // ---- Edit ----
   { id: 'editor.caseCycle', label: 'Cycle Case of Selection', category: 'edit', defaults: ['Shift+F3'] },
+  // ---- Formatting (#296, #274) ----
+  // Bold is NOT on Mod+B by default: that has toggled the file tree since
+  // 1.0 (the VS Code habit), and taking it away from everyone to match the
+  // Typora habit trades one group's muscle memory for another's. The writer
+  // preset below swaps the two in one click instead.
+  { id: 'fmt.bold', label: 'Bold', category: 'edit', defaults: ['Mod+Shift+B'] },
+  { id: 'fmt.italic', label: 'Italic', category: 'edit', defaults: ['Mod+I'] },
+  { id: 'fmt.strike', label: 'Strikethrough', category: 'edit', defaults: ['Mod+Shift+X'] },
+  { id: 'fmt.code', label: 'Inline Code', category: 'edit', defaults: ['Mod+Shift+M'] },
+  { id: 'fmt.link', label: 'Link', category: 'edit', defaults: ['Mod+K'] },
+  { id: 'fmt.h1', label: 'Heading 1', category: 'edit', defaults: ['Mod+1'] },
+  { id: 'fmt.h2', label: 'Heading 2', category: 'edit', defaults: ['Mod+2'] },
+  { id: 'fmt.h3', label: 'Heading 3', category: 'edit', defaults: ['Mod+3'] },
+  { id: 'fmt.h4', label: 'Heading 4', category: 'edit', defaults: ['Mod+4'] },
+  { id: 'fmt.h5', label: 'Heading 5', category: 'edit', defaults: ['Mod+5'] },
+  { id: 'fmt.h6', label: 'Heading 6', category: 'edit', defaults: ['Mod+6'] },
+  { id: 'fmt.quote', label: 'Blockquote', category: 'edit', defaults: ['Mod+Alt+Q'] },
+  { id: 'fmt.ul', label: 'Bulleted List', category: 'edit', defaults: ['Mod+Alt+8'] },
+  { id: 'fmt.ol', label: 'Numbered List', category: 'edit', defaults: ['Mod+Alt+7'] },
+  { id: 'fmt.task', label: 'Task List', category: 'edit', defaults: ['Mod+Alt+9'] },
+  { id: 'fmt.codeblock', label: 'Code Block', category: 'edit', defaults: ['Mod+Alt+K'] },
   { id: 'format.markdown', label: 'Format Markdown', category: 'edit', defaults: ['Mod+Alt+L'] },
   { id: 'editor.tableEditor', label: 'Edit Table as Grid', category: 'edit', defaults: ['Mod+Alt+T'] },
   { id: 'editor.formulaEditor', label: 'Edit Formula', category: 'edit', defaults: ['Mod+Alt+M'] },
@@ -172,13 +193,16 @@ export function eventToCombo(e: KeyboardEvent): KeyCombo | null {
   if (!raw || raw === 'Dead' || raw === 'Unidentified') {
     // Alt on macOS can produce "Dead" — fall through to the code path below
     // rather than dropping the event.
-    if (!(e.altKey && /^Key[A-Z]$/.test(e.code))) return null;
+    if (!(e.altKey && /^(Key[A-Z]|Digit\d)$/.test(e.code))) return null;
   }
   if (['Control', 'Meta', 'Shift', 'Alt', 'CapsLock'].includes(raw)) return null;
 
   let key: string;
   if (e.altKey && /^Key[A-Z]$/.test(e.code)) {
     key = e.code.slice(3).toUpperCase();
+  } else if (e.altKey && /^Digit\d$/.test(e.code)) {
+    // Same story for the number row: ⌥8 arrives as "•", ⌥7 as "¶".
+    key = e.code.slice(5);
   } else if (PUNCT_BY_CODE[e.code]) {
     key = e.code;
   } else if (/^F\d{1,2}$/.test(raw)) {
@@ -349,6 +373,26 @@ export function interceptedBindings(
     }
   }
   return out;
+}
+
+/**
+ * The "writer" preset: Mod+B is bold, as in Typora, Word and every rich-text
+ * box on the web, and the file tree moves to where bold was. It is a swap, so
+ * it can never leave either command without a key or create a conflict.
+ */
+export const WRITER_PRESET: Record<string, KeyCombo> = {
+  'fmt.bold': 'Mod+B',
+  'view.toggleFileTree': 'Mod+Shift+B',
+};
+
+/** True when both halves of the swap are in effect (however they got there). */
+export function writerPresetActive(
+  overrides: Record<string, string | null | undefined> = {},
+): boolean {
+  return Object.entries(WRITER_PRESET).every(([id, combo]) => {
+    const now = combosFor(id, overrides);
+    return now.length === 1 && now[0] === normalizeCombo(combo);
+  });
 }
 
 /** Which other action already owns this chord, if any. */

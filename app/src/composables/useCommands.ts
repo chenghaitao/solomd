@@ -1,3 +1,4 @@
+import { FORMAT_KINDS } from '../lib/md-format';
 import { invoke } from '@tauri-apps/api/core';
 import { useFiles } from './useFiles';
 import { useSettingsStore } from '../stores/settings';
@@ -394,6 +395,17 @@ export function useCommands(): Command[] {
         );
       },
     },
+
+    // #296 / #274 — every formatting command, so they are discoverable from
+    // the palette and not only by knowing the chord. Titles come from
+    // `cmd.fmt.<kind>` in the locale files.
+    ...FORMAT_KINDS.map((kind) => ({
+      id: `fmt.${kind}`,
+      title: `Format: ${kind}`,
+      hint: 'Selection, or the word under the cursor. Run again to remove.',
+      shortcut: kb(`fmt.${kind}`),
+      run: () => window.dispatchEvent(new CustomEvent('solomd:format-markdown', { detail: { kind } })),
+    })),
 
     // Gitee IK8QG3. Acts on the selection, or the word under the caret when
     // there is nothing selected. Shift+F3 cycles lower → UPPER → Title, which

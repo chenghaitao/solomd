@@ -18,6 +18,8 @@ import {
   eventToCombo,
   formatCombo,
   interceptedBindings,
+  WRITER_PRESET,
+  writerPresetActive,
   type KeyActionDef,
 } from '../lib/keybindings';
 import { isMacOS } from '../lib/platform';
@@ -133,6 +135,24 @@ function applyHotkeyCompatPreset(): void {
   const moves = intercepted.value;
   for (const b of moves) settings.setKeybinding(b.action.id, b.alternative);
   toasts.success(t('settings.keysCompatApplied', { count: String(moves.length) }));
+}
+
+/**
+ * #296 — ⌘B for bold is opt-in, not the default: it has toggled the file tree
+ * since 1.0. The preset is a swap of two bindings, offered as one button so
+ * nobody has to work out that freeing ⌘B means rebinding something else first.
+ */
+const writerPresetOn = computed(() => writerPresetActive(settings.keybindings));
+const writerPresetKeys = computed(() => ({
+  bold: formatCombo(WRITER_PRESET['fmt.bold'], macKeys),
+  tree: formatCombo(WRITER_PRESET['view.toggleFileTree'], macKeys),
+}));
+function applyWriterPreset(): void {
+  for (const [id, combo] of Object.entries(WRITER_PRESET)) settings.setKeybinding(id, combo);
+  toasts.success(t('settings.keysWriterApplied', writerPresetKeys.value));
+}
+function undoWriterPreset(): void {
+  for (const id of Object.keys(WRITER_PRESET)) settings.setKeybinding(id, undefined);
 }
 
 function startRecording(actionId: string): void {
@@ -1410,6 +1430,16 @@ function onSelectPdfFont(v: string) {
               {{ t('settings.keysApplyCompat') }}
             </button>
           </div>
+          <div class="kb-clash kb-clash--neutral">
+            <p class="kb-clash__title">{{ t('settings.keysWriterTitle') }}</p>
+            <p class="kb-clash__body">{{ t('settings.keysWriterBody', writerPresetKeys) }}</p>
+            <button v-if="!writerPresetOn" class="kb-btn kb-btn--wide" @click="applyWriterPreset()">
+              {{ t('settings.keysWriterApply', writerPresetKeys) }}
+            </button>
+            <button v-else class="kb-btn kb-btn--wide" @click="undoWriterPreset()">
+              ✓ {{ t('settings.keysWriterUndo') }}
+            </button>
+          </div>
           <div v-for="group in keyGroups" :key="group.key" class="kb-group">
             <h4 class="kb-group__title">{{ t('settings.keysCat' + group.key.charAt(0).toUpperCase() + group.key.slice(1)) }}</h4>
             <div v-for="action in group.items" :key="action.id" class="kb-row">
@@ -1775,6 +1805,12 @@ function onSelectPdfFont(v: string) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+/* Same box, no alarm: an offer rather than a warning (#296). */
+.kb-clash--neutral {
+  border-color: var(--border);
+  background: var(--bg-soft, transparent);
+  margin-bottom: 10px;
 }
 .kb-clash__title {
   margin: 0;

@@ -45,6 +45,7 @@ import {
 import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights } from '../lib/textarea-metrics';
 import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
+import { applyFormat, FORMAT_KINDS, type FormatKind } from '../lib/md-format';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore, buildEditorFontStack } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
@@ -2538,7 +2539,10 @@ function buildExtensions() {
           incrementalFindScroll,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ]),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+    // #296 — Mod-i is CodeMirror's selectParentSyntax. The app-level Italic
+    // shortcut listens on window, so CodeMirror would run first and widen the
+    // selection to the whole paragraph before it got italicised.
+    keymap.of([...defaultKeymap.filter((b) => b.key !== 'Mod-i'), ...historyKeymap, ...searchKeymap, indentWithTab]),
     lineNumCompartment.of(settings.showLineNumbers ? lineNumbers() : []),
     wrapCompartment.of(settings.wordWrap ? EditorView.lineWrapping : []),
     langCompartment.of(
@@ -2639,8 +2643,10 @@ onMounted(() => {
   // follows is unreachable on Windows. (Putting it further down is what made
   // the first attempt silently no-op on the plain editors.)
   window.addEventListener('solomd:transform-case', onTransformCase as EventListener);
+  window.addEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
   cleanupTransformCase = () => {
     window.removeEventListener('solomd:transform-case', onTransformCase as EventListener);
+    window.removeEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
   };
 
   if (usePlainWindowsEditor) {
@@ -2772,6 +2778,65 @@ function onTransformCase(e: Event) {
   nextTick(() => {
     el.focus();
     el.setSelectionRange(target.from, target.from + replaced.length);
+    emitPlainCursorAndSelection();
+  });
+}
+
+/**
+ * #296 / #274 — bold, italic, headings, lists… from a shortcut or the palette.
+ *
+ * Same shape as `onTransformCase` above, for the same reason: lib/md-format.ts
+ * decides the edit from a string and a selection, and the three editors only
+ * differ in how they hand those over and write the result back.
+ */
+function onFormatMarkdown(e: Event) {
+  const kind = ((e as CustomEvent).detail || {}).kind as FormatKind;
+  if (!FORMAT_KINDS.includes(kind)) return;
+  if (props.tab.id !== tabs.activeId) return;
+  if (props.tab.language !== 'markdown') return;
+
+  if (!usePlainWindowsEditor) {
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const edit = applyFormat(view.state.doc.toString(), sel.from, sel.to, kind);
+    view.dispatch({
+      changes: { from: edit.from, to: edit.to, insert: edit.insert },
+      selection: { anchor: edit.selFrom, head: edit.selTo },
+      scrollIntoView: true,
+      userEvent: 'input.format',
+    });
+    view.focus();
+    return;
+  }
+
+  const el = plainLiveEnabled.value
+    ? plainBlockEditors.value[plainActiveBlock.value]
+    : plainEditor.value;
+  if (!el) return;
+  const edit = applyFormat(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0, kind);
+  const value = el.value.slice(0, edit.from) + edit.insert + el.value.slice(edit.to);
+  recordPlainHistory();
+  if (plainLiveEnabled.value) {
+    updatePlainBlock(plainActiveBlock.value, value, edit.selTo);
+    nextTick(() => {
+      const e2 = plainBlockEditors.value[plainActiveBlock.value];
+      if (!e2) return;
+      e2.focus();
+      // A fence or a blank line can split the block, and then these offsets
+      // belong to a different textarea — leave the caret where the re-split
+      // put it rather than selecting the wrong text.
+      if (e2.value === value) e2.setSelectionRange(edit.selFrom, edit.selTo);
+    });
+    return;
+  }
+  const keepScroll = el.scrollTop;
+  el.value = value;
+  plainText.value = value;
+  tabs.setContent(props.tab.id, value);
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(edit.selFrom, edit.selTo);
+    el.scrollTop = keepScroll;
     emitPlainCursorAndSelection();
   });
 }

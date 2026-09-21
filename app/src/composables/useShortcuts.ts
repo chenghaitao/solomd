@@ -8,6 +8,7 @@ import { useCommands } from './useCommands';
 import { useInbox } from './useInbox';
 import { usePomodoroStore, getLastPreset } from '../stores/pomodoro';
 import { eventToCombo, resolveBindings } from '../lib/keybindings';
+import { FORMAT_KINDS, type FormatKind } from '../lib/md-format';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface Hooks {
@@ -36,6 +37,24 @@ export function useShortcuts(hooks: Hooks = {}) {
   function runById(id: string) {
     const cmd = commands.find((c) => c.id === id);
     if (cmd) cmd.run();
+  }
+
+  /**
+   * #296 — formatting only means something while typing in a Markdown
+   * document. Anywhere else (the find bar, a settings field, a .txt tab) the
+   * chord is declined so it keeps whatever it does natively — ⌘I in a text
+   * field should not silently edit the note behind the dialog.
+   */
+  function formatMarkdown(kind: FormatKind): boolean | void {
+    if (tabs.activeTab?.language !== 'markdown') return false;
+    const el = document.activeElement as HTMLElement | null;
+    // The find bars live *inside* the editor hosts, so match the editing
+    // surface itself, not its container.
+    const inEditor = !!el?.closest('.cm-content, textarea.plain-editor, textarea.plain-block__textarea');
+    const inField = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    if (inField && !inEditor) return false;
+    if (settings.viewMode === 'preview' || settings.viewMode === 'reading') return false;
+    window.dispatchEvent(new CustomEvent('solomd:format-markdown', { detail: { kind } }));
   }
 
   /** #106 — cycle the focused pane to the previous/next tab in the bar.
@@ -74,6 +93,11 @@ export function useShortcuts(hooks: Hooks = {}) {
     'file.exit': () => void getCurrentWindow().close(),
 
     'editor.caseCycle': () => runById('editor.caseCycle'),
+    // #296 — one entry per kind, generated: the ids are `fmt.<kind>` on both
+    // sides, so a kind added to FORMAT_KINDS cannot be bound but unhandled.
+    ...Object.fromEntries(
+      FORMAT_KINDS.map((kind) => [`fmt.${kind}`, () => formatMarkdown(kind)]),
+    ),
     'format.markdown': () => runById('format.markdown'),
     'editor.tableEditor': () => runById('editor.tableEditor'),
     'editor.formulaEditor': () => runById('editor.formulaEditor'),

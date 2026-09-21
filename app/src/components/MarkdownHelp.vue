@@ -82,6 +82,17 @@ const shortcutGroups: ShortcutGroup[] = [
   {
     title: '编辑 & 格式化 / Editing',
     items: [
+      { action: 'fmt.bold', zh: '加粗(设置 → 快捷键 里可一键改成 ⌘/Ctrl+B)', en: 'Bold (Settings → Shortcuts can move it to ⌘/Ctrl+B in one click)' },
+      { action: 'fmt.italic', zh: '斜体', en: 'Italic' },
+      { action: 'fmt.strike', zh: '删除线', en: 'Strikethrough' },
+      { action: 'fmt.code', zh: '行内代码', en: 'Inline code' },
+      { action: 'fmt.link', zh: '链接', en: 'Link' },
+      { action: 'fmt.h1', zh: '一级标题(2–6 同理)', en: 'Heading 1 (2–6 likewise)' },
+      { action: 'fmt.quote', zh: '引用', en: 'Blockquote' },
+      { action: 'fmt.ul', zh: '无序列表', en: 'Bulleted list' },
+      { action: 'fmt.ol', zh: '有序列表', en: 'Numbered list' },
+      { action: 'fmt.task', zh: '任务列表', en: 'Task list' },
+      { action: 'fmt.codeblock', zh: '代码块', en: 'Code block' },
       { action: 'format.markdown', zh: '格式化 Markdown（Prettier）', en: 'Format Markdown (Prettier)' },
       { action: 'editor.aiRewrite', zh: 'AI 改写所选文本（需在设置开启）', en: 'AI rewrite the selection (requires enabling in Settings)' },
       { keys: 'Cmd/Ctrl + click [[link]]', zh: '跳转到双链目标', en: 'Open the target of a [[wikilink]]' },
