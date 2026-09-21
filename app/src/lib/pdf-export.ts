@@ -16,6 +16,7 @@ import { initMermaid } from './mermaid-lazy';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import type { ResolvedPdfOptions } from './pdf-options';
 import { rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
+import { buildPagedCanvas, searchWindowPx } from './pdf-paginate';
 
 const EXPORT_TIMEOUT_MS = 30_000;
 
@@ -23,8 +24,17 @@ const PDF_CSS = `
   body { margin: 0; }
   .pdf-page {
     box-sizing: border-box;
-    width: 760px;
-    padding: 56px 64px 72px;
+    /* The container html2pdf hands us is exactly the printable width of the
+       chosen page size (190mm → 718px for A4 with 10mm margins), so the page
+       column has to fill it. A hard 760px column overflowed every narrower
+       setup — A5 with the default margins is 118mm, "Wide" (25mm) margins on A4
+       are 160mm — and the capture then cut the right edge off every line.
+       760px stays as a cap so wide paper (landscape) doesn't stretch the
+       measure, and the padding is proportional for the same reason: a fixed
+       64px inset eats an A5 text column alive. */
+    width: 100%;
+    max-width: 760px;
+    padding: 7.5% 8.5% 10%;
     color: #1f1d1a;
     background: #ffffff;
     font: 15px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto,
@@ -193,6 +203,21 @@ async function processMermaidBlocks(container: HTMLElement) {
   }
 }
 
+/**
+ * #115 — html2pdf.js renders into a full-screen `div.html2pdf__overlay`
+ * (position:fixed; z-index:1000; visible) and html2canvas clones into an
+ * `iframe.html2canvas-container`. On a thrown or hung export these are left
+ * mounted: the overlay swallows EVERY mouse click (the UI feels frozen, Cmd-Q
+ * only) and the orphan iframe surfaces as a zoomable "nested page" that
+ * survives a restart. Sweep them so no export, success or failure, can wedge
+ * the app.
+ */
+function sweepExportLeftovers(): void {
+  document
+    .querySelectorAll('.html2pdf__overlay, iframe.html2canvas-container')
+    .forEach((n) => n.remove());
+}
+
 // #115 — html2canvas (bundled by html2pdf.js) can't parse modern CSS color
 // functions: `color(display-p3 …)`, `oklch()`, `oklab()`, `lab()`, `lch()`,
 // `hwb()`, `color-mix()`. When a theme or inline span resolves to one of these,
@@ -275,20 +300,60 @@ function camelToKebab(s: string): string {
   return s.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
 }
 
+export interface PdfRasterCapture {
+  /** The raster html2pdf captured, still unsliced. */
+  canvas: HTMLCanvasElement | null;
+  /**
+   * Height of one page in raster pixels — jsPDF's own slice height, derived
+   * the same way `toPdf()` derives it so a re-paginated raster lines up with
+   * the slicer exactly. `0` when html2pdf's internals are not reachable, which
+   * switches pagination off and leaves the old behaviour in place.
+   */
+  pageHeightPx: number;
+  /** How far above a boundary a page cut may look, in raster pixels. */
+  searchUpPx: number;
+  /** Hand back a re-paginated raster for `finish()` to slice. */
+  useCanvas(canvas: HTMLCanvasElement): void;
+  /** Slice the raster into pages and assemble the PDF. */
+  finish(): Promise<Blob>;
+  /** Drop the off-screen page and sweep any html2pdf leftovers (#115). */
+  dispose(): void;
+}
+
 /**
- * @param source — markdown source (may include YAML front matter; rendering
- *   strips the block so it doesn't bleed into the PDF body).
- * @param title — used for the `filename` field on the html2pdf builder.
- * @param pdfOpts — v2.5 resolved options (Settings + frontmatter merged).
- *   Pass `undefined` to preserve pre-v2.5 hardcoded A4 / 10mm behavior.
- * @param filePath — used to resolve relative image paths in the markdown.
+ * The parts of html2pdf's worker we reach into to re-paginate its raster. Not
+ * in the published types and not part of its API — hence the cast — but it is
+ * the only way to keep jsPDF's slicing from shearing a line of text (see
+ * `pdf-paginate.ts`). Every use is optional-chained: if a future version
+ * reshapes `prop`, `markdownToPdfBlob` simply behaves as it did before.
  */
-export async function markdownToPdfBlob(
+interface Html2PdfWorkerInternals {
+  prop?: {
+    canvas?: HTMLCanvasElement;
+    pageSize?: { inner?: { width: number; height: number } };
+  };
+}
+
+/** CSS pixels per millimetre at the 96dpi the layout engine uses. */
+const CSS_PX_PER_MM = 96 / 25.4;
+
+/** Fallback body line height (px) when the computed style can't be read. */
+const FALLBACK_LINE_HEIGHT_PX = 26;
+
+/**
+ * Render `source` into an off-screen page and rasterise it, without slicing it
+ * into pages yet.
+ *
+ * The raster is handed back so it can be re-paginated (see `pdf-paginate.ts`)
+ * before `finish()` lets jsPDF slice it. Exported for the pagination harness
+ * (`app/pdf-harness.html`), which measures exactly what the export measures.
+ */
+export async function capturePdfRaster(
   source: string,
   title: string,
   pdfOpts?: ResolvedPdfOptions,
   filePath?: string,
-): Promise<Blob> {
+): Promise<PdfRasterCapture> {
   const rawHtml = renderMarkdown(source || '');
   // v4.3.0 issue #77 — also rewrite link hrefs so local-file links
   // don't bake in `http://tauri.localhost/...` URLs.
@@ -343,110 +408,190 @@ export async function markdownToPdfBlob(
   document.body.appendChild(root);
 
   let cleaned = false;
-  const cleanup = () => {
+  const dispose = () => {
     if (cleaned) return;
     cleaned = true;
     root.remove();
-    // #115 — html2pdf.js renders into a full-screen `div.html2pdf__overlay`
-    // (position:fixed; z-index:1000; visible) and html2canvas clones into an
-    // `iframe.html2canvas-container`. On a thrown export — e.g. the unparseable
-    // `color()`/`oklch()` case above, before we sanitized it — these are left
-    // mounted: the overlay swallows EVERY mouse click (the UI feels frozen,
-    // Cmd-Q only) and the orphan iframe surfaces as a zoomable "nested page"
-    // that survives a restart. Sweep them so no export, success or failure,
-    // can wedge the app.
-    document
-      .querySelectorAll('.html2pdf__overlay, iframe.html2canvas-container')
-      .forEach((n) => n.remove());
+    sweepExportLeftovers();
+  };
+  try {
+    // Render any Mermaid blocks before capture.
+    await processMermaidBlocks(page);
+    // Give the browser a tick to lay everything out (KaTeX fonts especially).
+    await new Promise((r) => setTimeout(r, 60));
+    // #115 — convert any modern CSS color functions (color()/oklch()/…) that
+    // html2canvas can't parse into resolved sRGB rgba(), now that Mermaid SVGs
+    // and KaTeX are in the tree. Runs on the live (offscreen) node so
+    // getComputedStyle sees the cascade.
+    sanitizeModernColors(page);
+
+    const opts = buildHtml2PdfOptions(title, pdfOpts);
+    // html2pdf drags in jsPDF + html2canvas (~1 MB). Load it when an
+    // export actually happens, not on every cold start.
+    const html2pdf = (await import('html2pdf.js')).default;
+    const worker = html2pdf().set(opts).from(page);
+    // Capture here rather than letting `outputPdf()` do it, so the raster can
+    // be re-paginated first.
+    await worker.toCanvas();
+    const prop = (worker as unknown as Html2PdfWorkerInternals).prop;
+    const canvas = prop?.canvas ?? null;
+    const inner = prop?.pageSize?.inner;
+    const geometry = pdfPaginationGeometry(canvas, inner, page);
+
+    return {
+      canvas,
+      pageHeightPx: geometry.pageHeightPx,
+      searchUpPx: geometry.searchUpPx,
+      useCanvas(replacement: HTMLCanvasElement) {
+        if (prop) prop.canvas = replacement;
+      },
+      async finish(): Promise<Blob> {
+        return await worker.outputPdf('blob');
+      },
+      dispose,
+    };
+  } catch (e) {
+    dispose();
+    throw e;
+  }
+}
+
+/**
+ * jsPDF slice height + how far a cut may climb, both in raster pixels.
+ *
+ * `pageHeightPx` repeats html2pdf's own arithmetic (`toPdf()` does
+ * `Math.floor(canvas.width * pageSize.inner.ratio)`), because the re-paginated
+ * raster is only safe if the slicer's grid and ours are the same grid.
+ */
+function pdfPaginationGeometry(
+  canvas: HTMLCanvasElement | null,
+  inner: { width: number; height: number } | undefined,
+  page: HTMLElement,
+): { pageHeightPx: number; searchUpPx: number } {
+  if (!canvas || !inner || !(inner.width > 0) || !(inner.height > 0)) {
+    return { pageHeightPx: 0, searchUpPx: 0 };
+  }
+  const pageHeightPx = Math.floor(canvas.width * (inner.height / inner.width));
+  // html2pdf's container is exactly the printable width, declared in mm, so
+  // this converts raster pixels back to CSS pixels for the line-height cap.
+  const rasterPerCssPx = canvas.width / (inner.width * CSS_PX_PER_MM);
+  const lineHeightPx = parseFloat(getComputedStyle(page).lineHeight);
+  return {
+    pageHeightPx,
+    searchUpPx: searchWindowPx(
+      Number.isFinite(lineHeightPx) ? lineHeightPx : FALLBACK_LINE_HEIGHT_PX,
+      rasterPerCssPx,
+      pageHeightPx,
+    ),
+  };
+}
+
+/**
+ * @param source — markdown source (may include YAML front matter; rendering
+ *   strips the block so it doesn't bleed into the PDF body).
+ * @param title — used for the `filename` field on the html2pdf builder.
+ * @param pdfOpts — v2.5 resolved options (Settings + frontmatter merged).
+ *   Pass `undefined` to preserve pre-v2.5 hardcoded A4 / 10mm behavior.
+ * @param filePath — used to resolve relative image paths in the markdown.
+ */
+export async function markdownToPdfBlob(
+  source: string,
+  title: string,
+  pdfOpts?: ResolvedPdfOptions,
+  filePath?: string,
+): Promise<Blob> {
+  // Timeout guard — prevents the export from hanging the UI indefinitely
+  // if html2pdf.js or Mermaid gets stuck. It sweeps html2pdf's leftovers on
+  // the way out: a hung capture can leave its invisible full-screen overlay
+  // mounted, which swallows every click in the app.
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => {
+      sweepExportLeftovers();
+      reject(new Error('PDF export timed out'));
+    }, EXPORT_TIMEOUT_MS),
+  );
+
+  const render = async (): Promise<Blob> => {
+    const capture = await capturePdfRaster(source, title, pdfOpts, filePath);
+    try {
+      // jsPDF slices the raster at a fixed page height, which shears whatever
+      // line of text sits on the boundary. Re-lay the raster as whole pages
+      // first, so every slice lands on a row with no ink in it.
+      const paged = capture.canvas
+        ? buildPagedCanvas(capture.canvas, capture.pageHeightPx, capture.searchUpPx)
+        : null;
+      if (paged) capture.useCanvas(paged.canvas);
+      return await capture.finish();
+    } finally {
+      capture.dispose();
+    }
   };
 
-  try {
-    // Timeout guard — prevents the export from hanging the UI indefinitely
-    // if html2pdf.js or Mermaid gets stuck.
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('PDF export timed out')), EXPORT_TIMEOUT_MS),
-    );
+  return await Promise.race([render(), timeout]);
+}
 
-    const work = async () => {
-      // Render any Mermaid blocks before capture.
-      await processMermaidBlocks(page);
-      // Give the browser a tick to lay everything out (KaTeX fonts especially).
-      await new Promise((r) => setTimeout(r, 60));
-      // #115 — convert any modern CSS color functions (color()/oklch()/…) that
-      // html2canvas can't parse into resolved sRGB rgba(), now that Mermaid SVGs
-      // and KaTeX are in the tree. Runs on the live (offscreen) node so
-      // getComputedStyle sees the cascade.
-      sanitizeModernColors(page);
-
-      // v2.5 F3: derive jsPDF / margin args from the resolved opts. When
-      // the caller didn't customize anything, fall back to the legacy
-      // hardcoded values so old users see exactly the same output as v2.4.
-      let margins: [number, number, number, number] = [10, 10, 12, 10];
-      let jsPdfFormat: string | [number, number] = 'a4';
-      let orientation: 'portrait' | 'landscape' = 'portrait';
-      if (pdfOpts && pdfOpts.pageSizeMm && pdfOpts.marginMm) {
-        margins = [
-          pdfOpts.marginMm.top,
-          pdfOpts.marginMm.right,
-          pdfOpts.marginMm.bottom,
-          pdfOpts.marginMm.left,
-        ];
-        const named = pageSizeLabelToJsPdf(pdfOpts.pageSizeLabel);
-        if (named) {
-          jsPdfFormat = named;
-        } else {
-          jsPdfFormat = [pdfOpts.pageSizeMm.width, pdfOpts.pageSizeMm.height];
-        }
-        orientation =
-          pdfOpts.pageSizeMm.width > pdfOpts.pageSizeMm.height ? 'landscape' : 'portrait';
-      }
-
-      const opts: any = {
-        margin: margins,
-        filename: `${title || 'document'}.pdf`,
-        image: { type: 'jpeg', quality: 0.96 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          letterRendering: true,
-          logging: false,
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: jsPdfFormat,
-          orientation,
-        },
-        pagebreak: {
-          mode: ['css', 'legacy'],
-          // html2canvas rasterises the whole document and jsPDF slices it by
-          // page height, so a page break can shear a line of body text in
-          // half. `avoid` makes html2pdf's element-level pass push these whole
-          // elements onto the next page instead. Body paragraphs (`p`), list
-          // items (`li`) and images (`img`) were missing — that left running
-          // text getting cut across the page boundary. (We deliberately keep
-          // `ul`/`ol` OUT: avoiding those would treat a whole multi-page list
-          // as one unsplittable block; we break between `li`s instead.)
-          avoid: [
-            'pre', '.mermaid-block', 'table', 'blockquote',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'p', 'li', 'img',
-          ],
-        },
-      };
-      // html2pdf drags in jsPDF + html2canvas (~1 MB). Load it when an
-      // export actually happens, not on every cold start.
-      const html2pdf = (await import('html2pdf.js')).default;
-      const worker = html2pdf().set(opts).from(page);
-
-      const blob: Blob = await worker.outputPdf('blob');
-      return blob;
-    };
-
-    return await Promise.race([work(), timeout]);
-  } finally {
-    cleanup();
+/** The html2pdf option object, shared by the export and the test harness. */
+export function buildHtml2PdfOptions(title: string, pdfOpts?: ResolvedPdfOptions): any {
+  // v2.5 F3: derive jsPDF / margin args from the resolved opts. When
+  // the caller didn't customize anything, fall back to the legacy
+  // hardcoded values so old users see exactly the same output as v2.4.
+  let margins: [number, number, number, number] = [10, 10, 12, 10];
+  let jsPdfFormat: string | [number, number] = 'a4';
+  let orientation: 'portrait' | 'landscape' = 'portrait';
+  if (pdfOpts && pdfOpts.pageSizeMm && pdfOpts.marginMm) {
+    margins = [
+      pdfOpts.marginMm.top,
+      pdfOpts.marginMm.right,
+      pdfOpts.marginMm.bottom,
+      pdfOpts.marginMm.left,
+    ];
+    const named = pageSizeLabelToJsPdf(pdfOpts.pageSizeLabel);
+    if (named) {
+      jsPdfFormat = named;
+    } else {
+      jsPdfFormat = [pdfOpts.pageSizeMm.width, pdfOpts.pageSizeMm.height];
+    }
+    orientation =
+      pdfOpts.pageSizeMm.width > pdfOpts.pageSizeMm.height ? 'landscape' : 'portrait';
   }
+
+  return {
+    margin: margins,
+    filename: `${title || 'document'}.pdf`,
+    image: { type: 'jpeg', quality: 0.96 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      letterRendering: true,
+      logging: false,
+    },
+    jsPDF: {
+      unit: 'mm',
+      format: jsPdfFormat,
+      orientation,
+    },
+    pagebreak: {
+      mode: ['css', 'legacy'],
+      // html2canvas rasterises the whole document and jsPDF slices it by
+      // page height, so a page break can shear a line of body text in
+      // half. `avoid` makes html2pdf's element-level pass push these whole
+      // elements onto the next page instead. Body paragraphs (`p`), list
+      // items (`li`) and images (`img`) were missing — that left running
+      // text getting cut across the page boundary. (We deliberately keep
+      // `ul`/`ol` OUT: avoiding those would treat a whole multi-page list
+      // as one unsplittable block; we break between `li`s instead.)
+      //
+      // This pass works in CSS pixels while jsPDF slices raster pixels, so it
+      // can only ever be a hint — see `pdf-paginate.ts` for the pass that
+      // actually guarantees no glyph is cut.
+      avoid: [
+        'pre', '.mermaid-block', 'table', 'blockquote',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'p', 'li', 'img',
+      ],
+    },
+  };
 }
 
 function pageSizeLabelToJsPdf(label: string): string | null {
