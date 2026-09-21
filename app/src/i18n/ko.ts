@@ -211,6 +211,12 @@ export const ko: I18n = {
     keysInterceptedBody: "아래 프로그램들이 이 조합을 전역 단축키로 등록해서 SoloMD까지 오지 않습니다. 해당 명령을 오른쪽 키로 옮겨도 나머지 단축키는 그대로입니다.",
     keysApplyCompat: "이 명령들을 비어 있는 키로 옮기기",
     keysCompatApplied: "단축키 {count}개를 옮겼습니다. 되돌리려면 ‘모두 초기화’를 쓰세요.",
+    keysSearch: "단축키 검색 — 이름 또는 키…",
+    keysNoMatch: "일치하는 단축키가 없습니다.",
+    keysHelpLead: "현재 적용 중인 단축키입니다. 변경한 내용도 여기에 반영됩니다.",
+    keysHelpChange: "변경하기…",
+    keysBuiltin: "편집기 내장",
+    formatHints: "Markdown 서식 기호를 직접 입력하면 해당 단축키를 한 번만 알려 주기",
     keysWriterTitle: "글쓰기 프리셋",
     keysWriterBody: "{bold} 를 굵게로 사용합니다(Typora, Word 와 동일). 파일 트리는 {tree} 로 옮겨집니다. 기본값은 그 반대입니다.",
     keysWriterApply: "{bold} 를 굵게로 사용",
@@ -1677,6 +1683,10 @@ export const ko: I18n = {
       refs: '상호 참조',
     },
   },
+  hints: {
+    formatKey: "팁: {name}은(는) {key} 로 할 수 있습니다. 기호를 직접 입력할 필요가 없습니다.",
+    formatChange: "단축키 변경",
+  },
   cmd: {
     fmt: {
       bold: "굵게",
@@ -1775,6 +1785,10 @@ export const ko: I18n = {
       cjk: 'CJK 교정 — 중국어 오타 표시',
     },
     editor: {
+      caseCycle: "선택 영역 대소문자 전환",
+      tableEditor: "표를 그리드로 편집",
+      formulaEditor: "수식 편집",
+      aiRewrite: "선택 영역 AI 다시 쓰기",
       find: '노트에서 찾기 / 바꾸기…',
       insertImage: '이미지 삽입…',
       insertImageUrl: 'URL에서 이미지…',
@@ -1838,11 +1852,28 @@ export const ko: I18n = {
       new: '새 창',
     },
     inbox: {
+      toggle: "받은 편지함 표시 전환 / 정리됨으로 표시",
       open: 'Inbox 열기',
       organizeAndAdvance: 'Inbox: 정리됨으로 표시하고 다음으로',
     },
     tags: {
       refresh: '태그 인덱스 새로 고침',
+    },
+    palette: {
+      open: "명령 팔레트",
+    },
+    quickSwitcher: {
+      open: "빠른 파일 전환",
+    },
+    tab: {
+      prev: "이전 탭",
+      next: "다음 탭",
+    },
+    settings: {
+      open: "설정",
+    },
+    pomodoro: {
+      startLast: "글쓰기 세션 시작",
     },
   },
 };

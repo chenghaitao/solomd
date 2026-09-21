@@ -212,6 +212,12 @@ export const zh: I18n = {
     keysInterceptedBody: "下面这些组合被列出的程序注册成了全局热键,按下去根本到不了 SoloMD。把这些命令改到右侧的键位即可,其余快捷键不受影响。",
     keysApplyCompat: "把这些命令改到不冲突的键位",
     keysCompatApplied: "已改绑 {count} 个快捷键,想还原用「全部重置」。",
+    keysSearch: "搜索快捷键 —— 输入名称或按键…",
+    keysNoMatch: "没有匹配的快捷键。",
+    keysHelpLead: "这里显示的是你当前生效的快捷键,改过的也会在这里更新。",
+    keysHelpChange: "去修改…",
+    keysBuiltin: "编辑器内置",
+    formatHints: "手打 Markdown 格式符号时,提示一次对应的快捷键",
     keysWriterTitle: "写作预设",
     keysWriterBody: "让 {bold} 变成加粗(和 Typora、Word 一致),文件树改到 {tree}。默认情况下两者正好相反。",
     keysWriterApply: "用 {bold} 加粗",
@@ -1680,6 +1686,10 @@ export const zh: I18n = {
       refs: '交叉引用',
     },
   },
+  hints: {
+    formatKey: "小提示:{name}可以直接按 {key},不用手打符号。",
+    formatChange: "修改快捷键",
+  },
   cmd: {
     fmt: {
       bold: "加粗",
@@ -1778,6 +1788,10 @@ export const zh: I18n = {
       cjk: '中文校对——标记常见错别字',
     },
     editor: {
+      caseCycle: "切换选中文字的大小写",
+      tableEditor: "用表格编辑器编辑",
+      formulaEditor: "编辑公式",
+      aiRewrite: "AI 改写选中文字",
       find: '在笔记中查找/替换…',
       insertImage: '插入图片…',
       insertImageUrl: '从 URL 插入图片…',
@@ -1841,11 +1855,28 @@ export const zh: I18n = {
       new: '新建窗口',
     },
     inbox: {
+      toggle: "切换收件箱标记 / 标为已整理",
       open: '打开收集箱',
       organizeAndAdvance: '收集箱:标记已整理并跳到下一条',
     },
     tags: {
       refresh: '刷新标签索引',
+    },
+    palette: {
+      open: "命令面板",
+    },
+    quickSwitcher: {
+      open: "快速切换文件",
+    },
+    tab: {
+      prev: "上一个标签页",
+      next: "下一个标签页",
+    },
+    settings: {
+      open: "设置",
+    },
+    pomodoro: {
+      startLast: "开始专注写作",
     },
   },
 };

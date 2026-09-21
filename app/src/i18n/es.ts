@@ -211,6 +211,12 @@ export const es: I18n = {
     keysInterceptedBody: "Los programas indicados abajo registran estas combinaciones como atajos globales, así que nunca llegan a SoloMD. Mover esos comandos a las teclas de la derecha no afecta al resto de tus atajos.",
     keysApplyCompat: "Mover estos comandos a teclas libres",
     keysCompatApplied: "Se movieron {count} atajos. Usa «Restablecer todo» para deshacerlo.",
+    keysSearch: "Buscar atajos: un nombre o una tecla…",
+    keysNoMatch: "Ningún atajo coincide.",
+    keysHelpLead: "Estos son tus atajos actuales; lo que hayas cambiado aparece aquí.",
+    keysHelpChange: "Cambiarlos…",
+    keysBuiltin: "Integrados en el editor",
+    formatHints: "Mostrar un consejo, una sola vez, cuando escribo a mano el formato Markdown",
     keysWriterTitle: "Preajuste de escritura",
     keysWriterBody: "{bold} pone negrita, como en Typora y Word, y el árbol de archivos pasa a {tree}. De fábrica es al revés.",
     keysWriterApply: "Usar {bold} para negrita",
@@ -1677,6 +1683,10 @@ export const es: I18n = {
       refs: 'Referencias',
     },
   },
+  hints: {
+    formatKey: "Consejo: {key} hace «{name}»; no hace falta escribir los símbolos.",
+    formatChange: "Cambiar atajos",
+  },
   cmd: {
     fmt: {
       bold: "Negrita",
@@ -1775,6 +1785,10 @@ export const es: I18n = {
       cjk: 'Corrección CJK — marcar erratas en chino',
     },
     editor: {
+      caseCycle: "Cambiar mayúsculas/minúsculas de la selección",
+      tableEditor: "Editar tabla como cuadrícula",
+      formulaEditor: "Editar fórmula",
+      aiRewrite: "Reescribir la selección con IA",
       find: 'Buscar / reemplazar en la nota…',
       insertImage: 'Insertar imagen…',
       insertImageUrl: 'Imagen desde URL…',
@@ -1838,11 +1852,28 @@ export const es: I18n = {
       new: 'Nueva ventana',
     },
     inbox: {
+      toggle: "Alternar marca de bandeja de entrada / marcar como organizado",
       open: 'Abrir Inbox',
       organizeAndAdvance: 'Inbox: Marcar como organizada y avanzar',
     },
     tags: {
       refresh: 'Actualizar índice de etiquetas',
+    },
+    palette: {
+      open: "Paleta de comandos",
+    },
+    quickSwitcher: {
+      open: "Cambio rápido de archivo",
+    },
+    tab: {
+      prev: "Pestaña anterior",
+      next: "Pestaña siguiente",
+    },
+    settings: {
+      open: "Ajustes",
+    },
+    pomodoro: {
+      startLast: "Iniciar sesión de escritura",
     },
   },
 };

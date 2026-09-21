@@ -77,6 +77,10 @@ interface Settings {
   spellCheck: boolean;
   focusMode: boolean;
   typewriterMode: boolean;
+  /** One-time tips when Markdown formatting is typed by hand (useFormatHints). */
+  formatHints: boolean;
+  /** Hint keys already shown — `bold`, `heading`, … Never shown twice. */
+  formatHintsSeen: string[];
   vimMode: boolean;
   uiFontSize: number;
   language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk';
@@ -525,6 +529,8 @@ function defaults(): Settings {
     spellCheck: true,
     focusMode: false,
     typewriterMode: false,
+    formatHints: true,
+    formatHintsSeen: [],
     vimMode: false,
     uiFontSize: 13,
     autoCheckUpdate: true,
@@ -1000,6 +1006,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleFocusMode() {
       this.focusMode = !this.focusMode;
+      this.persist();
+    },
+    toggleFormatHints() {
+      this.formatHints = !this.formatHints;
+      this.persist();
+    },
+    markFormatHintSeen(key: string) {
+      if (!this.formatHintsSeen.includes(key)) this.formatHintsSeen.push(key);
       this.persist();
     },
     toggleTypewriterMode() {

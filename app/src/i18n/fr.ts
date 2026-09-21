@@ -211,6 +211,12 @@ export const fr: I18n = {
     keysInterceptedBody: "Ces combinaisons sont enregistrées comme raccourcis globaux par les programmes ci-dessous : elles n'arrivent jamais jusqu'à SoloMD. Déplacer ces commandes vers les touches de droite laisse tous vos autres raccourcis intacts.",
     keysApplyCompat: "Déplacer ces commandes vers des touches libres",
     keysCompatApplied: "{count} raccourcis déplacés. « Tout réinitialiser » annule l'opération.",
+    keysSearch: "Rechercher un raccourci — nom ou touche…",
+    keysNoMatch: "Aucun raccourci ne correspond.",
+    keysHelpLead: "Voici vos raccourcis actuels — vos modifications apparaissent ici.",
+    keysHelpChange: "Les modifier…",
+    keysBuiltin: "Intégrés à l’éditeur",
+    formatHints: "Afficher une astuce, une seule fois, quand je tape la mise en forme Markdown à la main",
     keysWriterTitle: "Préréglage écriture",
     keysWriterBody: "{bold} met en gras, comme dans Typora et Word, et l’arborescence passe sur {tree}. Par défaut, c’est l’inverse.",
     keysWriterApply: "Utiliser {bold} pour le gras",
@@ -1677,6 +1683,10 @@ export const fr: I18n = {
       refs: 'Renvois',
     },
   },
+  hints: {
+    formatKey: "Astuce : {key} fait « {name} » — inutile de taper les symboles.",
+    formatChange: "Modifier les raccourcis",
+  },
   cmd: {
     fmt: {
       bold: "Gras",
@@ -1775,6 +1785,10 @@ export const fr: I18n = {
       cjk: 'Relecture CJK — signaler les fautes de frappe en chinois',
     },
     editor: {
+      caseCycle: "Changer la casse de la sélection",
+      tableEditor: "Modifier le tableau en grille",
+      formulaEditor: "Modifier la formule",
+      aiRewrite: "Réécrire la sélection avec l’IA",
       find: 'Rechercher / remplacer dans la note…',
       insertImage: 'Insérer une image…',
       insertImageUrl: 'Image depuis une URL…',
@@ -1838,11 +1852,28 @@ export const fr: I18n = {
       new: 'Nouvelle fenêtre',
     },
     inbox: {
+      toggle: "Basculer le marqueur de boîte de réception / marquer comme classé",
       open: 'Ouvrir l\'Inbox',
       organizeAndAdvance: 'Inbox : Marquer comme organisé et passer au suivant',
     },
     tags: {
       refresh: 'Actualiser l\'index des tags',
+    },
+    palette: {
+      open: "Palette de commandes",
+    },
+    quickSwitcher: {
+      open: "Changement rapide de fichier",
+    },
+    tab: {
+      prev: "Onglet précédent",
+      next: "Onglet suivant",
+    },
+    settings: {
+      open: "Réglages",
+    },
+    pomodoro: {
+      startLast: "Démarrer une session d’écriture",
     },
   },
 };

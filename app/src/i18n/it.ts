@@ -211,6 +211,12 @@ export const it: I18n = {
     keysInterceptedBody: "Questi tasti sono registrati come scorciatoie globali dai programmi indicati qui sotto e non arrivano mai a SoloMD. Spostare quei comandi sui tasti a destra lascia invariate tutte le altre scorciatoie.",
     keysApplyCompat: "Sposta questi comandi su tasti liberi",
     keysCompatApplied: "{count} scorciatoie spostate. Usa «Reimposta tutto» per annullare.",
+    keysSearch: "Cerca scorciatoie — un nome o un tasto…",
+    keysNoMatch: "Nessuna scorciatoia corrisponde.",
+    keysHelpLead: "Queste sono le tue scorciatoie attuali — le modifiche compaiono qui.",
+    keysHelpChange: "Modificale…",
+    keysBuiltin: "Integrate nell’editor",
+    formatHints: "Mostra un suggerimento, una sola volta, quando digito a mano la formattazione Markdown",
     keysWriterTitle: "Preimpostazione scrittura",
     keysWriterBody: "{bold} applica il grassetto, come in Typora e Word, e l’albero dei file passa a {tree}. Di default è il contrario.",
     keysWriterApply: "Usa {bold} per il grassetto",
@@ -1677,6 +1683,10 @@ export const it: I18n = {
       refs: 'Riferimenti',
     },
   },
+  hints: {
+    formatKey: "Suggerimento: {key} fa «{name}» — non serve digitare i simboli.",
+    formatChange: "Modifica scorciatoie",
+  },
   cmd: {
     fmt: {
       bold: "Grassetto",
@@ -1775,6 +1785,10 @@ export const it: I18n = {
       cjk: 'Revisione CJK — segnala refusi in cinese',
     },
     editor: {
+      caseCycle: "Cambia maiuscole/minuscole della selezione",
+      tableEditor: "Modifica tabella come griglia",
+      formulaEditor: "Modifica formula",
+      aiRewrite: "Riscrivi la selezione con l’IA",
       find: 'Trova / sostituisci nella nota…',
       insertImage: 'Inserisci immagine…',
       insertImageUrl: 'Immagine da URL…',
@@ -1838,11 +1852,28 @@ export const it: I18n = {
       new: 'Nuova finestra',
     },
     inbox: {
+      toggle: "Attiva/disattiva contrassegno Inbox / segna come organizzato",
       open: 'Apri Inbox',
       organizeAndAdvance: 'Inbox: Segna come organizzata e avanza',
     },
     tags: {
       refresh: 'Aggiorna indice dei tag',
+    },
+    palette: {
+      open: "Palette dei comandi",
+    },
+    quickSwitcher: {
+      open: "Cambio rapido di file",
+    },
+    tab: {
+      prev: "Scheda precedente",
+      next: "Scheda successiva",
+    },
+    settings: {
+      open: "Impostazioni",
+    },
+    pomodoro: {
+      startLast: "Avvia sessione di scrittura",
     },
   },
 };

@@ -45,3 +45,14 @@ test('the preset would leave nothing intercepted', () => {
   for (const b of interceptedBindings({}, 'windows')) overrides[b.action.id] = b.alternative;
   assert.deepEqual(interceptedBindings(overrides, 'windows'), []);
 });
+
+test('search: a chord query matches the chord, not the letters in it', async () => {
+  const { filterKeyActions, KEY_ACTIONS } = await import('./keybindings.ts');
+  const ids = (q: string) => filterKeyActions(KEY_ACTIONS, q, (a) => a.label).map((a) => a.id);
+  assert.deepEqual(ids('ctrl shift k'), ['palette.open']);
+  assert.deepEqual(ids('⌘⇧K'), ['palette.open']);
+  assert.deepEqual(ids('cmd+k'), ['fmt.link']);
+  assert.deepEqual(ids('ctrl \\'), ['tile.splitRight']);
+  assert.ok(ids('bold').includes('fmt.bold'));
+  assert.ok(ids('heading').length >= 6);
+});

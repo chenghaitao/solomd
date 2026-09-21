@@ -211,6 +211,12 @@ export const de: I18n = {
     keysInterceptedBody: "Diese Tastenkombinationen sind von den unten genannten Programmen als globale Hotkeys registriert und erreichen SoloMD nie. Werden die Befehle auf die Tasten rechts verschoben, bleibt der Rest Ihrer Kürzel unverändert.",
     keysApplyCompat: "Diese Befehle auf freie Tasten verschieben",
     keysCompatApplied: "{count} Tastenkürzel verschoben. „Alle zurücksetzen“ macht es rückgängig.",
+    keysSearch: "Tastenkürzel suchen – Name oder Taste…",
+    keysNoMatch: "Kein passendes Tastenkürzel.",
+    keysHelpLead: "Das sind deine aktuellen Tastenkürzel – Änderungen erscheinen hier.",
+    keysHelpChange: "Ändern…",
+    keysBuiltin: "Im Editor eingebaut",
+    formatHints: "Einmaligen Tipp zeigen, wenn ich Markdown-Formatierung von Hand tippe",
     keysWriterTitle: "Schreib-Voreinstellung",
     keysWriterBody: "{bold} formatiert fett, wie in Typora und Word, und der Dateibaum wandert auf {tree}. Standardmäßig ist es umgekehrt.",
     keysWriterApply: "{bold} für Fett verwenden",
@@ -1677,6 +1683,10 @@ export const de: I18n = {
       refs: 'Verweise',
     },
   },
+  hints: {
+    formatKey: "Tipp: {name} geht mit {key} – die Zeichen musst du nicht tippen.",
+    formatChange: "Tastenkürzel ändern",
+  },
   cmd: {
     fmt: {
       bold: "Fett",
@@ -1775,6 +1785,10 @@ export const de: I18n = {
       cjk: 'CJK-Korrekturlesen — chinesische Tippfehler markieren',
     },
     editor: {
+      caseCycle: "Groß-/Kleinschreibung der Auswahl wechseln",
+      tableEditor: "Tabelle als Raster bearbeiten",
+      formulaEditor: "Formel bearbeiten",
+      aiRewrite: "Auswahl mit KI umschreiben",
       find: 'In Notiz suchen / ersetzen…',
       insertImage: 'Bild einfügen…',
       insertImageUrl: 'Bild von URL…',
@@ -1838,11 +1852,28 @@ export const de: I18n = {
       new: 'Neues Fenster',
     },
     inbox: {
+      toggle: "Posteingangs-Markierung umschalten / als sortiert markieren",
       open: 'Inbox öffnen',
       organizeAndAdvance: 'Inbox: Als organisiert markieren & weiter',
     },
     tags: {
       refresh: 'Tag-Index aktualisieren',
+    },
+    palette: {
+      open: "Befehlspalette",
+    },
+    quickSwitcher: {
+      open: "Schneller Dateiwechsel",
+    },
+    tab: {
+      prev: "Vorheriger Tab",
+      next: "Nächster Tab",
+    },
+    settings: {
+      open: "Einstellungen",
+    },
+    pomodoro: {
+      startLast: "Schreibsitzung starten",
     },
   },
 };

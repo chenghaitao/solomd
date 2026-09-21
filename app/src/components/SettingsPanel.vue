@@ -18,6 +18,7 @@ import {
   eventToCombo,
   formatCombo,
   interceptedBindings,
+  filterKeyActions,
   WRITER_PRESET,
   writerPresetActive,
   type KeyActionDef,
@@ -90,11 +91,14 @@ const recordingAction = ref<string | null>(null);
 const recordError = ref<string | null>(null);
 const macKeys = isMacOS();
 
-const keyGroups = computed(() =>
-  (['file', 'edit', 'view', 'navigate', 'tools'] as const)
-    .map((key) => ({ key, items: activeKeyActions().filter((a) => a.category === key) }))
-    .filter((g) => g.items.length > 0),
-);
+/** Sixty rows is past what anyone scans — filter by name, id or chord. */
+const keyQuery = ref('');
+const keyGroups = computed(() => {
+  const hits = filterKeyActions(activeKeyActions(), keyQuery.value, actionLabel, settings.keybindings, macKeys);
+  return (['file', 'edit', 'view', 'navigate', 'tools'] as const)
+    .map((key) => ({ key, items: hits.filter((a) => a.category === key) }))
+    .filter((g) => g.items.length > 0);
+});
 
 /**
  * Prefer the command palette's own translation (`cmd.<id>` — most action ids
@@ -1440,6 +1444,17 @@ function onSelectPdfFont(v: string) {
               ✓ {{ t('settings.keysWriterUndo') }}
             </button>
           </div>
+          <label class="kb-hints-toggle">
+            <input type="checkbox" :checked="settings.formatHints" @change="settings.toggleFormatHints()" />
+            {{ t('settings.formatHints') }}
+          </label>
+          <input
+            v-model="keyQuery"
+            class="kb-search"
+            type="search"
+            :placeholder="t('settings.keysSearch')"
+          />
+          <p v-if="!keyGroups.length" class="setting-hint">{{ t('settings.keysNoMatch') }}</p>
           <div v-for="group in keyGroups" :key="group.key" class="kb-group">
             <h4 class="kb-group__title">{{ t('settings.keysCat' + group.key.charAt(0).toUpperCase() + group.key.slice(1)) }}</h4>
             <div v-for="action in group.items" :key="action.id" class="kb-row">
@@ -1807,6 +1822,21 @@ function onSelectPdfFont(v: string) {
   gap: 6px;
 }
 /* Same box, no alarm: an offer rather than a warning (#296). */
+.kb-hints-toggle {
+  display: block;
+  margin: 2px 0 10px;
+}
+.kb-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
 .kb-clash--neutral {
   border-color: var(--border);
   background: var(--bg-soft, transparent);

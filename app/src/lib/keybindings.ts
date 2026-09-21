@@ -395,6 +395,63 @@ export function writerPresetActive(
   });
 }
 
+/**
+ * Search over the bindable actions — by name (in the UI language *and* in
+ * English, so "bold" finds 加粗), by id, or by the chord itself ("⌘B",
+ * "ctrl shift k"). One implementation for the help sheet and the settings
+ * list, so the two can never disagree about what a query matches.
+ */
+export function filterKeyActions(
+  actions: KeyActionDef[],
+  query: string,
+  localizedLabel: (a: KeyActionDef) => string,
+  overrides: Record<string, string | null | undefined> = {},
+  mac = false,
+): KeyActionDef[] {
+  const words = query.trim().toLowerCase().split(/[\s+]+/).filter(Boolean);
+  if (!words.length) return actions;
+
+  // "ctrl shift k" is a chord, not three words: as text, the lone "k" would
+  // match strike, backslash and everything else with a k in it. When the query
+  // names a modifier, compare it to the bindings part by part instead.
+  const MODS: Record<string, string> = {
+    ctrl: 'Mod', control: 'Mod', cmd: 'Mod', command: 'Mod', mod: 'Mod', '⌘': 'Mod', '⌃': 'Mod',
+    alt: 'Alt', option: 'Alt', opt: 'Alt', '⌥': 'Alt',
+    shift: 'Shift', '⇧': 'Shift',
+  };
+  // "⌘⇧k" typed without spaces still means three parts.
+  const parts = words.flatMap((w) => w.split(/(?=[⌘⌃⌥⇧])|(?<=[⌘⌃⌥⇧])/)).filter(Boolean);
+  const wantMods = new Set(parts.filter((w) => MODS[w]).map((w) => MODS[w]));
+  const keys = parts.filter((w) => !MODS[w]);
+  if (wantMods.size && keys.length <= 1) {
+    return actions.filter((a) =>
+      combosFor(a.id, overrides).some((c) => {
+        const cp = c.split('+');
+        const key = cp[cp.length - 1].toLowerCase();
+        const mods = new Set(cp.slice(0, -1));
+        if (mods.size !== wantMods.size || [...wantMods].some((m) => !mods.has(m))) return false;
+        if (!keys.length) return true;
+        return key === keys[0] || (PUNCT_BY_CODE[cp[cp.length - 1]] ?? '') === keys[0];
+      }),
+    );
+  }
+
+  return actions.filter((a) => {
+    const combos = combosFor(a.id, overrides);
+    const hay = [
+      localizedLabel(a),
+      a.label,
+      a.id,
+      ...combos,
+      ...combos.map((c) => formatCombo(c, mac)),
+      // "ctrl" / "cmd" are what people type; the table says "Mod".
+      combos.some((c) => c.includes('Mod')) ? 'ctrl cmd command control' : '',
+      combos.some((c) => c.includes('Alt')) ? 'option opt' : '',
+    ].join(' ').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+}
+
 /** Which other action already owns this chord, if any. */
 export function conflictFor(
   combo: KeyCombo,

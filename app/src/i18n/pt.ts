@@ -213,6 +213,12 @@ export const pt: I18n = {
     keysInterceptedBody: "Os programas listados abaixo registram essas combinações como atalhos globais, então elas nunca chegam ao SoloMD. Mover esses comandos para as teclas à direita não altera os demais atalhos.",
     keysApplyCompat: "Mover estes comandos para teclas livres",
     keysCompatApplied: "{count} atalhos movidos. Use “Redefinir tudo” para desfazer.",
+    keysSearch: "Procurar atalhos — um nome ou uma tecla…",
+    keysNoMatch: "Nenhum atalho corresponde.",
+    keysHelpLead: "Estes são os seus atalhos atuais — o que alterou aparece aqui.",
+    keysHelpChange: "Alterá-los…",
+    keysBuiltin: "Incorporados no editor",
+    formatHints: "Mostrar uma dica, uma única vez, quando escrevo a formatação Markdown à mão",
     keysWriterTitle: "Predefinição de escrita",
     keysWriterBody: "{bold} aplica negrito, como no Typora e no Word, e a árvore de ficheiros passa para {tree}. Por omissão é o contrário.",
     keysWriterApply: "Usar {bold} para negrito",
@@ -1679,6 +1685,10 @@ export const pt: I18n = {
       refs: 'Referências',
     },
   },
+  hints: {
+    formatKey: "Dica: {key} faz «{name}» — não é preciso escrever os símbolos.",
+    formatChange: "Alterar atalhos",
+  },
   cmd: {
     fmt: {
       bold: "Negrito",
@@ -1777,6 +1787,10 @@ export const pt: I18n = {
       cjk: 'Revisão CJK — sinalizar erros de digitação em chinês',
     },
     editor: {
+      caseCycle: "Alternar maiúsculas/minúsculas da seleção",
+      tableEditor: "Editar tabela em grelha",
+      formulaEditor: "Editar fórmula",
+      aiRewrite: "Reescrever a seleção com IA",
       find: 'Localizar / substituir na nota…',
       insertImage: 'Inserir imagem…',
       insertImageUrl: 'Imagem a partir de URL…',
@@ -1840,11 +1854,28 @@ export const pt: I18n = {
       new: 'Nova janela',
     },
     inbox: {
+      toggle: "Alternar marca da caixa de entrada / marcar como organizado",
       open: 'Abrir Inbox',
       organizeAndAdvance: 'Inbox: Marcar como organizado e avançar',
     },
     tags: {
       refresh: 'Atualizar índice de tags',
+    },
+    palette: {
+      open: "Paleta de comandos",
+    },
+    quickSwitcher: {
+      open: "Troca rápida de ficheiro",
+    },
+    tab: {
+      prev: "Separador anterior",
+      next: "Separador seguinte",
+    },
+    settings: {
+      open: "Definições",
+    },
+    pomodoro: {
+      startLast: "Iniciar sessão de escrita",
     },
   },
 };

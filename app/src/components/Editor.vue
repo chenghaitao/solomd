@@ -46,6 +46,7 @@ import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisual
 import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
 import { applyFormat, FORMAT_KINDS, type FormatKind } from '../lib/md-format';
+import { useFormatHints } from '../composables/useFormatHints';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore, buildEditorFontStack } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
@@ -272,6 +273,18 @@ const isWindows = isWindowsEditorRuntime();
 // on Windows; PaneContent keys the editor by this setting so the switch happens
 // immediately instead of requiring an app restart (#194).
 const usePlainWindowsEditor = shouldUsePlainWindowsEditor(isWindows, settings.vimMode);
+
+// One-time "there is a key for that" tips. Fed from all three input paths
+// below — the same rule as every other editing feature in this file.
+const noteTypedFormat = useFormatHints();
+function noteTypedInTextarea(el: HTMLTextAreaElement, event: Event) {
+  const ie = event as InputEvent;
+  if (props.tab.language !== 'markdown') return;
+  if (ie.inputType !== 'insertText' || !ie.data || ie.data.length !== 1) return;
+  const caret = el.selectionStart ?? 0;
+  const lineStart = el.value.lastIndexOf('\n', caret - 1) + 1;
+  noteTypedFormat(el.value.slice(lineStart, caret), ie.data);
+}
 
 // Synchronous counterpart to the debounce below. `saveTab` broadcasts
 // `solomd:flush-content-sync` right before reading `tab.content`, because a
@@ -1306,6 +1319,7 @@ function handlePlainInput(event: Event) {
   // path unless Vim mode is on) it silently did nothing in 仅编辑 / 分栏 mode.
   // Same trigger the block editor uses.
   maybeOpenPlainAutocomplete(el);
+  if (!plainComposing.value) noteTypedInTextarea(el, event);
   nextTick(syncPlainLiveScroll);
 }
 
@@ -2198,6 +2212,8 @@ function handlePlainBlockInput(index: number, event: Event) {
   autoSizePlainBlock(el);
   schedulePlainOverlays();
   if (plainComposing.value) return;
+  // Before updatePlainBlock: a re-split can swap this textarea for another.
+  noteTypedInTextarea(el, event);
   updatePlainBlock(index, el.value, el.selectionStart ?? el.value.length);
   maybeOpenPlainAutocomplete(el);
 }
@@ -2598,6 +2614,16 @@ function buildExtensions() {
       if (u.docChanged) {
         const text = u.state.doc.toString();
         if (!u.view.composing) syncEditorContentSoon(text);
+      }
+      if (u.docChanged && !u.view.composing && props.tab.language === 'markdown') {
+        for (const tr of u.transactions) {
+          if (!tr.isUserEvent('input.type')) continue;
+          tr.changes.iterChanges((_fa, _ta, _fb, toB, inserted) => {
+            if (inserted.length !== 1) return;
+            const line = u.state.doc.lineAt(toB);
+            noteTypedFormat(line.text.slice(0, toB - line.from), inserted.toString());
+          });
+        }
       }
       if (u.selectionSet) {
         const head = u.state.selection.main.head;

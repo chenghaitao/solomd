@@ -211,6 +211,12 @@ export const nl: I18n = {
     keysInterceptedBody: "De onderstaande programma's registreren deze toetsen als globale sneltoetsen, dus ze bereiken SoloMD nooit. De opdrachten naar de toetsen rechts verplaatsen laat je overige sneltoetsen ongemoeid.",
     keysApplyCompat: "Verplaats deze opdrachten naar vrije toetsen",
     keysCompatApplied: "{count} sneltoetsen verplaatst. Gebruik ‘Alles herstellen’ om dit ongedaan te maken.",
+    keysSearch: "Sneltoetsen zoeken — een naam of een toets…",
+    keysNoMatch: "Geen sneltoets gevonden.",
+    keysHelpLead: "Dit zijn je huidige sneltoetsen — wat je hebt gewijzigd staat hier.",
+    keysHelpChange: "Wijzigen…",
+    keysBuiltin: "Ingebouwd in de editor",
+    formatHints: "Eenmalig een tip tonen wanneer ik Markdown-opmaak met de hand typ",
     keysWriterTitle: "Schrijfvoorinstelling",
     keysWriterBody: "{bold} maakt tekst vet, zoals in Typora en Word, en de bestandsboom verhuist naar {tree}. Standaard is het andersom.",
     keysWriterApply: "{bold} gebruiken voor vet",
@@ -1694,6 +1700,10 @@ export const nl: I18n = {
       refs: 'Verwijzingen',
     },
   },
+  hints: {
+    formatKey: "Tip: {key} doet ‘{name}’ — je hoeft de tekens niet te typen.",
+    formatChange: "Sneltoetsen wijzigen",
+  },
   cmd: {
     fmt: {
       bold: "Vet",
@@ -1792,6 +1802,10 @@ export const nl: I18n = {
       cjk: 'CJK-proeflezen — Chinese typefouten markeren',
     },
     editor: {
+      caseCycle: "Hoofd-/kleine letters van selectie wisselen",
+      tableEditor: "Tabel als raster bewerken",
+      formulaEditor: "Formule bewerken",
+      aiRewrite: "Selectie herschrijven met AI",
       find: 'Zoeken / vervangen in notitie…',
       insertImage: 'Afbeelding invoegen…',
       insertImageUrl: 'Afbeelding via URL…',
@@ -1855,11 +1869,28 @@ export const nl: I18n = {
       new: 'Nieuw venster',
     },
     inbox: {
+      toggle: "Inbox-markering wisselen / als geordend markeren",
       open: 'Inbox openen',
       organizeAndAdvance: 'Inbox: Markeren als georganiseerd en verder',
     },
     tags: {
       refresh: 'Tagindex vernieuwen',
+    },
+    palette: {
+      open: "Opdrachtenpalet",
+    },
+    quickSwitcher: {
+      open: "Snel van bestand wisselen",
+    },
+    tab: {
+      prev: "Vorig tabblad",
+      next: "Volgend tabblad",
+    },
+    settings: {
+      open: "Instellingen",
+    },
+    pomodoro: {
+      startLast: "Schrijfsessie starten",
     },
   },
 };

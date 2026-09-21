@@ -211,6 +211,12 @@ export const tr: I18n = {
     keysInterceptedBody: "Aşağıdaki programlar bu tuş birleşimlerini genel kısayol olarak kaydediyor, bu yüzden SoloMD'ye hiç ulaşmıyorlar. Komutları sağdaki tuşlara taşımak diğer kısayollarınıza dokunmaz.",
     keysApplyCompat: "Bu komutları boş tuşlara taşı",
     keysCompatApplied: "{count} kısayol taşındı. Geri almak için “Tümünü sıfırla”yı kullanın.",
+    keysSearch: "Kısayol ara — bir ad veya tuş…",
+    keysNoMatch: "Eşleşen kısayol yok.",
+    keysHelpLead: "Bunlar şu anki kısayollarınız — değiştirdikleriniz burada görünür.",
+    keysHelpChange: "Değiştir…",
+    keysBuiltin: "Düzenleyiciye yerleşik",
+    formatHints: "Markdown biçimlendirmesini elle yazdığımda bir kereliğine ipucu göster",
     keysWriterTitle: "Yazar ön ayarı",
     keysWriterBody: "{bold}, Typora ve Word’deki gibi metni kalın yapar; dosya ağacı {tree} kısayoluna taşınır. Varsayılan durum bunun tersidir.",
     keysWriterApply: "Kalın için {bold} kullan",
@@ -1694,6 +1700,10 @@ export const tr: I18n = {
       refs: 'Çapraz başvuru',
     },
   },
+  hints: {
+    formatKey: "İpucu: {key} “{name}” yapar — işaretleri elle yazmanıza gerek yok.",
+    formatChange: "Kısayolları değiştir",
+  },
   cmd: {
     fmt: {
       bold: "Kalın",
@@ -1792,6 +1802,10 @@ export const tr: I18n = {
       cjk: 'CJK Düzeltme — Çince yazım hatalarını işaretle',
     },
     editor: {
+      caseCycle: "Seçimin büyük/küçük harfini değiştir",
+      tableEditor: "Tabloyu ızgara olarak düzenle",
+      formulaEditor: "Formülü düzenle",
+      aiRewrite: "Seçimi yapay zekâ ile yeniden yaz",
       find: 'Notta Bul / Değiştir…',
       insertImage: 'Görsel ekle…',
       insertImageUrl: 'URL\'den görsel…',
@@ -1855,11 +1869,28 @@ export const tr: I18n = {
       new: 'Yeni Pencere',
     },
     inbox: {
+      toggle: "Gelen kutusu işaretini değiştir / düzenlendi olarak işaretle",
       open: 'Inbox\'ı Aç',
       organizeAndAdvance: 'Inbox: Düzenlendi Olarak İşaretle ve İlerle',
     },
     tags: {
       refresh: 'Etiket Dizinini Yenile',
+    },
+    palette: {
+      open: "Komut paleti",
+    },
+    quickSwitcher: {
+      open: "Hızlı dosya değiştirici",
+    },
+    tab: {
+      prev: "Önceki sekme",
+      next: "Sonraki sekme",
+    },
+    settings: {
+      open: "Ayarlar",
+    },
+    pomodoro: {
+      startLast: "Yazma oturumu başlat",
     },
   },
 };

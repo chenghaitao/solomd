@@ -211,6 +211,12 @@ export const en = {
     keysInterceptedBody: "These chords are registered as global hotkeys by the programs named below, so they never reach SoloMD. Switching the commands to the keys on the right leaves the rest of your shortcuts alone.",
     keysApplyCompat: "Move these commands to free keys",
     keysCompatApplied: "Moved {count} shortcuts. Use “Reset all” to undo.",
+    keysSearch: "Search shortcuts — a name or a key…",
+    keysNoMatch: "No shortcut matches that.",
+    keysHelpLead: "These are your current shortcuts — anything you have changed shows here.",
+    keysHelpChange: "Change them…",
+    keysBuiltin: "Built into the editor",
+    formatHints: "Show a one-time tip when I type Markdown formatting by hand",
     keysWriterTitle: "Writer preset",
     keysWriterBody: "{bold} makes text bold, as in Typora and Word, and the file tree moves to {tree}. Out of the box it is the other way round.",
     keysWriterApply: "Use {bold} for bold",
@@ -1700,6 +1706,10 @@ export const en = {
       refs: 'References',
     },
   },
+  hints: {
+    formatKey: "Tip: {key} does {name} — no need to type the marks.",
+    formatChange: "Change shortcuts",
+  },
   cmd: {
     fmt: {
       bold: "Bold",
@@ -1798,6 +1808,10 @@ export const en = {
       cjk: 'CJK Proofread — flag Chinese typos',
     },
     editor: {
+      caseCycle: "Cycle Case of Selection",
+      tableEditor: "Edit Table as Grid",
+      formulaEditor: "Edit Formula",
+      aiRewrite: "AI Rewrite Selection",
       find: 'Find / Replace in note…',
       insertImage: 'Insert image…',
       insertImageUrl: 'Image from URL…',
@@ -1861,11 +1875,28 @@ export const en = {
       new: 'New Window',
     },
     inbox: {
+      toggle: "Toggle Inbox Flag / Organize",
       open: 'Open Inbox',
       organizeAndAdvance: 'Inbox: Mark Organized & Advance',
     },
     tags: {
       refresh: 'Refresh Tag Index',
+    },
+    palette: {
+      open: "Command Palette",
+    },
+    quickSwitcher: {
+      open: "Quick File Switcher",
+    },
+    tab: {
+      prev: "Previous Tab",
+      next: "Next Tab",
+    },
+    settings: {
+      open: "Settings",
+    },
+    pomodoro: {
+      startLast: "Start Writing Session (Zen)",
     },
   },
 };

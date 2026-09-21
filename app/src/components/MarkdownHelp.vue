@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { combosFor, formatCombo } from '../lib/keybindings';
+import { activeKeyActions, combosFor, filterKeyActions, formatCombo, type KeyActionDef } from '../lib/keybindings';
+import { useI18n } from '../i18n';
 import { isMacOS } from '../lib/platform';
 import { useSettingsStore } from '../stores/settings';
 import { DsModal, DsTabs, DsInput } from '../ui';
@@ -20,103 +21,55 @@ const today = new Date().toISOString().slice(0, 10);
 const cliExampleNew = `solomd new "daily-${today}" "今日待办："`;
 
 interface Shortcut {
-  /** #180 — when set, the chord is read from the user's bindings at render
-   *  time instead of being frozen into this table. */
-  action?: string;
-  /** A second action rendered as `A / B` (focus next / prev). */
-  action2?: string;
-  keys?: string;
+  keys: string;
   zh: string;
   en: string;
 }
-interface ShortcutGroup {
-  title: string;
-  items: Shortcut[];
-}
 const macChord = isMacOS();
 const kbSettings = useSettingsStore();
-/** The chord to print for a row: live binding, else the literal in the table. */
-function rowKeys(item: Shortcut): string {
-  if (!item.action) return item.keys ?? '';
-  const render = (id: string) => {
-    const combos = combosFor(id, kbSettings.keybindings);
-    return combos.length ? combos.map((c) => formatCombo(c, macChord)).join(' / ') : '—';
-  };
-  return item.action2 ? `${render(item.action)} / ${render(item.action2)}` : render(item.action);
+
+/**
+ * The shortcuts tab is generated from the binding table, not written by hand.
+ * The hand-written list below went stale the way every such list does — it
+ * was missing a third of the commands, and the welcome note that mirrored it
+ * told new users the wrong key for the command palette. Only rows that are
+ * NOT bindable actions (⌘-click a wikilink, Tab in a table) still come from
+ * the literal list, because there is no table to read them from.
+ */
+const { t } = useI18n();
+function actionName(a: KeyActionDef): string {
+  const key = `cmd.${a.id}`;
+  const translated = t(key);
+  return translated && translated !== key ? translated : a.label;
+}
+const CATEGORY_ORDER: KeyActionDef['category'][] = ['file', 'edit', 'view', 'navigate', 'tools'];
+const liveGroups = computed(() => {
+  const hits = filterKeyActions(activeKeyActions(), query.value, actionName, kbSettings.keybindings, macChord);
+  return CATEGORY_ORDER.map((cat) => ({
+    cat,
+    title: t('settings.keysCat' + cat.charAt(0).toUpperCase() + cat.slice(1)),
+    items: hits.filter((a) => a.category === cat),
+  })).filter((g) => g.items.length);
+});
+function liveKeys(a: KeyActionDef): string {
+  const combos = combosFor(a.id, kbSettings.keybindings);
+  return combos.length ? combos.map((c) => formatCombo(c, macChord)).join(' / ') : '—';
+}
+const builtinRows = computed(() => {
+  const q = query.value.trim().toLowerCase();
+  return BUILTIN_KEYS
+    .filter((it) => !q || `${it.keys} ${it.zh} ${it.en}`.toLowerCase().includes(q));
+});
+function changeShortcuts(): void {
+  emit('close');
+  window.dispatchEvent(new CustomEvent('solomd:open-settings', { detail: { section: 'keys' } }));
 }
 
-const shortcutGroups: ShortcutGroup[] = [
-  {
-    title: '文件 / Files',
-    items: [
-      { action: 'file.new', zh: '新建 Markdown 文件', en: 'New markdown file' },
-      { action: 'file.newText', zh: '新建纯文本文件', en: 'New plain text file' },
-      { action: 'window.new', zh: '新建窗口', en: 'New window' },
-      { action: 'file.open', zh: '打开文件', en: 'Open file' },
-      { action: 'file.save', zh: '保存', en: 'Save' },
-      { action: 'file.saveAs', zh: '另存为', en: 'Save As' },
-      { action: 'file.closeTab', zh: '关闭标签页', en: 'Close tab' },
-    ],
-  },
-  {
-    title: '视图 / View',
-    items: [
-      { action: 'view.cycleView', zh: '编辑 / 分栏 / 预览 三档循环', en: 'Cycle Edit / Split / Preview' },
-      { action: 'view.toggleFileTree', zh: '文件树显隐', en: 'Toggle file tree' },
-      { action: 'view.toggleOutline', zh: '大纲显隐', en: 'Toggle outline' },
-      { action: 'tile.splitRight', zh: '向右分屏', en: 'Split editor right' },
-      { action: 'tile.splitDown', zh: '向下分屏', en: 'Split editor down' },
-      { action: 'tile.focusNext', action2: 'tile.focusPrev', zh: '焦点切到下一/上一面板', en: 'Focus next / prev pane' },
-    ],
-  },
-  {
-    title: '搜索 & 跳转 / Search & Navigate',
-    items: [
-      { action: 'editor.find', zh: '编辑器内查找（预览模式则在预览中查找）', en: 'Find in editor (or preview when in Preview mode)' },
-      { action: 'search.global', zh: '跨文件夹搜索', en: 'Search across folder' },
-      { action: 'palette.open', zh: '命令面板', en: 'Command palette' },
-      { action: 'help.markdown', zh: '帮助（这个对话框）', en: 'Help (this dialog)' },
-      { action: 'settings.open', zh: '设置', en: 'Settings' },
-    ],
-  },
-  {
-    title: '编辑 & 格式化 / Editing',
-    items: [
-      { action: 'fmt.bold', zh: '加粗(设置 → 快捷键 里可一键改成 ⌘/Ctrl+B)', en: 'Bold (Settings → Shortcuts can move it to ⌘/Ctrl+B in one click)' },
-      { action: 'fmt.italic', zh: '斜体', en: 'Italic' },
-      { action: 'fmt.strike', zh: '删除线', en: 'Strikethrough' },
-      { action: 'fmt.code', zh: '行内代码', en: 'Inline code' },
-      { action: 'fmt.link', zh: '链接', en: 'Link' },
-      { action: 'fmt.h1', zh: '一级标题(2–6 同理)', en: 'Heading 1 (2–6 likewise)' },
-      { action: 'fmt.quote', zh: '引用', en: 'Blockquote' },
-      { action: 'fmt.ul', zh: '无序列表', en: 'Bulleted list' },
-      { action: 'fmt.ol', zh: '有序列表', en: 'Numbered list' },
-      { action: 'fmt.task', zh: '任务列表', en: 'Task list' },
-      { action: 'fmt.codeblock', zh: '代码块', en: 'Code block' },
-      { action: 'format.markdown', zh: '格式化 Markdown（Prettier）', en: 'Format Markdown (Prettier)' },
-      { action: 'editor.aiRewrite', zh: 'AI 改写所选文本（需在设置开启）', en: 'AI rewrite the selection (requires enabling in Settings)' },
-      { keys: 'Cmd/Ctrl + click [[link]]', zh: '跳转到双链目标', en: 'Open the target of a [[wikilink]]' },
-      { keys: 'Tab', zh: '增加缩进 / 跨表格列', en: 'Indent / table column nav' },
-      { keys: 'Shift+Tab', zh: '减少缩进', en: 'Outdent' },
-    ],
-  },
-  {
-    title: '工作区 / Workspace',
-    items: [
-      { action: 'quickSwitcher.open', zh: '快速切换最近文件（VSCode 风格）', en: 'Quick file switcher (VSCode-style)' },
-      { action: 'daily.openToday', zh: '打开今日的每日笔记', en: 'Open today\'s daily note' },
-      { keys: '(Command palette)', zh: 'Properties Table —— Bases 视图（按 Ctrl+Shift+K 找 "bases"）', en: 'Properties Table — Bases view (Ctrl+Shift+K → bases)' },
-    ],
-  },
-  {
-    title: '导出 & 演讲 / Export & Present',
-    items: [
-      { action: 'export.pdfPrint', zh: '导出 PDF（系统打印对话框）', en: 'Export PDF (system print)' },
-      { action: 'export.copyHtml', zh: '复制为 HTML', en: 'Copy as HTML' },
-      { action: 'export.copyMd', zh: '复制为 Markdown', en: 'Copy as Markdown' },
-      { action: 'view.slideshow', zh: '演讲模式（`---` 分页）', en: 'Slideshow mode (split on ---)' },
-    ],
-  },
+/** Keys that are not bindable actions, so no table knows about them. */
+const BUILTIN_KEYS: Shortcut[] = [
+  { keys: 'Cmd/Ctrl + click [[link]]', zh: '跳转到双链目标', en: 'Open the target of a [[wikilink]]' },
+  { keys: 'Tab', zh: '增加缩进 / 跨表格列', en: 'Indent / table column nav' },
+  { keys: 'Shift+Tab', zh: '减少缩进', en: 'Outdent' },
 ];
 
 interface Item {
@@ -411,11 +364,11 @@ async function copyExample(text: string) {
           @update:model-value="activeTab = ($event as Tab)"
         />
         <DsInput
-          v-if="activeTab === 'syntax'"
+          v-if="activeTab !== 'cli'"
           :model-value="query"
           size="sm"
           class="help__search"
-          placeholder="搜索语法 / Search syntax…"
+          :placeholder="activeTab === 'syntax' ? '搜索语法 / Search syntax…' : t('settings.keysSearch')"
           @update:model-value="query = $event"
         />
       </div>
@@ -442,14 +395,29 @@ async function copyExample(text: string) {
 
         <template v-if="activeTab === 'shortcuts'">
           <p class="help__lead">
-            <code>Ctrl</code>（Linux/Windows）= <code>Cmd</code>（Mac）。完整命令清单按 <kbd>Ctrl+Shift+K</kbd> 打开命令面板。
+            {{ t('settings.keysHelpLead') }}
+            <button class="help__link" @click="changeShortcuts()">{{ t('settings.keysHelpChange') }}</button>
           </p>
-          <section v-for="g in shortcutGroups" :key="g.title" class="help__section">
+          <section v-for="g in liveGroups" :key="g.cat" class="help__section">
             <h3>{{ g.title }}</h3>
             <table class="help__keys">
               <tbody>
-              <tr v-for="(s, i) in g.items" :key="i">
-                <td class="help__keys-key"><kbd>{{ rowKeys(s) }}</kbd></td>
+              <tr v-for="a in g.items" :key="a.id">
+                <td class="help__keys-key"><kbd>{{ liveKeys(a) }}</kbd></td>
+                <td class="help__keys-desc">
+                  <div>{{ actionName(a) }}</div>
+                  <div v-if="actionName(a) !== a.label" class="help__keys-en">{{ a.label }}</div>
+                </td>
+              </tr>
+              </tbody>
+            </table>
+          </section>
+          <section v-if="builtinRows.length" class="help__section">
+            <h3>{{ t('settings.keysBuiltin') }}</h3>
+            <table class="help__keys">
+              <tbody>
+              <tr v-for="(s, i) in builtinRows" :key="i">
+                <td class="help__keys-key"><kbd>{{ s.keys }}</kbd></td>
                 <td class="help__keys-desc">
                   <div>{{ s.zh }}</div>
                   <div class="help__keys-en">{{ s.en }}</div>
@@ -458,6 +426,7 @@ async function copyExample(text: string) {
               </tbody>
             </table>
           </section>
+          <p v-if="!liveGroups.length && !builtinRows.length" class="help__lead">{{ t('settings.keysNoMatch') }}</p>
         </template>
 
         <template v-if="activeTab === 'cli'">
@@ -726,5 +695,14 @@ async function copyExample(text: string) {
 }
 .help__code:hover {
   background: var(--bg-active);
+}
+.help__link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
 }
 </style>

@@ -211,6 +211,12 @@ export const sv: I18n = {
     keysInterceptedBody: "Programmen nedan registrerar de här tangentkombinationerna som globala snabbtangenter, så de når aldrig SoloMD. Att flytta kommandona till tangenterna till höger påverkar inte dina övriga kortkommandon.",
     keysApplyCompat: "Flytta kommandona till lediga tangenter",
     keysCompatApplied: "{count} kortkommandon flyttade. Använd ”Återställ alla” för att ångra.",
+    keysSearch: "Sök kortkommandon – ett namn eller en tangent…",
+    keysNoMatch: "Inget kortkommando matchar.",
+    keysHelpLead: "Det här är dina nuvarande kortkommandon – ändringar visas här.",
+    keysHelpChange: "Ändra dem…",
+    keysBuiltin: "Inbyggda i redigeraren",
+    formatHints: "Visa ett tips, en gång, när jag skriver Markdown-formatering för hand",
     keysWriterTitle: "Skrivförval",
     keysWriterBody: "{bold} ger fetstil, som i Typora och Word, och filträdet flyttas till {tree}. Som standard är det tvärtom.",
     keysWriterApply: "Använd {bold} för fetstil",
@@ -1694,6 +1700,10 @@ export const sv: I18n = {
       refs: 'Referenser',
     },
   },
+  hints: {
+    formatKey: "Tips: {key} gör ”{name}” – du behöver inte skriva tecknen.",
+    formatChange: "Ändra kortkommandon",
+  },
   cmd: {
     fmt: {
       bold: "Fet",
@@ -1792,6 +1802,10 @@ export const sv: I18n = {
       cjk: 'CJK-korrekturläsning — markera kinesiska stavfel',
     },
     editor: {
+      caseCycle: "Växla skiftläge för markeringen",
+      tableEditor: "Redigera tabell som rutnät",
+      formulaEditor: "Redigera formel",
+      aiRewrite: "Skriv om markeringen med AI",
       find: 'Sök / ersätt i anteckningen…',
       insertImage: 'Infoga bild…',
       insertImageUrl: 'Bild från URL…',
@@ -1855,11 +1869,28 @@ export const sv: I18n = {
       new: 'Nytt fönster',
     },
     inbox: {
+      toggle: "Växla inkorgsmarkering / markera som ordnad",
       open: 'Öppna Inbox',
       organizeAndAdvance: 'Inbox: Markera som organiserad och gå vidare',
     },
     tags: {
       refresh: 'Uppdatera taggindex',
+    },
+    palette: {
+      open: "Kommandopalett",
+    },
+    quickSwitcher: {
+      open: "Snabbt filbyte",
+    },
+    tab: {
+      prev: "Föregående flik",
+      next: "Nästa flik",
+    },
+    settings: {
+      open: "Inställningar",
+    },
+    pomodoro: {
+      startLast: "Starta skrivpass",
     },
   },
 };

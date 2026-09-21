@@ -211,6 +211,12 @@ export const ja: I18n = {
     keysInterceptedBody: "以下のプログラムがこれらのキーをグローバルホットキーとして登録しているため、SoloMD には届きません。右側のキーに移せば、ほかのショートカットはそのままです。",
     keysApplyCompat: "これらのコマンドを空いているキーに移す",
     keysCompatApplied: "{count} 件のショートカットを移しました。元に戻すには「すべてリセット」を使ってください。",
+    keysSearch: "ショートカットを検索 — 名前またはキー…",
+    keysNoMatch: "一致するショートカットはありません。",
+    keysHelpLead: "現在有効なショートカットです。変更した内容もここに反映されます。",
+    keysHelpChange: "変更する…",
+    keysBuiltin: "エディタ組み込み",
+    formatHints: "Markdown の書式記号を手入力したとき、対応するショートカットを一度だけ案内する",
     keysWriterTitle: "執筆プリセット",
     keysWriterBody: "{bold} を太字にします(Typora や Word と同じ)。ファイルツリーは {tree} に移動します。初期設定ではその逆です。",
     keysWriterApply: "{bold} を太字にする",
@@ -1677,6 +1683,10 @@ export const ja: I18n = {
       refs: '相互参照',
     },
   },
+  hints: {
+    formatKey: "ヒント: {name}は {key} でできます。記号を手入力する必要はありません。",
+    formatChange: "ショートカットを変更",
+  },
   cmd: {
     fmt: {
       bold: "太字",
@@ -1775,6 +1785,10 @@ export const ja: I18n = {
       cjk: 'CJK 校正 — 中国語の誤字を検出',
     },
     editor: {
+      caseCycle: "選択範囲の大文字・小文字を切り替え",
+      tableEditor: "表をグリッドで編集",
+      formulaEditor: "数式を編集",
+      aiRewrite: "選択範囲を AI でリライト",
       find: 'ノート内を検索 / 置換…',
       insertImage: '画像を挿入…',
       insertImageUrl: 'URL から画像…',
@@ -1838,11 +1852,28 @@ export const ja: I18n = {
       new: '新しいウィンドウ',
     },
     inbox: {
+      toggle: "受信トレイのフラグを切り替え / 整理済みにする",
       open: 'Inbox を開く',
       organizeAndAdvance: 'Inbox: 整理済みにして次へ',
     },
     tags: {
       refresh: 'タグインデックスを更新',
+    },
+    palette: {
+      open: "コマンドパレット",
+    },
+    quickSwitcher: {
+      open: "クイックファイル切り替え",
+    },
+    tab: {
+      prev: "前のタブ",
+      next: "次のタブ",
+    },
+    settings: {
+      open: "設定",
+    },
+    pomodoro: {
+      startLast: "執筆セッションを開始",
     },
   },
 };

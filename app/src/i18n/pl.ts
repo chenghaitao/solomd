@@ -211,6 +211,12 @@ export const pl: I18n = {
     keysInterceptedBody: "Wymienione niżej programy rejestrują te kombinacje jako skróty globalne, więc nigdy nie docierają do SoloMD. Przeniesienie tych poleceń na klawisze po prawej nie rusza pozostałych skrótów.",
     keysApplyCompat: "Przenieś te polecenia na wolne klawisze",
     keysCompatApplied: "Przeniesiono {count} skrótów. Cofniesz to przez „Zresetuj wszystko”.",
+    keysSearch: "Szukaj skrótów — nazwa lub klawisz…",
+    keysNoMatch: "Żaden skrót nie pasuje.",
+    keysHelpLead: "To Twoje aktualne skróty — zmiany pojawiają się tutaj.",
+    keysHelpChange: "Zmień je…",
+    keysBuiltin: "Wbudowane w edytor",
+    formatHints: "Pokaż jednorazową wskazówkę, gdy ręcznie wpisuję formatowanie Markdown",
     keysWriterTitle: "Ustawienie dla piszących",
     keysWriterBody: "{bold} pogrubia tekst, jak w Typorze i Wordzie, a drzewo plików przenosi się na {tree}. Domyślnie jest odwrotnie.",
     keysWriterApply: "Używaj {bold} do pogrubienia",
@@ -1694,6 +1700,10 @@ export const pl: I18n = {
       refs: 'Odsyłacze',
     },
   },
+  hints: {
+    formatKey: "Wskazówka: {key} robi „{name}” — nie trzeba wpisywać znaków.",
+    formatChange: "Zmień skróty",
+  },
   cmd: {
     fmt: {
       bold: "Pogrubienie",
@@ -1792,6 +1802,10 @@ export const pl: I18n = {
       cjk: 'Korekta CJK — oznacz chińskie literówki',
     },
     editor: {
+      caseCycle: "Zmień wielkość liter zaznaczenia",
+      tableEditor: "Edytuj tabelę jako siatkę",
+      formulaEditor: "Edytuj formułę",
+      aiRewrite: "Przepisz zaznaczenie przez AI",
       find: 'Znajdź / zamień w notatce…',
       insertImage: 'Wstaw obraz…',
       insertImageUrl: 'Obraz z adresu URL…',
@@ -1855,11 +1869,28 @@ export const pl: I18n = {
       new: 'Nowe okno',
     },
     inbox: {
+      toggle: "Przełącz znacznik skrzynki / oznacz jako uporządkowane",
       open: 'Otwórz Inbox',
       organizeAndAdvance: 'Inbox: Oznacz jako uporządkowane i przejdź dalej',
     },
     tags: {
       refresh: 'Odśwież indeks tagów',
+    },
+    palette: {
+      open: "Paleta poleceń",
+    },
+    quickSwitcher: {
+      open: "Szybkie przełączanie plików",
+    },
+    tab: {
+      prev: "Poprzednia karta",
+      next: "Następna karta",
+    },
+    settings: {
+      open: "Ustawienia",
+    },
+    pomodoro: {
+      startLast: "Rozpocznij sesję pisania",
     },
   },
 };
