@@ -20,7 +20,7 @@ import { renderMarkdown, extractImageRoot } from '../lib/markdown';
 import { initMermaid } from '../lib/mermaid-lazy';
 import { exportDefaultPath } from '../lib/export-paths';
 import { useI18n } from '../i18n';
-import { rewriteLinkUrls, rewriteImageUrls } from '../lib/image-resolve';
+import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls } from '../lib/image-resolve';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
@@ -428,8 +428,13 @@ export function useExport() {
     // absolute `file://` paths so the exported HTML doesn't bake in
     // `http://tauri.localhost/...` references that break when shared.
     const imageRoot = extractImageRoot(ctx.content);
+    // Local images are embedded as `data:` URLs first: a standalone .html has
+    // no way to reach the app's `asset.localhost` protocol, so rewriting the
+    // src into one — which is what makes images load inside the webview — left
+    // every figure broken in the exported file.
+    const withImages = await inlineLocalImages(renderMarkdown(ctx.content), imageRoot, ctx.filePath);
     const body = rewriteLinkUrls(
-      rewriteImageUrls(renderMarkdown(ctx.content), imageRoot, ctx.filePath),
+      rewriteImageUrls(withImages, imageRoot, ctx.filePath),
       imageRoot,
       ctx.filePath,
     );
