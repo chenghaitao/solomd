@@ -129,6 +129,34 @@ rm -rf app/src-tauri/gen/apple/Externals/arm64/debug
 echo "==> Regenerating .xcodeproj from project.yml"
 ( cd app/src-tauri/gen/apple && xcodegen generate )
 
+# ---------------------------------------------------------------------------
+# Which Xcode builds this. Set IOS_DEVELOPER_DIR (in .env.local) to pin one,
+# e.g. /Volumes/Dev/xcode26/Xcode-26.app/Contents/Developer.
+#
+# Why it matters: an app linked against the iOS 27 SDK is killed at launch on
+# iOS 27 unless it has adopted the UIScene lifecycle, and Tauri 2.10/2.11 has
+# not (proper support is unreleased as of 2026-09). Apple rejected 4.13.3 for
+# exactly that (2.1a, crash in
+# _UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption). Linked
+# against the iOS 26 SDK the same code runs fine on iOS 27.
+#
+# Exporting DEVELOPER_DIR is NOT enough: the Tauri mobile CLI scrubs the
+# environment before it runs xcodebuild and keeps little more than PATH, so
+# the build silently falls back to `xcode-select -p`. PATH survives, so put
+# forwarding shims first on it.
+# ---------------------------------------------------------------------------
+if [ -n "${IOS_DEVELOPER_DIR:-}" ]; then
+  [ -x "$IOS_DEVELOPER_DIR/usr/bin/xcodebuild" ] || { echo "ERROR: IOS_DEVELOPER_DIR has no xcodebuild: $IOS_DEVELOPER_DIR" >&2; exit 1; }
+  SHIMS="$(mktemp -d)"
+  for tool in xcodebuild xcrun; do
+    printf '#!/bin/sh\nexport DEVELOPER_DIR=%s\nexec /usr/bin/%s "$@"\n' "$IOS_DEVELOPER_DIR" "$tool" > "$SHIMS/$tool"
+    chmod +x "$SHIMS/$tool"
+  done
+  export DEVELOPER_DIR="$IOS_DEVELOPER_DIR"
+  export PATH="$SHIMS:$PATH"
+  echo "==> Xcode pinned: $(xcodebuild -version | tr '\n' ' ')"
+fi
+
 echo "==> Building iOS .ipa (release / arm64)"
 # App Store distribution: strip the AI / Agent / Recipe surface (Apple 3.1.1).
 # SOLOMD_APP_STORE_BUILD gates Rust commands (option_env! in app_build.rs);
@@ -150,5 +178,23 @@ echo "  Xcode-managed: $(security cms -D -i "$TMP/profile" | plutil -extract IsX
 rm -rf "$TMP"
 
 echo ""
+# Read the SDK the binary was actually linked against — out of the artifact,
+# not out of what we asked for. A 27-SDK build is what got 4.13.3 rejected, and
+# nothing about it looks wrong until it is launched on iOS 27.
+SDK_NAME="$(unzip -p "$IPA" 'Payload/*.app/Info.plist' | plutil -extract DTSDKName raw -o - - 2>/dev/null || true)"
+echo "==> Linked SDK: ${SDK_NAME:-unknown}"
+case "$SDK_NAME" in
+  iphoneos26.*) ;;
+  *)
+    if [ -z "${IOS_ALLOW_NEW_SDK:-}" ]; then
+      echo "ERROR: $IPA is linked against '${SDK_NAME:-unknown}', not iphoneos26.x." >&2
+      echo "       Until the app adopts the UIScene lifecycle it will crash at launch on" >&2
+      echo "       iOS 27 when built with a newer SDK. Set IOS_DEVELOPER_DIR to an Xcode 26," >&2
+      echo "       or IOS_ALLOW_NEW_SDK=1 once UIScene support has landed and been verified." >&2
+      exit 1
+    fi
+    ;;
+esac
+
 echo "==> Done: $IPA ($(du -h "$IPA" | cut -f1))"
 echo "    Submit: ./scripts/submit-ios.sh"
