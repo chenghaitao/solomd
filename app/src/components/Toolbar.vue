@@ -360,6 +360,16 @@ function togglePomo() {
   pomoOpen.value = !pomoOpen.value;
 }
 
+/** #296 — formatting from the Insert menu runs the same toggle the shortcut
+ *  does, so it wraps the selection instead of dropping a template beside it. */
+function dispatchFormat(kind: string) {
+  window.dispatchEvent(new CustomEvent('solomd:format-markdown', { detail: { kind } }));
+  insertOpen.value = false;
+}
+function chord(actionId: string): string {
+  return shortcutLabel(actionId, settings.keybindings, macChord) || '';
+}
+
 function dispatchInsert(snippet: string) {
   window.dispatchEvent(
     new CustomEvent('solomd:insert-markdown', {
@@ -701,7 +711,7 @@ onBeforeUnmount(() => {
           ref="newBtnRef"
           class="icon-btn"
           @click="toggleDropdown('new')"
-          :title="t('toolbar.newFile')"
+          :title="tip('toolbar.newFile', 'file.new')"
         >
           <Icon name="new" />
           <Icon name="chevron-down" :size="10" />
@@ -773,7 +783,7 @@ onBeforeUnmount(() => {
       <button class="icon-btn" @click="files.saveActiveAs" :title="tip('toolbar.saveAsTooltip', 'file.saveAs')">
         <Icon name="save-as" />
       </button>
-      <button class="icon-btn" @click="onOpenExternal" :title="t('toolbar.openExternalTooltip')">
+      <button class="icon-btn" @click="onOpenExternal" :title="tip('toolbar.openExternalTooltip', 'file.openExternal')">
         <Icon name="external" />
       </button>
       <div class="dropdown">
@@ -866,11 +876,53 @@ onBeforeUnmount(() => {
         </button>
         <Teleport to="body">
           <div v-if="insertOpen" class="dropdown__menu" :style="floatStyle">
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n```\n$|$\n```\n')">
-              <span class="dropdown__name">{{ t('toolbar.insertCodeBlock') }}</span>
+            <!-- #296 — the formatting commands, with the chord beside each: the
+                 menu is where a mouse user learns the key. These wrap the
+                 selection; the snippet items below only insert. -->
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('bold')">
+              <span class="dropdown__name">{{ t('cmd.fmt.bold') }}</span>
+              <kbd v-if="chord('fmt.bold')" class="dropdown__kbd">{{ chord('fmt.bold') }}</kbd>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('`$|$`')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('italic')">
+              <span class="dropdown__name">{{ t('cmd.fmt.italic') }}</span>
+              <kbd v-if="chord('fmt.italic')" class="dropdown__kbd">{{ chord('fmt.italic') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('strike')">
+              <span class="dropdown__name">{{ t('cmd.fmt.strike') }}</span>
+              <kbd v-if="chord('fmt.strike')" class="dropdown__kbd">{{ chord('fmt.strike') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h1')">
+              <span class="dropdown__name">{{ t('cmd.fmt.h1') }}</span>
+              <kbd v-if="chord('fmt.h1')" class="dropdown__kbd">{{ chord('fmt.h1') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h2')">
+              <span class="dropdown__name">{{ t('cmd.fmt.h2') }}</span>
+              <kbd v-if="chord('fmt.h2')" class="dropdown__kbd">{{ chord('fmt.h2') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h3')">
+              <span class="dropdown__name">{{ t('cmd.fmt.h3') }}</span>
+              <kbd v-if="chord('fmt.h3')" class="dropdown__kbd">{{ chord('fmt.h3') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('ul')">
+              <span class="dropdown__name">{{ t('cmd.fmt.ul') }}</span>
+              <kbd v-if="chord('fmt.ul')" class="dropdown__kbd">{{ chord('fmt.ul') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('ol')">
+              <span class="dropdown__name">{{ t('cmd.fmt.ol') }}</span>
+              <kbd v-if="chord('fmt.ol')" class="dropdown__kbd">{{ chord('fmt.ol') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('task')">
+              <span class="dropdown__name">{{ t('cmd.fmt.task') }}</span>
+              <kbd v-if="chord('fmt.task')" class="dropdown__kbd">{{ chord('fmt.task') }}</kbd>
+            </button>
+            <div class="dropdown__sep"></div>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('codeblock')">
+              <span class="dropdown__name">{{ t('toolbar.insertCodeBlock') }}</span>
+              <kbd v-if="chord('fmt.codeblock')" class="dropdown__kbd">{{ chord('fmt.codeblock') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('code')">
               <span class="dropdown__name">{{ t('toolbar.insertInlineCode') }}</span>
+              <kbd v-if="chord('fmt.code')" class="dropdown__kbd">{{ chord('fmt.code') }}</kbd>
             </button>
             <div class="dropdown__sep"></div>
             <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n$$\n$|$\n$$\n')">
@@ -887,8 +939,9 @@ onBeforeUnmount(() => {
               <span class="dropdown__name">{{ t('toolbar.insertMermaid') }}</span>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('[$|$](url)')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('link')">
               <span class="dropdown__name">{{ t('toolbar.insertLink') }}</span>
+              <kbd v-if="chord('fmt.link')" class="dropdown__kbd">{{ chord('fmt.link') }}</kbd>
             </button>
             <button class="dropdown__item dropdown__item--single" @mousedown.prevent="pickAndInsertImage()">
               <span class="dropdown__name">{{ t('toolbar.insertImage') }}</span>
@@ -896,8 +949,9 @@ onBeforeUnmount(() => {
             <button class="dropdown__item dropdown__item--single" @mousedown.prevent="openImageUrlDialog()">
               <span class="dropdown__name">{{ t('toolbar.insertNetworkImage') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('> $|$')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('quote')">
               <span class="dropdown__name">{{ t('toolbar.insertQuote') }}</span>
+              <kbd v-if="chord('fmt.quote')" class="dropdown__kbd">{{ chord('fmt.quote') }}</kbd>
             </button>
             <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n---\n')">
               <span class="dropdown__name">{{ t('toolbar.insertDivider') }}</span>
@@ -1460,6 +1514,16 @@ onBeforeUnmount(() => {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+.dropdown__item--kbd {
+  justify-content: space-between;
+}
+.dropdown__kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  margin-left: 16px;
 }
 .dropdown__sep {
   height: 1px;

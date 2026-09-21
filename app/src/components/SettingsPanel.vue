@@ -18,6 +18,9 @@ import {
   eventToCombo,
   formatCombo,
   interceptedBindings,
+  filterKeyActions,
+  WRITER_PRESET,
+  writerPresetActive,
   type KeyActionDef,
 } from '../lib/keybindings';
 import { isMacOS } from '../lib/platform';
@@ -88,11 +91,14 @@ const recordingAction = ref<string | null>(null);
 const recordError = ref<string | null>(null);
 const macKeys = isMacOS();
 
-const keyGroups = computed(() =>
-  (['file', 'edit', 'view', 'navigate', 'tools'] as const)
-    .map((key) => ({ key, items: activeKeyActions().filter((a) => a.category === key) }))
-    .filter((g) => g.items.length > 0),
-);
+/** Sixty rows is past what anyone scans — filter by name, id or chord. */
+const keyQuery = ref('');
+const keyGroups = computed(() => {
+  const hits = filterKeyActions(activeKeyActions(), keyQuery.value, actionLabel, settings.keybindings, macKeys);
+  return (['file', 'edit', 'view', 'navigate', 'tools'] as const)
+    .map((key) => ({ key, items: hits.filter((a) => a.category === key) }))
+    .filter((g) => g.items.length > 0);
+});
 
 /**
  * Prefer the command palette's own translation (`cmd.<id>` — most action ids
@@ -133,6 +139,24 @@ function applyHotkeyCompatPreset(): void {
   const moves = intercepted.value;
   for (const b of moves) settings.setKeybinding(b.action.id, b.alternative);
   toasts.success(t('settings.keysCompatApplied', { count: String(moves.length) }));
+}
+
+/**
+ * #296 — ⌘B for bold is opt-in, not the default: it has toggled the file tree
+ * since 1.0. The preset is a swap of two bindings, offered as one button so
+ * nobody has to work out that freeing ⌘B means rebinding something else first.
+ */
+const writerPresetOn = computed(() => writerPresetActive(settings.keybindings));
+const writerPresetKeys = computed(() => ({
+  bold: formatCombo(WRITER_PRESET['fmt.bold'], macKeys),
+  tree: formatCombo(WRITER_PRESET['view.toggleFileTree'], macKeys),
+}));
+function applyWriterPreset(): void {
+  for (const [id, combo] of Object.entries(WRITER_PRESET)) settings.setKeybinding(id, combo);
+  toasts.success(t('settings.keysWriterApplied', writerPresetKeys.value));
+}
+function undoWriterPreset(): void {
+  for (const id of Object.keys(WRITER_PRESET)) settings.setKeybinding(id, undefined);
 }
 
 function startRecording(actionId: string): void {
@@ -922,6 +946,26 @@ function onSelectPdfFont(v: string) {
             <input type="checkbox" :checked="settings.spellcheckEnabled" @change="settings.toggleSpellcheckEnabled()" />
             {{ t('settings.spellcheckEnabled') }}
           </label>
+          <!-- #246 — only en_US ships with the app; anything the user drops in
+               `<config>/dictionaries/` shows up here. Without this the checker
+               flagged every word for non-English writers. It belongs to the
+               Hunspell checkbox: it used to hang off the browser spell-check
+               toggle below, so ticking this box revealed nothing. -->
+          <div v-if="settings.spellcheckEnabled" class="ghs-row" style="align-items:center; gap:8px; margin-top:6px;">
+            <span>{{ t('settings.spellcheckLang') }}</span>
+            <select
+              class="ghs-select"
+              :value="settings.spellcheckLang"
+              @focus="refreshSpellDicts"
+              @change="settings.setSpellcheckLang(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="code in spellDicts" :key="code" :value="code">{{ code }}</option>
+            </select>
+            <button type="button" class="link-button" @click="openDictsFolder">
+              {{ t('settings.spellcheckAddDict') }}
+            </button>
+          </div>
+          <p v-if="settings.spellcheckEnabled" class="setting-hint">{{ t('settings.spellcheckLangHint') }}</p>
         </section>
 
         <section data-cat="integrations">
@@ -1390,6 +1434,27 @@ function onSelectPdfFont(v: string) {
               {{ t('settings.keysApplyCompat') }}
             </button>
           </div>
+          <div class="kb-clash kb-clash--neutral">
+            <p class="kb-clash__title">{{ t('settings.keysWriterTitle') }}</p>
+            <p class="kb-clash__body">{{ t('settings.keysWriterBody', writerPresetKeys) }}</p>
+            <button v-if="!writerPresetOn" class="kb-btn kb-btn--wide" @click="applyWriterPreset()">
+              {{ t('settings.keysWriterApply', writerPresetKeys) }}
+            </button>
+            <button v-else class="kb-btn kb-btn--wide" @click="undoWriterPreset()">
+              ✓ {{ t('settings.keysWriterUndo') }}
+            </button>
+          </div>
+          <label class="kb-hints-toggle">
+            <input type="checkbox" :checked="settings.formatHints" @change="settings.toggleFormatHints()" />
+            {{ t('settings.formatHints') }}
+          </label>
+          <input
+            v-model="keyQuery"
+            class="kb-search"
+            type="search"
+            :placeholder="t('settings.keysSearch')"
+          />
+          <p v-if="!keyGroups.length" class="setting-hint">{{ t('settings.keysNoMatch') }}</p>
           <div v-for="group in keyGroups" :key="group.key" class="kb-group">
             <h4 class="kb-group__title">{{ t('settings.keysCat' + group.key.charAt(0).toUpperCase() + group.key.slice(1)) }}</h4>
             <div v-for="action in group.items" :key="action.id" class="kb-row">
@@ -1486,23 +1551,6 @@ function onSelectPdfFont(v: string) {
             <input type="checkbox" :checked="settings.spellCheck" @change="settings.toggleSpellCheck()" />
             {{ t('settings.spellCheck') }}
           </label>
-          <!-- #246 — only en_US ships with the app; anything the user drops in
-               `<config>/dictionaries/` shows up here. Without this the checker
-               flagged every word for non-English writers. -->
-          <div v-if="settings.spellCheck" class="ghs-row" style="align-items:center; gap:8px; margin-top:6px;">
-            <span>{{ t('settings.spellcheckLang') }}</span>
-            <select
-              class="ghs-select"
-              :value="settings.spellcheckLang"
-              @change="settings.setSpellcheckLang(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="code in spellDicts" :key="code" :value="code">{{ code }}</option>
-            </select>
-            <button type="button" class="link-button" @click="openDictsFolder">
-              {{ t('settings.spellcheckAddDict') }}
-            </button>
-          </div>
-          <p v-if="settings.spellCheck" class="setting-hint">{{ t('settings.spellcheckLangHint') }}</p>
         </section>
 
         <section data-cat="writing">
@@ -1762,6 +1810,27 @@ function onSelectPdfFont(v: string) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+/* Same box, no alarm: an offer rather than a warning (#296). */
+.kb-hints-toggle {
+  display: block;
+  margin: 2px 0 10px;
+}
+.kb-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.kb-clash--neutral {
+  border-color: var(--border);
+  background: var(--bg-soft, transparent);
+  margin-bottom: 10px;
 }
 .kb-clash__title {
   margin: 0;

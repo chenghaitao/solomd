@@ -38,6 +38,8 @@ import {
 import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights } from '../lib/textarea-metrics';
 import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
+import { applyFormat, FORMAT_KINDS, type FormatKind } from '../lib/md-format';
+import { useFormatHints } from '../composables/useFormatHints';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore, buildEditorFontStack } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
@@ -248,6 +250,18 @@ const isWindows = isWindowsEditorRuntime();
 // on Windows; PaneContent keys the editor by this setting so the switch happens
 // immediately instead of requiring an app restart (#194).
 const usePlainWindowsEditor = shouldUsePlainWindowsEditor(isWindows, settings.vimMode);
+
+// One-time "there is a key for that" tips. Fed from all three input paths
+// below — the same rule as every other editing feature in this file.
+const noteTypedFormat = useFormatHints();
+function noteTypedInTextarea(el: HTMLTextAreaElement, event: Event) {
+  const ie = event as InputEvent;
+  if (props.tab.language !== 'markdown') return;
+  if (ie.inputType !== 'insertText' || !ie.data || ie.data.length !== 1) return;
+  const caret = el.selectionStart ?? 0;
+  const lineStart = el.value.lastIndexOf('\n', caret - 1) + 1;
+  noteTypedFormat(el.value.slice(lineStart, caret), ie.data);
+}
 
 // Synchronous counterpart to the debounce below. `saveTab` broadcasts
 // `solomd:flush-content-sync` right before reading `tab.content`, because a
@@ -494,6 +508,17 @@ const plainBlocks = computed<PlainBlock[]>(() => {
   }));
 });
 
+function plainTocFingerprint(source: string): string {
+  // FNV-1a keeps the cache key compact even for very large documents. The
+  // source itself is still passed to renderMarkdown, but is not retained in up
+  // to 300 historical Map keys while the user edits headings.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < source.length; i++) {
+    hash = Math.imul(hash ^ source.charCodeAt(i), 0x01000193);
+  }
+  return `${source.length}:${(hash >>> 0).toString(36)}`;
+}
+
 function renderPlainBlock(src: string): string {
   // A standalone thematic-break block ("---" / "***" / "___") would be misread
   // as a YAML front-matter fence when rendered in isolation (each block renders
@@ -505,13 +530,19 @@ function renderPlainBlock(src: string): string {
   // setting invalidates previously rendered blocks. The per-call `breaks`
   // override is gone: the shared md singleton now follows the setting, so
   // the live editor, preview pane and exports all agree.
-  const key = `${settings.markdownHardBreaks ? 'hb' : 'sb'}${settings.markdownAutoNumberHeadings ? 'nh' : ''}\u0000${props.tab.filePath || ''}\u0000${root}\u0000${src}`;
+  const isTocBlock = /^[ \t]*\[toc\][ \t]*$/i.test(src);
+  // A rendered live-edit block normally only sees its own source. TOC is the
+  // exception: it needs the whole document's headings, and the cache key must
+  // change when any of those headings changes.
+  const tocSource = isTocBlock ? plainText.value || '' : undefined;
+  const tocKey = tocSource === undefined ? '' : `\u0000toc:${plainTocFingerprint(tocSource)}`;
+  const key = `${settings.markdownHardBreaks ? 'hb' : 'sb'}${settings.markdownAutoNumberHeadings ? 'nh' : ''}\u0000${props.tab.filePath || ''}\u0000${root}\u0000${src}${tocKey}`;
   const cached = plainRenderCache.get(key);
   if (cached != null) return cached;
   const html = rewriteImageUrls(
     // Drop `disabled` on task checkboxes so they can be clicked to toggle in the
     // preview (handled by activatePlainBlockFromClick → togglePlainTask).
-    renderMarkdown(src || '\n').replace(
+    renderMarkdown(src || '\n', { tocSource }).replace(
       /(<input class="task-list-item-checkbox" type="checkbox"[^>]*?)\s+disabled=""/g,
       '$1',
     ),
@@ -1265,6 +1296,7 @@ function handlePlainInput(event: Event) {
   // path unless Vim mode is on) it silently did nothing in 仅编辑 / 分栏 mode.
   // Same trigger the block editor uses.
   maybeOpenPlainAutocomplete(el);
+  if (!plainComposing.value) noteTypedInTextarea(el, event);
   nextTick(syncPlainLiveScroll);
 }
 
@@ -1399,7 +1431,19 @@ function selectPlainRange(start: number, end: number) {
       const s = Math.max(0, Math.min(start - b.start, el.value.length));
       const e = Math.max(s, Math.min(end - b.start, el.value.length));
       el.setSelectionRange(s, e);
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // Centre the *match*, not the block: a block can be a several-screen
+      // code fence or paragraph, and centring that leaves the match off-screen.
+      // Size it first — a just-mounted textarea is still two rows tall, and the
+      // host would clamp the scroll to a document that short.
+      autoSizePlainBlock(el);
+      const host = plainLiveHost.value;
+      if (host) {
+        const y = el.getBoundingClientRect().top - host.getBoundingClientRect().top
+          + plainPaddingTopPx(el) + caretTopPx(el, el.value, s);
+        host.scrollTop = Math.max(0, host.scrollTop + y - host.clientHeight / 2);
+      } else {
+        el.scrollIntoView({ block: 'center' });
+      }
       emitPlainCursorAndSelection();
     });
     return;
@@ -1408,6 +1452,9 @@ function selectPlainRange(start: number, end: number) {
   if (!el) return;
   el.focus();
   el.setSelectionRange(start, end);
+  // #255 — setSelectionRange() selects but never scrolls a <textarea>, so in a
+  // long document the counter moved ("3/12") while the view stayed put.
+  el.scrollTop = Math.max(0, plainPaddingTopPx(el) + caretTopPx(el, el.value, start) - el.clientHeight / 2);
   emitPlainCursorAndSelection();
 }
 
@@ -2080,7 +2127,12 @@ function activatePlainBlockFromClick(index: number, event: MouseEvent) {
     return;
   }
   if (index === plainActiveBlock.value) return;
-  activatePlainBlock(index, estimatePlainBlockCaretFromClick(index, event));
+  // #300 — a drag that selected rendered text ends in a click too. Turning
+  // the block into a textarea at that point throws the selection away and
+  // moves the page under someone who was only reading (or about to copy).
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
+  activatePlainBlock(index, estimatePlainBlockCaretFromClick(index, event), true);
 }
 
 /** Flip the `ordinal`-th task checkbox marker in a block's source, in place. */
@@ -2103,17 +2155,34 @@ function togglePlainTask(index: number, ordinal: number) {
   tabs.setContent(props.tab.id, next);
 }
 
-function activatePlainBlock(index: number, caret?: number) {
-  plainActiveBlock.value = Math.max(0, Math.min(index, plainBlocks.value.length - 1));
+/**
+ * `holdScroll` is for activation by mouse: the block under the pointer must
+ * stay under the pointer. Two things used to move it (#300) — the previously
+ * active block re-rendering to a different height somewhere above, and
+ * focus() scrolling the new textarea into view before it had been sized.
+ * Keyboard navigation leaves it off, because there following the caret is the
+ * point.
+ */
+function activatePlainBlock(index: number, caret?: number, holdScroll = false) {
+  const target = Math.max(0, Math.min(index, plainBlocks.value.length - 1));
+  const host = plainLiveHost.value;
+  const blockEl = holdScroll && host
+    ? host.querySelectorAll<HTMLElement>(':scope > .plain-block')[target] ?? null
+    : null;
+  const topBefore = blockEl ? blockEl.getBoundingClientRect().top : 0;
+  plainActiveBlock.value = target;
   nextTick(() => {
     const el = plainBlockEditors.value[plainActiveBlock.value];
     if (!el) return;
-    el.focus();
+    el.focus({ preventScroll: holdScroll });
     if (caret != null) {
       const pos = Math.max(0, Math.min(caret, el.value.length));
       el.setSelectionRange(pos, pos);
     }
     autoSizePlainBlock(el);
+    if (blockEl && host && blockEl.isConnected) {
+      host.scrollTop += blockEl.getBoundingClientRect().top - topBefore;
+    }
     emitPlainCursorAndSelection();
   });
 }
@@ -2127,8 +2196,15 @@ function setPlainBlockEditor(index: number, el: HTMLTextAreaElement | null) {
 }
 
 function autoSizePlainBlock(el: HTMLTextAreaElement) {
+  // Collapsing to `auto` to measure shortens the whole document for an
+  // instant, and the host clamps its scrollTop to that shorter document and
+  // does not give it back. Deep inside a tall block (a long code fence) that
+  // threw the view a screenful or more upwards (#255, #300).
+  const host = plainLiveHost.value;
+  const keep = host ? host.scrollTop : 0;
   el.style.height = 'auto';
   el.style.height = `${Math.max(plainLineHeightPx(), el.scrollHeight)}px`;
+  if (host && host.scrollTop !== keep) host.scrollTop = keep;
 }
 
 function handlePlainBlockInput(index: number, event: Event) {
@@ -2136,6 +2212,8 @@ function handlePlainBlockInput(index: number, event: Event) {
   autoSizePlainBlock(el);
   schedulePlainOverlays();
   if (plainComposing.value) return;
+  // Before updatePlainBlock: a re-split can swap this textarea for another.
+  noteTypedInTextarea(el, event);
   updatePlainBlock(index, el.value, el.selectionStart ?? el.value.length);
   maybeOpenPlainAutocomplete(el);
 }
@@ -2477,7 +2555,10 @@ function buildExtensions() {
           incrementalFindScroll,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ]),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+    // #296 — Mod-i is CodeMirror's selectParentSyntax. The app-level Italic
+    // shortcut listens on window, so CodeMirror would run first and widen the
+    // selection to the whole paragraph before it got italicised.
+    keymap.of([...defaultKeymap.filter((b) => b.key !== 'Mod-i'), ...historyKeymap, ...searchKeymap, indentWithTab]),
     lineNumCompartment.of(settings.showLineNumbers ? lineNumbers() : []),
     wrapCompartment.of(settings.wordWrap ? EditorView.lineWrapping : []),
     langCompartment.of(
@@ -2539,6 +2620,16 @@ function buildExtensions() {
         const text = u.state.doc.toString();
         if (!u.view.composing) syncEditorContentSoon(text);
       }
+      if (u.docChanged && !u.view.composing && props.tab.language === 'markdown') {
+        for (const tr of u.transactions) {
+          if (!tr.isUserEvent('input.type')) continue;
+          tr.changes.iterChanges((_fa, _ta, _fb, toB, inserted) => {
+            if (inserted.length !== 1) return;
+            const line = u.state.doc.lineAt(toB);
+            noteTypedFormat(line.text.slice(0, toB - line.from), inserted.toString());
+          });
+        }
+      }
       if (u.selectionSet) {
         const head = u.state.selection.main.head;
         const line = u.state.doc.lineAt(head);
@@ -2583,8 +2674,10 @@ onMounted(() => {
   // follows is unreachable on Windows. (Putting it further down is what made
   // the first attempt silently no-op on the plain editors.)
   window.addEventListener('solomd:transform-case', onTransformCase as EventListener);
+  window.addEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
   cleanupTransformCase = () => {
     window.removeEventListener('solomd:transform-case', onTransformCase as EventListener);
+    window.removeEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
   };
 
   if (usePlainWindowsEditor) {
@@ -2716,6 +2809,65 @@ function onTransformCase(e: Event) {
   nextTick(() => {
     el.focus();
     el.setSelectionRange(target.from, target.from + replaced.length);
+    emitPlainCursorAndSelection();
+  });
+}
+
+/**
+ * #296 / #274 — bold, italic, headings, lists… from a shortcut or the palette.
+ *
+ * Same shape as `onTransformCase` above, for the same reason: lib/md-format.ts
+ * decides the edit from a string and a selection, and the three editors only
+ * differ in how they hand those over and write the result back.
+ */
+function onFormatMarkdown(e: Event) {
+  const kind = ((e as CustomEvent).detail || {}).kind as FormatKind;
+  if (!FORMAT_KINDS.includes(kind)) return;
+  if (props.tab.id !== tabs.activeId) return;
+  if (props.tab.language !== 'markdown') return;
+
+  if (!usePlainWindowsEditor) {
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const edit = applyFormat(view.state.doc.toString(), sel.from, sel.to, kind);
+    view.dispatch({
+      changes: { from: edit.from, to: edit.to, insert: edit.insert },
+      selection: { anchor: edit.selFrom, head: edit.selTo },
+      scrollIntoView: true,
+      userEvent: 'input.format',
+    });
+    view.focus();
+    return;
+  }
+
+  const el = plainLiveEnabled.value
+    ? plainBlockEditors.value[plainActiveBlock.value]
+    : plainEditor.value;
+  if (!el) return;
+  const edit = applyFormat(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0, kind);
+  const value = el.value.slice(0, edit.from) + edit.insert + el.value.slice(edit.to);
+  recordPlainHistory();
+  if (plainLiveEnabled.value) {
+    updatePlainBlock(plainActiveBlock.value, value, edit.selTo);
+    nextTick(() => {
+      const e2 = plainBlockEditors.value[plainActiveBlock.value];
+      if (!e2) return;
+      e2.focus();
+      // A fence or a blank line can split the block, and then these offsets
+      // belong to a different textarea — leave the caret where the re-split
+      // put it rather than selecting the wrong text.
+      if (e2.value === value) e2.setSelectionRange(edit.selFrom, edit.selTo);
+    });
+    return;
+  }
+  const keepScroll = el.scrollTop;
+  el.value = value;
+  plainText.value = value;
+  tabs.setContent(props.tab.id, value);
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(edit.selFrom, edit.selTo);
+    el.scrollTop = keepScroll;
     emitPlainCursorAndSelection();
   });
 }
