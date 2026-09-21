@@ -199,12 +199,19 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   return html.replace(/<code([^>]*)>([\s\S]*?)<\/code>/, (_m, codeAttrs, inner) => {
     // Strip the trailing newline if any so we don't render an empty
     // line-numbered row at the end.
-    const trimmed = inner.endsWith('\n') ? inner.slice(0, -1) : inner;
+    // The newline can sit *inside* a highlight span that runs to the end of
+    // the block ("…\n</span>"), so look past closing tags for it.
+    const trimmed = inner.replace(/\n((?:<\/span>)*)$/, '$1');
     const openSpans: string[] = [];
     let out = '';
     let line = '';
     const flush = () => {
-      out += `<span class="cb-line">${line || ' '}</span>`;
+      // #190 — a blank line inside a multi-line highlight span is not an empty
+      // string, it is `<span class="hljs-code"></span>`: no text, so no line
+      // box, and its number landed on top of the next one. Judge emptiness by
+      // the text, not the markup.
+      const blank = line.replace(/<[^>]*>/g, '') === '';
+      out += `<span class="cb-line">${blank ? `${line} ` : line}</span>`;
       line = '';
     };
     for (const tok of trimmed.match(/<span\b[^>]*>|<\/span>|\n|[^<\n]+|</g) ?? []) {
