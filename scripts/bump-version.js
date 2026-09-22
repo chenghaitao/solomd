@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
-// Bumps the SoloMD version across the three sources of truth:
+// Bumps the SoloMD version across the four sources of truth:
 //   app/package.json            (frontend / CI reads this for release name)
 //   app/src-tauri/tauri.conf.json  (installer + bundle version; has a BOM)
 //   app/src-tauri/Cargo.toml    (crate version)
+//   app/src-tauri/Cargo.lock    (only the `solomd` package entry)
 //
 // Pure regex replacement (not JSON.parse) to preserve formatting and the
 // UTF-8 BOM on tauri.conf.json. Kept dependency-free so release.bat can call
@@ -37,6 +38,14 @@ const targets = [
     rel: 'app/src-tauri/Cargo.toml',
     re: /^version\s*=\s*"[^"]+"/m,
     rep: `version = "${v}"`,
+  },
+  {
+    // Cargo.lock only carries our own version on the `[[package]] name = "solomd"`
+    // entry; every other `version =` line belongs to a dependency. Skipping this
+    // file leaves the tree dirty, because the next `cargo` run rewrites it.
+    rel: 'app/src-tauri/Cargo.lock',
+    re: /(\[\[package\]\]\r?\nname = "solomd"\r?\nversion = )"[^"]+"/,
+    rep: `$1"${v}"`,
   },
 ];
 
