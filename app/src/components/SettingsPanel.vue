@@ -26,6 +26,7 @@ import {
 import { isMacOS } from '../lib/platform';
 import { checkForUpdate, openReleaseUrl, isMasBuild } from '../lib/check-update';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
+import { useFiles } from '../composables/useFiles';
 import AISettings from './AISettings.vue';
 import CitationPickerSettings from './CitationPickerSettings.vue';
 import CaptureEndpointSettings from './CaptureEndpointSettings.vue';
@@ -289,6 +290,7 @@ void refreshSpellDicts();
 const tabs = useTabsStore();
 const toasts = useToastsStore();
 const workspace = useWorkspaceStore();
+const files = useFiles();
 const rag = useRagStore();
 
 // #282 — a custom CSS theme takes the palette over completely (see the note
@@ -337,6 +339,7 @@ function onToggleOutlineGlobal() {
 async function pickCustomCss() {
   const path = await openFileDialog({
     multiple: false,
+    defaultPath: await files.filePickerStartDir(),
     filters: [{ name: 'CSS', extensions: ['css'] }],
   });
   if (path && typeof path === 'string') {

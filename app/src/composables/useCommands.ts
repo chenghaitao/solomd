@@ -235,6 +235,7 @@ export function useCommands(): Command[] {
       run: async () => {
         const path = await openFileDialog({
           multiple: false,
+          defaultPath: await files.filePickerStartDir(),
           filters: [{ name: 'CSS', extensions: ['css'] }],
         });
         if (path && typeof path === 'string') {
@@ -385,6 +386,7 @@ export function useCommands(): Command[] {
         }
         const sel = await openFileDialog({
           multiple: false,
+          defaultPath: await files.filePickerStartDir(),
           filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'tiff'] }],
         });
         if (typeof sel !== 'string') return;

@@ -31,10 +31,14 @@ function chordFor(c: { id: string; shortcut?: string }): string {
   return shortcutLabel(c.id, kbSettings.keybindings, macChords) || '';
 }
 
-// #177 — localized command titles. `t()` falls back to English for any id
-// missing in a locale, so this is always displayable.
+// #177 — localized command titles. Missing ids used to render as the literal
+// key ("cmd.editor.caseUpper") because `t()` returns the key when nothing
+// defines it; falling back to the command's own English title degrades a gap
+// to untranslated instead of to gibberish.
 function localizedTitle(c: Command): string {
-  return t(`cmd.${c.id}`);
+  const key = `cmd.${c.id}`;
+  const translated = t(key);
+  return translated === key ? c.title : translated;
 }
 
 const filtered = computed<Command[]>(() => {
@@ -114,13 +118,13 @@ async function runIdx(i: number) {
 <template>
   <Teleport to="body">
   <div v-if="open" class="palette__backdrop" @click.self="emit('close')">
-    <div class="palette" role="dialog" aria-label="Command palette">
+    <div class="palette" role="dialog" :aria-label="t('toolbar.paletteTitle')">
       <input
         ref="inputRef"
         v-model="query"
         @keydown="onKey"
         class="palette__input"
-        placeholder="Type a command…"
+        :placeholder="t('palette.placeholder')"
         spellcheck="false"
       />
       <ul class="palette__list" ref="listRef" v-if="filtered.length">
@@ -137,7 +141,7 @@ async function runIdx(i: number) {
           <span class="palette__shortcut" v-if="chordFor(c)">{{ chordFor(c) }}</span>
         </li>
       </ul>
-      <div class="palette__empty" v-else>No matching command</div>
+      <div class="palette__empty" v-else>{{ t('palette.empty') }}</div>
     </div>
   </div>
   </Teleport>

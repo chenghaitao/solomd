@@ -388,6 +388,7 @@ async function pickAndInsertImage() {
   insertOpen.value = false;
   const sel = await openFileDialog({
     multiple: false,
+    defaultPath: await files.filePickerStartDir(),
     filters: [
       { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'tiff'] },
     ],
