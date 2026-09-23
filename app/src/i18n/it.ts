@@ -310,7 +310,7 @@ export const it: I18n = {
     explorerFullNames: 'Nomi file completi nell’esplora risorse',
     explorerFullNamesHint: 'Manda a capo i nomi lunghi nell’albero laterale invece di abbreviarli con i puntini centrali.',
     explorerShowHidden: 'Mostra i file nascosti',
-    explorerShowHiddenHint: 'Elenca file e cartelle che iniziano con un punto (.git, .obsidian, .gitignore) nell’albero laterale.',
+    explorerShowHiddenHint: 'Elenca file e cartelle che iniziano con un punto (.git, .obsidian, .gitignore) e le cartelle degli allegati immagine (_assets, *.assets) nell’albero laterale.',
     distinctSplitPanes: 'Distingui editor e anteprima',
     distinctSplitPanesHint: 'Nella vista divisa dà all’anteprima uno sfondo leggermente diverso, così i due riquadri non sembrano un’unica colonna.',
     markdownHardBreaks: 'Renderizza i singoli a capo come interruzioni di riga',
@@ -480,6 +480,7 @@ export const it: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Tutte le schede aperte',
     close: 'Chiudi',
     closeLeft: 'Chiudi schede a sinistra',
     closeRight: 'Chiudi schede a destra',

@@ -310,7 +310,7 @@ export const uk: I18n = {
     explorerFullNames: 'Повні імена файлів у провіднику',
     explorerFullNamesHint: 'Переносить довгі імена файлів у бічному дереві замість скорочення трикрапкою посередині.',
     explorerShowHidden: 'Показувати приховані файли',
-    explorerShowHiddenHint: 'Показує файли та теки, що починаються з крапки (.git, .obsidian, .gitignore), у дереві файлів.',
+    explorerShowHiddenHint: 'Показує файли та теки, що починаються з крапки (.git, .obsidian, .gitignore), а також теки з вкладеними зображеннями (_assets, *.assets) у дереві файлів.',
     distinctSplitPanes: 'Розрізняти редактор і попередній перегляд',
     distinctSplitPanesHint: 'У розділеному вигляді надає попередньому перегляду трохи інше тло, щоб дві панелі не читалися як одна широка колонка.',
     markdownHardBreaks: 'Відображати одиничні переноси рядка як розриви',
@@ -480,6 +480,7 @@ export const uk: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Усі відкриті вкладки',
     close: 'Закрити',
     closeLeft: 'Закрити вкладки ліворуч',
     closeRight: 'Закрити вкладки праворуч',

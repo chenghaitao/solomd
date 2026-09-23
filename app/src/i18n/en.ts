@@ -310,7 +310,7 @@ export const en = {
     explorerFullNames: 'Full file names in Explorer',
     explorerFullNamesHint: 'Wraps long file names across lines in the sidebar tree instead of shortening them with a middle ellipsis.',
     explorerShowHidden: 'Show hidden files',
-    explorerShowHiddenHint: 'Lists dot-files and dot-folders (.git, .obsidian, .gitignore) in the Explorer tree.',
+    explorerShowHiddenHint: 'Lists dot-files and dot-folders (.git, .obsidian, .gitignore) and image attachment folders (_assets, *.assets) in the Explorer tree.',
     distinctSplitPanes: 'Distinguish the editor and preview panes',
     distinctSplitPanesHint: 'In split view, gives the preview a slightly different background so the two panes don’t read as one wide column.',
     markdownHardBreaks: 'Render single newlines as line breaks',
@@ -480,6 +480,7 @@ export const en = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'All open tabs',
     close: 'Close',
     closeLeft: 'Close Tabs to the Left',
     closeRight: 'Close Tabs to the Right',

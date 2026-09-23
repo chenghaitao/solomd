@@ -310,7 +310,7 @@ export const fr: I18n = {
     explorerFullNames: 'Noms de fichiers complets dans l’explorateur',
     explorerFullNamesHint: 'Replie les noms de fichiers longs dans l’arborescence au lieu de les raccourcir par une ellipse centrale.',
     explorerShowHidden: 'Afficher les fichiers masqués',
-    explorerShowHiddenHint: 'Affiche les fichiers et dossiers commençant par un point (.git, .obsidian, .gitignore) dans l’arborescence.',
+    explorerShowHiddenHint: 'Affiche les fichiers et dossiers commençant par un point (.git, .obsidian, .gitignore) ainsi que les dossiers de pièces jointes images (_assets, *.assets) dans l’arborescence.',
     distinctSplitPanes: 'Distinguer l’éditeur de l’aperçu',
     distinctSplitPanesHint: 'En vue divisée, donne à l’aperçu un fond légèrement différent pour que les deux volets ne se lisent pas comme une seule colonne.',
     markdownHardBreaks: 'Rendre les sauts de ligne simples comme des retours',
@@ -480,6 +480,7 @@ export const fr: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Tous les onglets ouverts',
     close: 'Fermer',
     closeLeft: 'Fermer les onglets à gauche',
     closeRight: 'Fermer les onglets à droite',

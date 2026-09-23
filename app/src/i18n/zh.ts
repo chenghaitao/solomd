@@ -311,7 +311,7 @@ export const zh: I18n = {
     explorerFullNames: '文件树显示完整文件名',
     explorerFullNamesHint: '侧边栏文件树中的长文件名换行完整显示,不再用省略号截断中段。',
     explorerShowHidden: '显示隐藏文件',
-    explorerShowHiddenHint: '在文件树里列出以点开头的文件和文件夹（.git、.obsidian、.gitignore 等）。',
+    explorerShowHiddenHint: '在文件树里列出以点开头的文件和文件夹（.git、.obsidian、.gitignore 等），以及存放图片附件的文件夹（_assets、*.assets）。',
     distinctSplitPanes: '区分编辑区与预览区',
     distinctSplitPanesHint: '分栏时给预览区一个略微不同的底色，两边不再长得一模一样、连成一整片。',
     markdownHardBreaks: '单个换行渲染为换行',
@@ -481,6 +481,7 @@ export const zh: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: '所有打开的标签',
     close: '关闭',
     closeLeft: '关闭左侧标签',
     closeRight: '关闭右侧标签',

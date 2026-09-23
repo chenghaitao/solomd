@@ -310,7 +310,7 @@ export const es: I18n = {
     explorerFullNames: 'Nombres de archivo completos en el explorador',
     explorerFullNamesHint: 'Ajusta los nombres largos en el árbol lateral en lugar de acortarlos con puntos suspensivos en el medio.',
     explorerShowHidden: 'Mostrar archivos ocultos',
-    explorerShowHiddenHint: 'Muestra archivos y carpetas que empiezan por punto (.git, .obsidian, .gitignore) en el árbol del explorador.',
+    explorerShowHiddenHint: 'Muestra archivos y carpetas que empiezan por punto (.git, .obsidian, .gitignore) y las carpetas de imágenes adjuntas (_assets, *.assets) en el árbol del explorador.',
     distinctSplitPanes: 'Distinguir el editor de la vista previa',
     distinctSplitPanesHint: 'En vista dividida, da a la vista previa un fondo algo distinto para que los dos paneles no parezcan una sola columna ancha.',
     markdownHardBreaks: 'Renderizar saltos de línea simples como saltos',
@@ -480,6 +480,7 @@ export const es: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Todas las pestañas abiertas',
     close: 'Cerrar',
     closeLeft: 'Cerrar pestañas a la izquierda',
     closeRight: 'Cerrar pestañas a la derecha',
