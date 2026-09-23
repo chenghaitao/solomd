@@ -132,6 +132,8 @@ const PDF_CSS = `
     padding: 7px 13px;
     text-align: left;
   }
+  /* #271 — short cells stay on one line (see markdown.ts table_short_cells). */
+  .pdf-page .cell-nowrap { white-space: nowrap; }
   .pdf-page thead th {
     background: #ffe7cc;
     color: #1f1d1a;

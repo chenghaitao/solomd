@@ -442,6 +442,33 @@ md.renderer.rules.html_block = function (tokens, idx, options, env, self) {
 //   3. attach `data-line="N"` (1-indexed source line) to the <li>
 // We also tag the enclosing <ul>/<ol> with `contains-task-list` so
 // integrators can strip bullet markers.
+// #271 — short table cells don't wrap. The browser's table layout promises a
+// column only its min-content width, which for Chinese is ONE character, so a
+// short label beside a long column was squeezed until it read top to bottom
+// ("定/时/任/务…"). A cell whose text is short — up to ~12 CJK characters or
+// ~24 Latin ones — is kept on one line; longer cells wrap as before, so a
+// wide table still fits its page.
+const SHORT_CELL_WIDTH = 24;
+function displayWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) w += /[\u2E80-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]/.test(ch) ? 2 : 1;
+  return w;
+}
+md.core.ruler.after('inline', 'table_short_cells', (state) => {
+  const tokens = state.tokens;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const tok = tokens[i];
+    if (tok.type !== 'td_open' && tok.type !== 'th_open') continue;
+    const inline = tokens[i + 1];
+    if (inline.type !== 'inline') continue;
+    // Measure what is shown, not the markup: `**x**` is one character wide.
+    const shown = (inline.children ?? [])
+      .map((c) => (c.type === 'text' || c.type === 'code_inline' ? c.content : ''))
+      .join('');
+    if (shown && displayWidth(shown) <= SHORT_CELL_WIDTH) tok.attrJoin('class', 'cell-nowrap');
+  }
+});
+
 md.core.ruler.after('inline', 'task_lists', (state) => {
   const tokens = state.tokens;
   const TASK_RE = /^\[([ xX])\][ \u00A0]/;

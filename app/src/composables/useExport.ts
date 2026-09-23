@@ -148,6 +148,8 @@ const HTML_TEMPLATE = (title: string, body: string) => `<!doctype html>
     padding: 8px 14px;
     text-align: left;
   }
+  /* #271 — short cells stay on one line (see markdown.ts table_short_cells). */
+  .cell-nowrap { white-space: nowrap; }
   thead th {
     background: var(--brand-soft);
     color: var(--ink);
