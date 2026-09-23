@@ -1437,31 +1437,12 @@ export const FileTreeNode = defineComponent({
       return iconMap[ext] || '📄';
     };
 
-    // Truncate filename in the middle: keep start and extension, ellipsis in middle
-    const truncateFileName = (name: string, maxLength: number = 30): string => {
-      if (name.length <= maxLength) return name;
-
-      const lastDotIndex = name.lastIndexOf('.');
-      if (lastDotIndex === -1) {
-        // No extension: simple truncation
-        const half = Math.floor((maxLength - 3) / 2);
-        return name.slice(0, half) + '...' + name.slice(-half);
-      }
-
-      const ext = name.slice(lastDotIndex); // includes the dot
-      const baseName = name.slice(0, lastDotIndex);
-      const extLength = ext.length;
-
-      // Reserve space for extension and ellipsis
-      const availableForBase = maxLength - extLength - 3;
-      if (availableForBase < 4) {
-        // Extension is too long, truncate extension instead
-        const half = Math.floor((maxLength - 3) / 2);
-        return name.slice(0, half) + '...' + name.slice(-half);
-      }
-
-      const half = Math.floor(availableForBase / 2);
-      return baseName.slice(0, half) + '...' + baseName.slice(-half) + ext;
+    // #259 — split "name" and ".ext" so CSS can truncate the name to whatever
+    // width the sidebar has, keeping the extension visible. This used to be a
+    // fixed 30-character cut in JS, so widening the sidebar never showed more.
+    const splitName = (name: string): [string, string] => {
+      const dot = name.lastIndexOf('.');
+      return dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
     };
 
     return () => {
@@ -1480,10 +1461,16 @@ export const FileTreeNode = defineComponent({
       }
       const indent = 8 + props.depth * 12;
 
-      // Use truncated name for display, full name in tooltip. #182 — the
-      // full-names setting skips JS mid-ellipsis; CSS wraps instead.
-      const displayName =
-        !n.is_dir && !nodeSettings.explorerFullNames ? truncateFileName(n.name) : n.name;
+      // Full name in the tooltip. #182 — the full-names setting wraps
+      // instead of truncating.
+      const [nameBase, nameExt] = splitName(n.name);
+      const nameNode =
+        !n.is_dir && !nodeSettings.explorerFullNames && nameExt
+          ? h('span', { class: 'ftree__name ftree__name--split' }, [
+              h('span', { class: 'ftree__name-base' }, nameBase),
+              h('span', { class: 'ftree__name-ext' }, nameExt),
+            ])
+          : h('span', { class: 'ftree__name' }, n.name);
 
       const e = edit?.editInTree.value ? edit.editing.value : null;
       const renaming = !!e && e.kind === 'rename' && e.original === n.path;
@@ -1521,7 +1508,7 @@ export const FileTreeNode = defineComponent({
           },
           [
             h('span', { class: 'ftree__icon' }, n.is_dir ? (n.expanded ? '▾' : '▸') : getFileIcon(n.name)),
-            h('span', { class: 'ftree__name' }, displayName),
+            nameNode,
             !n.is_dir && props.inboxPaths.has(n.path)
               ? h('span', { class: 'ftree__inbox-dot', title: 'inbox' }, '●')
               : null,
@@ -2132,12 +2119,27 @@ export const FileTreeNode = defineComponent({
   opacity: 0.4;
 }
 
-/* Better filename display with middle ellipsis for very long names */
+/* Long names are cut to the sidebar's current width (#259). */
 :deep(.ftree__name) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   flex: 1;
+}
+/* A file name with an extension: the name shrinks with an ellipsis, the
+   extension never does — "a-very-long-meeting-no….md". */
+:deep(.ftree__name--split) {
+  display: flex;
+}
+:deep(.ftree__name-base) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+:deep(.ftree__name-ext) {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 </style>
