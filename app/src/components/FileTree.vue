@@ -16,6 +16,12 @@ import { useI18n } from '../i18n';
 import { isMobile } from '../lib/platform';
 import { usePendingDeletes, isDeletePending, UNDO_WINDOW_MS } from '../composables/usePendingDeletes';
 import { isSafPath, fromSafPath, safList, safCreate } from '../lib/saf-fs';
+import {
+  revealRequest,
+  revealedPath,
+  clearRevealRequest,
+  clearRevealedPath,
+} from '../composables/useFileTreeReveal';
 import MoveToDialog from './MoveToDialog.vue';
 import {
   dragPath,
@@ -258,6 +264,9 @@ watch(
     // Leaving the folder ends the undo offer — the toast is about to be out of
     // sight, and a timer that fires against another workspace is a trap.
     void pendingDeletes.flushAll();
+    // A reveal highlight belongs to the workspace it was asked for: the same
+    // path in the next one must not inherit it.
+    clearRevealedPath();
     void refreshRoot();
   },
   { immediate: true },
@@ -764,6 +773,104 @@ function findNode(path: string, nodes?: Node[]): Node | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// "Reveal in File Tree" — the tab's context menu asks for a file, the tree
+// expands down to it and highlights the row.
+//
+// The old implementation re-rooted the workspace at the file's parent folder,
+// which is destructive (the switcher's recents, the per-workspace tab set) and
+// was a visible no-op whenever the file already lived directly in the open
+// workspace root — the reported "nothing happens". Revealing is a view action:
+// it must not move the user's workspace. Rooting elsewhere only happens for a
+// file that is genuinely outside it, because then there is nothing to reveal.
+//
+// The highlight itself is deliberately loud and temporary: a fill + ring + a
+// short fade, so it reads in a theme whose accent is close to the row colour
+// (a colour-only tint was reported as invisible).
+// ---------------------------------------------------------------------------
+const REVEAL_HOLD_MS = 3200;
+let revealTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Path segments between the workspace root and `path`, or null when the path
+ *  is not inside the open workspace. */
+function segmentsUnderRoot(path: string): string[] | null {
+  const rootPath = root.value?.path;
+  if (!rootPath) return null;
+  if (path === rootPath) return [];
+  const sep = path.includes('\\') ? '\\' : '/';
+  const rootNorm = rootPath.endsWith(sep) ? rootPath : rootPath + sep;
+  return path.startsWith(rootNorm) ? path.slice(rootNorm.length).split(/[\\/]+/) : null;
+}
+
+function rowElementFor(path: string): HTMLElement | null {
+  const rows = treeBody.value?.querySelectorAll<HTMLElement>('.ftree__item');
+  for (const row of rows ?? []) {
+    if (row.dataset.path === path) return row;
+  }
+  return null;
+}
+
+/** Highlight a row that is already on screen and scroll it into view. */
+function flashRow(path: string, row: HTMLElement) {
+  revealedPath.value = path;
+  row.scrollIntoView({ block: 'center' });
+  if (revealTimer) clearTimeout(revealTimer);
+  revealTimer = setTimeout(() => {
+    revealTimer = null;
+    clearRevealedPath();
+  }, REVEAL_HOLD_MS);
+}
+
+/** Expand every folder on the way down, then flash the row. False when the
+ *  file is not reachable in the tree (filtered out, hidden, or truncated). */
+async function revealRow(path: string): Promise<boolean> {
+  // Already rendered — its ancestors are expanded. Checked first because it
+  // also covers SAF vaults, whose node paths are opaque `saf:<docId>` values
+  // that cannot be walked by prefix.
+  const shown = rowElementFor(path);
+  if (shown) {
+    flashRow(path, shown);
+    return true;
+  }
+  const parts = segmentsUnderRoot(path);
+  if (!parts || parts.length === 0 || !root.value) return false;
+  let node: Node = root.value;
+  for (const seg of parts.slice(0, -1)) {
+    const dir = node.children?.find((c) => c.is_dir && c.name === seg);
+    if (!dir) return false;
+    if (!dir.expanded) await toggle(dir);
+    node = dir;
+  }
+  if (!node.children?.some((c) => c.path === path)) return false;
+  await nextTick();
+  const row = rowElementFor(path);
+  if (!row) return false;
+  flashRow(path, row);
+  return true;
+}
+
+/** Serve a parked request, once the tree is in a position to answer it. */
+async function serveRevealRequest() {
+  const path = revealRequest.value;
+  // A directory read is in flight — the request is served when it lands, so a
+  // reveal that raced a workspace switch is not dropped.
+  if (!path || !root.value || root.value.loading) return;
+  clearRevealRequest();
+  if (!(await revealRow(path))) toasts.warning(t('explorer.revealHidden'), 6000);
+}
+
+watch(
+  [revealRequest, () => root.value?.path, () => root.value?.loading],
+  () => {
+    void serveRevealRequest();
+  },
+  // `immediate` matters: the tree is `v-if`'d on the sidebar toggle, so a
+  // reveal can arrive (and park) while this component does not exist yet —
+  // a request that is already set when the tree mounts would otherwise never
+  // be seen, because a non-immediate watcher only reacts to later changes.
+  { immediate: true },
+);
+
 /** Which folder the pointer is currently over, or null. Files are not drop
  *  targets: filing into a file's parent reads as "dropped into the file" and
  *  there is no honest way to highlight that. */
@@ -1085,7 +1192,7 @@ onBeforeUnmount(() => {
       @mousedown="onResizeStart"
     />
     <div class="ftree__header">
-      <span>Explorer</span>
+      <span>{{ t('explorer.heading') }}</span>
       <div class="ftree__header-btns">
         <button
           class="ftree__hbtn"
@@ -1150,7 +1257,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="!root" class="ftree__empty">
-      <button class="ftree__open-btn" @click="files.openFolder">Open Folder…</button>
+      <button class="ftree__open-btn" @click="files.openFolder">{{ t('explorer.openFolder') }}</button>
     </div>
     <div v-else ref="treeBody" class="ftree__body">
       <!-- v4.3.5: root display doubles as the workspace switcher. Click
@@ -1264,7 +1371,7 @@ onBeforeUnmount(() => {
 
       <div v-if="root.loading" class="ftree__loading">
         <span class="ftree__spinner" aria-hidden="true"></span>
-        <span>Loading…</span>
+        <span>{{ t('explorer.loading') }}</span>
       </div>
       <ul v-else class="ftree__list" :class="{ 'ftree__list--drop': dropTarget === root.path }">
         <FileTreeNode
@@ -1283,8 +1390,8 @@ onBeforeUnmount(() => {
         <EditRowAtRoot
           v-if="editInTree && editing && editing.kind !== 'rename' && editing.parent === root.path"
         />
-        <li v-if="root.truncated" class="ftree__truncated" :title="`This folder has more than 10,000 entries; showing the first batch. Move groups into subfolders to see them all.`">
-          + 10,000+ more —— folder is huge
+        <li v-if="root.truncated" class="ftree__truncated" :title="t('explorer.truncatedHint')">
+          {{ t('explorer.truncated') }}
         </li>
       </ul>
     </div>
@@ -1483,6 +1590,7 @@ export const FileTreeNode = defineComponent({
               n.is_dir ? 'ftree__item--dir' : 'ftree__item--file',
               dragPath.value === n.path ? 'ftree__item--dragging' : '',
               n.is_dir && dropTarget.value === n.path ? 'ftree__item--drop' : '',
+              revealedPath.value === n.path ? 'ftree__item--revealed' : '',
             ],
             style: { paddingLeft: indent + 'px' },
             // Hit-testing during a drag reads these off whatever row is under
@@ -1924,6 +2032,27 @@ export const FileTreeNode = defineComponent({
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   box-shadow: inset 0 0 0 1px var(--accent);
   border-radius: 4px;
+}
+/* "Reveal in File Tree" (tab context menu). A colour-only tint can be
+   indistinguishable from the row background in a low-contrast theme, so the
+   row gets a fill *and* a ring, at full strength first and then fading out
+   over ~3s — long enough to catch the eye after the tree has scrolled. */
+:deep(.ftree__item--revealed) {
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--accent);
+  animation: ftree-reveal 3.2s ease-out forwards;
+}
+@keyframes ftree-reveal {
+  0% {
+    background: color-mix(in srgb, var(--accent) 42%, transparent);
+  }
+  60% {
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
 }
 .ftree__root--drop {
   box-shadow: inset 0 0 0 1px var(--accent);

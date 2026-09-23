@@ -2,7 +2,7 @@ import { inject } from 'vue';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { documentDir, join } from '@tauri-apps/api/path';
+import { documentDir, desktopDir, homeDir, join } from '@tauri-apps/api/path';
 import { isIOS, isAndroid, isWindowsDesktop } from '../lib/platform';
 import { isNarrowViewport } from './useViewport';
 import { useTabsStore } from '../stores/tabs';
@@ -86,7 +86,10 @@ export function useFiles() {
     // No filters: rfd's filter behavior on macOS greys out non-matching files
     // and `'*'` is not treated as a wildcard. Letting the user pick anything
     // is simpler and more reliable.
-    const selected = await openDialog({ multiple: false });
+    const selected = await openDialog({
+      multiple: false,
+      defaultPath: await filePickerStartDir(),
+    });
     if (!selected || typeof selected !== 'string') return;
     await openPath(selected);
   }
@@ -423,6 +426,7 @@ export function useFiles() {
   async function importDocuments() {
     const selected = await openDialog({
       multiple: true,
+      defaultPath: await filePickerStartDir(),
       filters: [
         {
           name: 'Documents',
@@ -533,13 +537,69 @@ export function useFiles() {
     }
   }
 
+  /** The starting folder handed to the OS folder picker.
+   *
+   *  Never let the picker open without one, and never hand it a path that is
+   *  not a real directory:
+   *
+   *  - Windows' picker falls back to the shell's *Desktop root* when it is
+   *    given no starting folder. That root is a namespace item, not a
+   *    directory — it has no filesystem path — so pressing OK on it makes the
+   *    shell answer "no object for moniker" (MK_E_UNAVAILABLE, zh: "没有供标
+   *    记使用的对象") and refuse to close the dialog. "Open Folder" then reads
+   *    as a dead button and the Desktop itself cannot be chosen.
+   *  - rfd silently drops a starting folder it cannot resolve
+   *    (`SHCreateItemFromParsingName` fails → `SetFolder` is skipped), so a
+   *    remembered workspace on a deleted / unmounted path lands the user in
+   *    exactly that virtual root.
+   *
+   *  A directory that exists keeps the dialog on the filesystem: the caller's
+   *  own candidates first (a remembered path, the active file's folder), then
+   *  the last workspace, else the Desktop (where the picker would have opened
+   *  anyway), else Documents, else the home folder. */
+  async function pickerStartDir(
+    ...preferred: Array<string | null | undefined>
+  ): Promise<string | undefined> {
+    const candidates = [
+      ...preferred,
+      workspace.currentFolder,
+      await desktopDir().catch(() => null),
+      await documentDir().catch(() => null),
+      await homeDir().catch(() => null),
+    ];
+    for (const c of candidates) {
+      if (!c) continue;
+      try {
+        // A SAF vault path ("saf:…") is not a filesystem path — skip it and
+        // let the next candidate win, same as a folder that has gone away.
+        if (await invoke<boolean>('fs_dir_exists', { path: c })) return c;
+      } catch {
+        /* path API unavailable — try the next candidate */
+      }
+    }
+    return undefined;
+  }
+
+  /** Directory a *file* picker should open in.
+   *
+   *  The active document's folder first — that is where the next file the user
+   *  reaches for almost always lives (an image next to the note, a sibling
+   *  chapter, the CSS for the theme you're editing) — then the chain above. */
+  async function filePickerStartDir(): Promise<string | undefined> {
+    const active = tabs.activeTab?.filePath;
+    const dir = active?.replace(/[\\/][^\\/]+$/, '');
+    return pickerStartDir(dir && dir !== active ? dir : null);
+  }
+
   async function openFolder() {
     // Open the OS folder picker rooted at the previously chosen workspace
     // so the user lands in a familiar tree, not at $HOME or wherever the
     // OS defaults. Without `defaultPath` Tauri's picker re-opens at the
     // OS-level last-used directory, which is unrelated to SoloMD state
     // and surprised users with a "why isn't my last folder remembered"
-    // bug. We persist `currentFolder` already; this just feeds it back.
+    // bug. We persist `currentFolder` already; this just feeds it back —
+    // via pickerStartDir(), which guarantees the folder it hands over
+    // actually exists (see there for why that matters on Windows).
     //
     // #96 fix: on Android, `openDialog({ directory: true })` resolves to
     // `null` silently — Tauri's dialog plugin doesn't surface SAF's
@@ -594,7 +654,7 @@ export function useFiles() {
     const selected = await openDialog({
       directory: true,
       multiple: false,
-      defaultPath: workspace.currentFolder ?? undefined,
+      defaultPath: await pickerStartDir(),
     });
     if (!selected || typeof selected !== 'string') return;
     workspace.setFolder(selected);
@@ -823,6 +883,11 @@ export function useFiles() {
     openPath,
     openLinkedFile,
     openFolder,
+    // Starting directories for the OS dialogs. Every picker needs one: an
+    // unset `defaultPath` is not "neutral" on Windows — it strands the dialog
+    // on the shell's virtual desktop root, which OK cannot return.
+    pickerStartDir,
+    filePickerStartDir,
     saveActive,
     saveActiveAs,
     // Exposed for the task panel: ticking a checkbox in a file that happens to

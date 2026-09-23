@@ -6,6 +6,9 @@ import { useTilesStore } from '../stores/tiles';
 import { useSettingsStore } from '../stores/settings';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useFiles } from '../composables/useFiles';
+import { requestRevealInTree } from '../composables/useFileTreeReveal';
+import { shortcutLabel } from '../lib/keybindings';
+import { isMacOS } from '../lib/platform';
 import { useI18n } from '../i18n';
 import type { SplitDirection } from '../types';
 
@@ -20,6 +23,10 @@ const settings = useSettingsStore();
 const workspace = useWorkspaceStore();
 const files = useFiles();
 const { t } = useI18n();
+const macChord = isMacOS();
+/** "New tab (Ctrl+N)" — the chord is read at render time so a rebind in
+ *  Settings shows up here (same reason CommandPalette does it). */
+const newTabChord = shortcutLabel('file.new', settings.keybindings, macChord);
 
 const tabsEl = ref<HTMLElement | null>(null);
 
@@ -109,11 +116,22 @@ async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'close
   if (action === 'revealInFileTree') {
     const path = list[idx]?.filePath;
     if (!path) return;
-    const parent = path.replace(/[\\/][^\\/]+$/, '');
-    if (parent && parent !== path) {
-      if (!settings.showFileTree) settings.toggleFileTree();
-      workspace.setFolder(parent);
+    if (!settings.showFileTree) settings.toggleFileTree();
+    // Revealing is a view action, so the workspace is left alone when the file
+    // is already inside it — re-rooting the tree at the file's folder (what
+    // this used to do) moved the user's workspace, churned the recent-folder
+    // list, and looked like a no-op whenever the file sat directly in the root.
+    // Only a file from outside the workspace needs the tree to follow it;
+    // otherwise there would be nothing to point at.
+    const root = workspace.currentFolder;
+    const sep = path.includes('\\') ? '\\' : '/';
+    const inside =
+      !!root && (path === root || path.startsWith(root.endsWith(sep) ? root : root + sep));
+    if (!inside) {
+      const parent = path.replace(/[\\/][^\\/]+$/, '');
+      if (parent && parent !== path) workspace.setFolder(parent);
     }
+    requestRevealInTree(path);
     return;
   }
   const ids = (() => {
@@ -344,31 +362,34 @@ onBeforeUnmount(() => {
 <template>
   <div class="pane-tabbar">
     <div class="tabs" ref="tabsEl" @wheel.prevent="onTabsWheel">
+      <!-- The loop variable is `tab`, not `t`: `t` is the i18n function in
+           this component, and `v-for="t in …"` silently shadowed it — any
+           `t('key')` written inside the row would have called the tab. -->
       <div
-        v-for="t in tabs.tabs"
-        :key="t.id"
-        :data-tab-id="t.id"
+        v-for="tab in tabs.tabs"
+        :key="tab.id"
+        :data-tab-id="tab.id"
         class="tab"
-        :class="{ 'tab--active': t.id === activeTabId, 'tab--dragging': tiles.dragTabId === t.id }"
-        @click="onTabClick(t.id)"
-        @pointerdown="onTabPointerDown($event, t.id)"
-        @mousedown.middle="onMiddlePointerDown($event, t.id)"
-        @contextmenu="onContextMenu($event, t.id)"
-        :title="t.filePath || t.fileName"
+        :class="{ 'tab--active': tab.id === activeTabId, 'tab--dragging': tiles.dragTabId === tab.id }"
+        @click="onTabClick(tab.id)"
+        @pointerdown="onTabPointerDown($event, tab.id)"
+        @mousedown.middle="onMiddlePointerDown($event, tab.id)"
+        @contextmenu="onContextMenu($event, tab.id)"
+        :title="tab.filePath || tab.fileName"
       >
-        <span class="tab__name">{{ t.fileName }}</span>
+        <span class="tab__name">{{ tab.fileName }}</span>
         <button
-          v-if="t.language === 'markdown'"
+          v-if="tab.language === 'markdown'"
           class="tab__outline"
-          :class="{ 'tab__outline--active': t.showOutline }"
-          :title="t.showOutline ? 'Hide outline' : 'Show outline'"
-          @click.stop="tabs.toggleOutline(t.id)"
+          :class="{ 'tab__outline--active': tab.showOutline }"
+          :title="tab.showOutline ? t('tabMenu.hideOutline') : t('tabMenu.showOutline')"
+          @click.stop="tabs.toggleOutline(tab.id)"
         >≡</button>
-        <span class="tab__dot" v-if="tabs.isDirty(t.id)">●</span>
+        <span class="tab__dot" v-if="tabs.isDirty(tab.id)">●</span>
         <button
           class="tab__close"
-          @click.stop="files.closeTabSafe(t.id)"
-          aria-label="Close tab"
+          @click.stop="files.closeTabSafe(tab.id)"
+          :aria-label="t('tabMenu.close')"
         >×</button>
       </div>
     </div>
@@ -381,7 +402,7 @@ onBeforeUnmount(() => {
       :aria-expanded="!!tabListPos"
       @click.stop="toggleTabList"
     >⌄</button>
-    <button class="tabbar__new" @click="files.newFile" title="New tab (Ctrl+N)">+</button>
+    <button class="tabbar__new" @click="files.newFile" :title="newTabChord ? `${t('tabMenu.newTab')} (${newTabChord})` : t('tabMenu.newTab')">+</button>
     <button
       v-if="canClosePane"
       class="tabbar__close-pane"
@@ -443,10 +464,10 @@ onBeforeUnmount(() => {
         <button class="ctx-item" :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('revealInFolder')">{{ t('tabMenu.revealInFolder') }}</button>
         <button class="ctx-item" :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('revealInFileTree')">{{ t('tabMenu.revealInFileTree') }}</button>
         <div class="ctx-sep" />
-        <button class="ctx-item" @click="splitPane('horizontal')">Split Right</button>
-        <button class="ctx-item" @click="splitPane('vertical')">Split Down</button>
+        <button class="ctx-item" @click="splitPane('horizontal')">{{ t('cmd.tile.splitRight') }}</button>
+        <button class="ctx-item" @click="splitPane('vertical')">{{ t('cmd.tile.splitDown') }}</button>
         <div class="ctx-sep" v-if="tiles.allLeaves.length > 1" />
-        <button class="ctx-item" v-if="tiles.allLeaves.length > 1" @click="closePane">Close Pane</button>
+        <button class="ctx-item" v-if="tiles.allLeaves.length > 1" @click="closePane">{{ t('cmd.tile.closePane') }}</button>
       </div>
     </Teleport>
   </div>
