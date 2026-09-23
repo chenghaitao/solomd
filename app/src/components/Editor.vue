@@ -2446,6 +2446,34 @@ function activatePlainBlock(index: number, caret?: number, holdScroll = false) {
   });
 }
 
+/**
+ * #326 — a click on the editor's blank space (below the last block, or in the
+ * gaps between blocks) landed on the host itself, which has no handler: on a
+ * new, empty note the whole page ignored clicks and looked frozen. Put the
+ * caret at the end of the nearest block — the last one when clicking below
+ * the text, which is where every other editor puts it.
+ */
+function onPlainLiveHostMouseDown(event: MouseEvent) {
+  const host = plainLiveHost.value;
+  if (!host || event.button !== 0 || event.target !== host) return;
+  const els = host.querySelectorAll<HTMLElement>(':scope > .plain-block');
+  if (!els.length) return;
+  let best = els.length - 1;
+  let bestDist = Infinity;
+  els.forEach((el, i) => {
+    const r = el.getBoundingClientRect();
+    const d = event.clientY < r.top ? r.top - event.clientY : event.clientY > r.bottom ? event.clientY - r.bottom : 0;
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  });
+  // Keep the host from taking focus and the browser from starting a text
+  // selection on it; the block's textarea gets focus instead.
+  event.preventDefault();
+  activatePlainBlock(best, Number.MAX_SAFE_INTEGER, true);
+}
+
 function setPlainBlockEditor(index: number, el: HTMLTextAreaElement | null) {
   plainBlockEditors.value[index] = el;
   if (!el) return;
@@ -3949,6 +3977,7 @@ const cls = computed(() => ({
         },
       ]"
       :style="plainEditorStyle"
+      @mousedown="onPlainLiveHostMouseDown"
     >
       <div
         v-for="(block, index) in plainBlocks"
