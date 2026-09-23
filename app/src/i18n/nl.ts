@@ -271,7 +271,7 @@ export const nl: I18n = {
     explorerFullNames: 'Volledige bestandsnamen in verkenner',
     explorerFullNamesHint: 'Laat lange bestandsnamen in de zijbalkboom teruglopen in plaats van ze in het midden af te korten.',
     explorerShowHidden: 'Verborgen bestanden tonen',
-    explorerShowHiddenHint: 'Toont bestanden en mappen die met een punt beginnen (.git, .obsidian, .gitignore) in de verkennerboom.',
+    explorerShowHiddenHint: 'Toont bestanden en mappen die met een punt beginnen (.git, .obsidian, .gitignore) en mappen met afbeeldingsbijlagen (_assets, *.assets) in de verkennerboom.',
     distinctSplitPanes: 'Editor en voorbeeld onderscheiden',
     distinctSplitPanesHint: 'Geeft het voorbeeld in de gesplitste weergave een iets andere achtergrond, zodat de twee panelen niet als één brede kolom ogen.',
     markdownHardBreaks: 'Enkele regeleinden als regelafbreking weergeven',

@@ -271,7 +271,7 @@ export const pl: I18n = {
     explorerFullNames: 'Pełne nazwy plików w eksploratorze',
     explorerFullNamesHint: 'Zawija długie nazwy plików w drzewie bocznym zamiast skracać je wielokropkiem w środku.',
     explorerShowHidden: 'Pokaż ukryte pliki',
-    explorerShowHiddenHint: 'Wyświetla pliki i foldery zaczynające się od kropki (.git, .obsidian, .gitignore) w drzewie plików.',
+    explorerShowHiddenHint: 'Wyświetla pliki i foldery zaczynające się od kropki (.git, .obsidian, .gitignore) oraz foldery z załącznikami graficznymi (_assets, *.assets) w drzewie plików.',
     distinctSplitPanes: 'Odróżnij edytor od podglądu',
     distinctSplitPanesHint: 'W widoku podzielonym nadaje podglądowi nieco inne tło, żeby oba panele nie wyglądały jak jedna szeroka kolumna.',
     markdownHardBreaks: 'Renderuj pojedyncze nowe linie jako łamanie wiersza',

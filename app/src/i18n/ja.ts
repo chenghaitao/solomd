@@ -271,7 +271,7 @@ export const ja: I18n = {
     explorerFullNames: 'エクスプローラーで完全なファイル名を表示',
     explorerFullNamesHint: 'サイドバーのツリーで長いファイル名を中央省略せず、折り返して完全に表示します。',
     explorerShowHidden: '隠しファイルを表示',
-    explorerShowHiddenHint: 'ドットで始まるファイルとフォルダー（.git、.obsidian、.gitignore など）をファイルツリーに表示します。',
+    explorerShowHiddenHint: 'ドットで始まるファイルとフォルダー（.git、.obsidian、.gitignore など）と、画像の添付フォルダー（_assets、*.assets）をファイルツリーに表示します。',
     distinctSplitPanes: '編集エリアとプレビューを見分けやすくする',
     distinctSplitPanesHint: '分割表示のとき、プレビューの背景をわずかに変えて、2 つのペインが 1 つの広い列に見えないようにします。',
     markdownHardBreaks: '単一の改行を改行として表示',

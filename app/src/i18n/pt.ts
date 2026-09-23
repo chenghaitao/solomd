@@ -273,7 +273,7 @@ export const pt: I18n = {
     explorerFullNames: 'Nomes de arquivo completos no explorador',
     explorerFullNamesHint: 'Quebra nomes longos na árvore lateral em vez de encurtá-los com reticências no meio.',
     explorerShowHidden: 'Mostrar arquivos ocultos',
-    explorerShowHiddenHint: 'Lista arquivos e pastas que começam com ponto (.git, .obsidian, .gitignore) na árvore do explorador.',
+    explorerShowHiddenHint: 'Lista arquivos e pastas que começam com ponto (.git, .obsidian, .gitignore) e as pastas de imagens anexadas (_assets, *.assets) na árvore do explorador.',
     distinctSplitPanes: 'Distinguir o editor da pré-visualização',
     distinctSplitPanesHint: 'Na vista dividida, dá à pré-visualização um fundo ligeiramente diferente para os dois painéis não parecerem uma única coluna larga.',
     markdownHardBreaks: 'Renderizar quebras de linha simples como quebras',

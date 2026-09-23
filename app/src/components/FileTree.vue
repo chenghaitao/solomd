@@ -140,6 +140,22 @@ const TRUNCATED_SENTINEL = '__solomd_truncated__';
  *  indistinguishable from data loss, which is how it read before. */
 const rootMissing = ref(false);
 
+/**
+ * #325 — attachment folders are the app's, not the user's: pasted images land
+ * there and notes link into them by path, so renaming or moving one by
+ * accident breaks every image in the folder. They are treated like dot-folders
+ * — out of the tree unless "Show hidden files" is on. Both attachment modes:
+ * the shared folder (`_assets`, or whatever it was renamed to) and the
+ * per-file `<note>.assets/` folders.
+ */
+function isAttachmentDir(name: string): boolean {
+  return name === (settings.assetsDirName || '_assets') || /\.assets$/i.test(name);
+}
+function hiddenInTree(e: { name: string; is_dir: boolean }): boolean {
+  if (settings.explorerShowHidden) return false;
+  return e.name.startsWith('.') || (e.is_dir && isAttachmentDir(e.name));
+}
+
 async function loadDir(path: string): Promise<{ children: Node[]; truncated: boolean }> {
   try {
     // #148 — SAF vault: list children via ContentResolver, not std::fs.
@@ -152,7 +168,7 @@ async function loadDir(path: string): Promise<{ children: Node[]; truncated: boo
       // plain folder.
       return {
         children: (safChildren as Node[]).filter(
-          (c) => !isDeletePending(c.path) && (settings.explorerShowHidden || !c.name.startsWith('.')),
+          (c) => !isDeletePending(c.path) && !hiddenInTree(c),
         ),
         truncated: false,
       };
@@ -169,6 +185,7 @@ async function loadDir(path: string): Promise<{ children: Node[]; truncated: boo
         continue;
       }
       if (isDeletePending(e.path)) continue;
+      if (hiddenInTree(e)) continue;
       filtered.push({ ...e });
     }
     // A successful listing clears the "folder is gone" state, so putting the

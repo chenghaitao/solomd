@@ -271,7 +271,7 @@ export const sv: I18n = {
     explorerFullNames: 'Fullständiga filnamn i utforskaren',
     explorerFullNamesHint: 'Radbryter långa filnamn i sidofältsträdet i stället för att korta dem med ellips i mitten.',
     explorerShowHidden: 'Visa dolda filer',
-    explorerShowHiddenHint: 'Visar filer och mappar som börjar med punkt (.git, .obsidian, .gitignore) i filträdet.',
+    explorerShowHiddenHint: 'Visar filer och mappar som börjar med punkt (.git, .obsidian, .gitignore) samt mappar med bildbilagor (_assets, *.assets) i filträdet.',
     distinctSplitPanes: 'Skilj redigeraren från förhandsvisningen',
     distinctSplitPanesHint: 'I delad vy får förhandsvisningen en något annan bakgrund, så att de två rutorna inte läses som en enda bred kolumn.',
     markdownHardBreaks: 'Rendera enkla radbrytningar som radbrytningar',

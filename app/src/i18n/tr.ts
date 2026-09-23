@@ -271,7 +271,7 @@ export const tr: I18n = {
     explorerFullNames: 'Gezginde tam dosya adları',
     explorerFullNamesHint: 'Kenar çubuğu ağacındaki uzun dosya adlarını ortadan kısaltmak yerine alt satıra kaydırarak tam gösterir.',
     explorerShowHidden: 'Gizli dosyaları göster',
-    explorerShowHiddenHint: 'Nokta ile başlayan dosya ve klasörleri (.git, .obsidian, .gitignore) dosya ağacında listeler.',
+    explorerShowHiddenHint: 'Nokta ile başlayan dosya ve klasörleri (.git, .obsidian, .gitignore) ve görsel eki klasörlerini (_assets, *.assets) dosya ağacında listeler.',
     distinctSplitPanes: 'Düzenleyici ile önizlemeyi ayırt et',
     distinctSplitPanesHint: 'Bölünmüş görünümde önizlemeye biraz farklı bir arka plan verir, böylece iki bölme tek bir geniş sütun gibi görünmez.',
     markdownHardBreaks: 'Tek satır sonlarını satır sonu olarak göster',

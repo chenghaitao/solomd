@@ -271,7 +271,7 @@ export const ko: I18n = {
     explorerFullNames: '탐색기에 전체 파일 이름 표시',
     explorerFullNamesHint: '사이드바 트리에서 긴 파일 이름을 중간 생략 대신 줄 바꿈하여 전체 표시합니다.',
     explorerShowHidden: '숨김 파일 표시',
-    explorerShowHiddenHint: '점으로 시작하는 파일과 폴더(.git, .obsidian, .gitignore)를 파일 트리에 표시합니다.',
+    explorerShowHiddenHint: '점으로 시작하는 파일과 폴더(.git, .obsidian, .gitignore)와 이미지 첨부 폴더(_assets, *.assets)를 파일 트리에 표시합니다.',
     distinctSplitPanes: '편집 영역과 미리보기 구분',
     distinctSplitPanesHint: '분할 보기에서 미리보기 배경을 약간 다르게 하여 두 창이 하나의 넓은 열처럼 보이지 않게 합니다.',
     markdownHardBreaks: '단일 줄바꿈을 줄바꿈으로 렌더링',
