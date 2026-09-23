@@ -339,6 +339,11 @@ const floatStyle = computed<Record<string, string | number> | undefined>(() => {
     position: 'fixed',
     top: `${menuPos.value.top}px`,
     zIndex: 1000,
+    // #320 — as tall as the window allows, not a fixed 360px: the View menu
+    // is ~19 rows and scrolled even on a 1080p screen, turning "click, move,
+    // click" into "click, scroll, move, click". It still scrolls when the
+    // window really is too short.
+    maxHeight: `calc(100vh - ${menuPos.value.top}px - 8px)`,
   };
   if (menuPos.value.left !== undefined) s.left = `${menuPos.value.left}px`;
   if (menuPos.value.right !== undefined) s.right = `${menuPos.value.right}px`;

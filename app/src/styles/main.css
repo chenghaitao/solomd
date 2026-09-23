@@ -501,6 +501,13 @@ button:disabled {
 :root .toolbar.toolbar--sheet .toolbar__group {
   flex-wrap: wrap;
   gap: 4px;
+  /* #329 — `flex-wrap` alone did nothing: a group is `flex-shrink: 0`, so it
+     was always as wide as all of its buttons (793px for the last one on a
+     360px phone) and never had a line to wrap at. Settings, dark mode, search
+     and the command palette sat past the right edge of the screen, in a sheet
+     that does not scroll sideways — reachable only by turning the phone. */
+  max-width: 100%;
+  min-width: 0;
 }
 /* The desktop sheet is the SAME strip on two rows, so the flexible spacer
    that centres the view-mode group in one row becomes a hole: measured 378px

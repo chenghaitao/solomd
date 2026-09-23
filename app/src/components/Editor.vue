@@ -386,6 +386,8 @@ function onPlainScroll(event: Event) {
   // The shade and the drawn caret are positioned against the container, not
   // the scrolled text, so they have to follow the textarea's own scrolling.
   schedulePlainOverlays();
+  // So does the find highlight (#330). Cheap: its rects are cached per match.
+  if (plainFindBoxes.value.length || plainFindOpen.value) updatePlainFindBoxes();
 }
 
 watch(
@@ -1382,6 +1384,25 @@ const plainFindCaseSensitive = ref(false);
 const plainFindInput = ref<HTMLInputElement | null>(null);
 const plainMatches = ref<Array<{ start: number; end: number }>>([]);
 const plainMatchIndex = ref(0);
+// Where the caret was when the find bar opened: typing a query jumps to the
+// first match from here on, the way Notepad and VS Code do, not from the top.
+let plainFindAnchor = 0;
+// #330 — the current match, drawn. Focus stays in the find box while you step
+// through matches (so Enter means "next", not "replace the match with a line
+// break"), and a <textarea> paints no selection while it is unfocused.
+const plainFindBoxes = ref<Array<{ top: number; left: number; width: number; height: number }>>([]);
+// Docks the find bar at the bottom while the current match sits under it.
+const plainFindDodge = ref(false);
+const plainFindBar = ref<HTMLElement | null>(null);
+
+function plainCaretDocOffset(): number {
+  if (plainLiveEnabled.value) {
+    const el = plainBlockEditors.value[plainActiveBlock.value];
+    const b = plainBlocks.value[plainActiveBlock.value];
+    return b ? b.start + (el?.selectionStart ?? 0) : 0;
+  }
+  return plainEditor.value?.selectionStart ?? 0;
+}
 
 function runPlainSearch() {
   const q = plainFindQuery.value;
@@ -1403,22 +1424,71 @@ function runPlainSearch() {
 }
 
 function openPlainFind() {
+  const wasOpen = plainFindOpen.value;
   plainFindOpen.value = true;
+  if (!wasOpen) plainFindAnchor = plainCaretDocOffset();
   const selected = plainSelectionText();
   if (selected && !selected.includes('\n')) plainFindQuery.value = selected;
   nextTick(() => {
     plainFindInput.value?.focus();
     plainFindInput.value?.select();
-    runPlainSearch();
-    if (plainMatches.value.length) gotoPlainMatch(0);
+    revealPlainMatchFromAnchor();
   });
 }
 
-function closePlainFind() {
+/**
+ * Close the bar. From Esc / ✕ (`toMatch`) the editor takes focus with the
+ * current match selected, so you land where you searched to — the one moment
+ * the editor gets focus from the find bar. Closing because the tab changed
+ * must not: the match belongs to the previous document.
+ */
+function closePlainFind(toMatch = false) {
+  const m = plainMatches.value[plainMatchIndex.value];
   plainFindOpen.value = false;
+  plainFindBoxes.value = [];
+  plainFindDodge.value = false;
+  if (toMatch && m && plainFindQuery.value) selectPlainRange(m.start, m.end, true);
 }
 
-function selectPlainRange(start: number, end: number) {
+/** Jump to the first match at or after where the caret was when the bar opened. */
+function revealPlainMatchFromAnchor() {
+  runPlainSearch();
+  const ms = plainMatches.value;
+  if (!ms.length) {
+    plainFindBoxes.value = [];
+    return;
+  }
+  const i = ms.findIndex((m) => m.start >= plainFindAnchor);
+  plainMatchIndex.value = i < 0 ? 0 : i;
+  const m = ms[plainMatchIndex.value];
+  selectPlainRange(m.start, m.end);
+}
+
+/** Enter → next match, Shift+Enter → previous; focus stays in the box. */
+function onPlainFindEnter(event: KeyboardEvent) {
+  // The Enter that commits an IME candidate is the IME's, not ours.
+  if (event.isComposing || event.keyCode === 229) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  event.preventDefault();
+  gotoPlainMatch(event.shiftKey ? -1 : 1);
+}
+
+function onPlainFindInput(value: string, composing = false) {
+  plainFindQuery.value = value;
+  // Not mid-IME-composition: moving the editor's selection while a Chinese
+  // IME is composing in this box cancels the composition, and the typed
+  // characters vanish. Jump once the composition commits (compositionend).
+  if (composing) return;
+  revealPlainMatchFromAnchor();
+}
+
+/**
+ * Select [start, end) in the plain editor and scroll it to the middle of the
+ * view. The editor is only focused when `focusEditor` is set: stepping
+ * through matches must leave focus in the find box, or the next Enter lands
+ * in the document and replaces the match with a line break (#330).
+ */
+function selectPlainRange(start: number, end: number, focusEditor = false) {
   if (plainLiveEnabled.value) {
     const blocks = plainBlocks.value;
     const bi = blocks.findIndex((b) => start >= b.start && start < b.end);
@@ -1427,7 +1497,10 @@ function selectPlainRange(start: number, end: number) {
       const el = plainBlockEditors.value[plainActiveBlock.value];
       const b = plainBlocks.value[plainActiveBlock.value];
       if (!el || !b) return;
-      el.focus();
+      // preventScroll: focus() otherwise scrolls the whole textarea into view
+      // — for a tall block, its top — and the view visibly bounced from there
+      // back to the match (#330).
+      if (focusEditor) el.focus({ preventScroll: true });
       const s = Math.max(0, Math.min(start - b.start, el.value.length));
       const e = Math.max(s, Math.min(end - b.start, el.value.length));
       el.setSelectionRange(s, e);
@@ -1445,17 +1518,191 @@ function selectPlainRange(start: number, end: number) {
         el.scrollIntoView({ block: 'center' });
       }
       emitPlainCursorAndSelection();
+      updatePlainFindBoxes();
+      pinPlainBlockInView();
     });
     return;
   }
   const el = plainEditor.value;
   if (!el) return;
-  el.focus();
+  if (focusEditor) el.focus({ preventScroll: true });
   el.setSelectionRange(start, end);
   // #255 — setSelectionRange() selects but never scrolls a <textarea>, so in a
   // long document the counter moved ("3/12") while the view stayed put.
   el.scrollTop = Math.max(0, plainPaddingTopPx(el) + caretTopPx(el, el.value, start) - el.clientHeight / 2);
   emitPlainCursorAndSelection();
+  updatePlainFindBoxes();
+}
+
+// #330 — "it finds the right place, then bounces up a few lines". Blocks above
+// the match keep changing height after the jump: the block that was being
+// edited goes back to rendered HTML, and code highlighting, maths and diagrams
+// render asynchronously. The browser's scroll anchoring absorbs some of that,
+// but only for changes above its anchor node — near the top of the view — so
+// a block that grows between there and the match still pushes the match out
+// of the spot it was scrolled to. For a moment after a jump, follow the match:
+// whatever it moved on screen, scroll by the same. Stops once the user
+// scrolls, clicks or types.
+let plainPinRaf = 0;
+let plainPinStop: (() => void) | null = null;
+function pinPlainBlockInView() {
+  plainPinStop?.();
+  const host = plainLiveHost.value;
+  if (!host) return;
+  // Re-read the active textarea each frame rather than holding one: the block
+  // list re-renders around a jump, and a stale element reports a stale place.
+  const current = () => plainBlockEditors.value[plainActiveBlock.value] ?? null;
+  const topOf = () => {
+    const el = current();
+    return el ? el.getBoundingClientRect().top - host.getBoundingClientRect().top : null;
+  };
+  let last = topOf();
+  const until = performance.now() + 1500;
+  const stop = () => {
+    cancelAnimationFrame(plainPinRaf);
+    plainPinRaf = 0;
+    host.removeEventListener('wheel', stop);
+    host.removeEventListener('pointerdown', stop);
+    host.removeEventListener('keydown', stop);
+    if (plainPinStop === stop) plainPinStop = null;
+  };
+  plainPinStop = stop;
+  host.addEventListener('wheel', stop, { passive: true });
+  host.addEventListener('pointerdown', stop);
+  host.addEventListener('keydown', stop);
+  let lastEl = current();
+  const tick = () => {
+    const now = topOf();
+    if (now == null || last == null || performance.now() > until) {
+      stop();
+      return;
+    }
+    const el = current();
+    if (Math.abs(now - last) > 0.5) {
+      host.scrollTop += now - last;
+      last = topOf();
+    }
+    // A new element needs its highlight measured again.
+    if (el !== lastEl) updatePlainFindBoxes();
+    lastEl = el;
+    plainPinRaf = requestAnimationFrame(tick);
+  };
+  plainPinRaf = requestAnimationFrame(tick);
+}
+
+// Flat editor: the match's rects in text-flow px, cached so that scrolling
+// only re-positions them — measuring means laying the whole document out in
+// the mirror, which is fine once per jump and not once per scroll frame.
+let plainFindFlowCache: {
+  text: string;
+  start: number;
+  end: number;
+  width: number;
+  rects: Array<{ top: number; left: number; width: number; height: number }>;
+} | null = null;
+
+function matchFlowRects(el: HTMLTextAreaElement, text: string, s: number, e: number) {
+  const a = caretPointPx(el, text, s);
+  const b = caretPointPx(el, text, e);
+  if (Math.abs(a.top - b.top) < a.height / 2) {
+    return [{ top: a.top, left: a.left, width: Math.max(2, b.left - a.left), height: a.height }];
+  }
+  // Soft-wrapped across rows: to the end of the first row, from the start of
+  // the last. (A query has no line breaks, so it spans two rows at most in
+  // practice.)
+  const cs = window.getComputedStyle(el);
+  const contentW = el.clientWidth
+    - (Number.parseFloat(cs.paddingLeft) || 0) - (Number.parseFloat(cs.paddingRight) || 0);
+  return [
+    { top: a.top, left: a.left, width: Math.max(2, contentW - a.left), height: a.height },
+    { top: b.top, left: 0, width: Math.max(2, b.left), height: b.height },
+  ];
+}
+
+/** Re-draw the current-match highlight (and dodge the bar if it covers it). */
+function updatePlainFindBoxes() {
+  const m = plainFindOpen.value && plainFindQuery.value
+    ? plainMatches.value[plainMatchIndex.value]
+    : null;
+  const el = plainActiveTextarea();
+  if (!m || !el) {
+    plainFindBoxes.value = [];
+    return;
+  }
+  const cs = window.getComputedStyle(el);
+  const padTop = Number.parseFloat(cs.paddingTop) || 0;
+  const padLeft = Number.parseFloat(cs.paddingLeft) || 0;
+  let boxes: Array<{ top: number; left: number; width: number; height: number }>;
+  if (plainLiveEnabled.value) {
+    const b = plainBlocks.value[plainActiveBlock.value];
+    const block = el.parentElement;
+    if (!b || !block || m.start < b.start || m.end > b.end) {
+      plainFindBoxes.value = [];
+      return;
+    }
+    // Relative to the block the boxes are rendered in (see the template).
+    const bRect = block.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const ox = eRect.left - bRect.left + padLeft;
+    const oy = eRect.top - bRect.top + padTop;
+    boxes = matchFlowRects(el, el.value, m.start - b.start, m.end - b.start)
+      .map((r) => ({ ...r, left: r.left + ox, top: r.top + oy }));
+  } else {
+    const text = el.value;
+    const width = el.clientWidth;
+    const c = plainFindFlowCache;
+    const rects = c && c.text === text && c.start === m.start && c.end === m.end && c.width === width
+      ? c.rects
+      : matchFlowRects(el, text, m.start, m.end);
+    plainFindFlowCache = { text, start: m.start, end: m.end, width, rects };
+    const container = el.parentElement;
+    if (!container) {
+      plainFindBoxes.value = [];
+      return;
+    }
+    const cRect = container.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const ox = eRect.left - cRect.left + padLeft - el.scrollLeft;
+    const oy = eRect.top - cRect.top + padTop - el.scrollTop;
+    boxes = rects
+      .map((r) => ({ ...r, left: r.left + ox, top: r.top + oy }))
+      // Scrolled out of the textarea's own viewport: nothing to draw.
+      .filter((r) => r.top + r.height > eRect.top - cRect.top && r.top < eRect.bottom - cRect.top);
+  }
+  plainFindBoxes.value = boxes;
+  nextTick(updatePlainFindDodge);
+}
+
+// #330 — "the find box covers what I searched for". Centring keeps a match
+// clear of the bar except near the very top of the document, where there is
+// no room to scroll it lower; there, the bar steps aside to the bottom.
+function updatePlainFindDodge() {
+  const bar = plainFindBar.value;
+  const el = plainActiveTextarea();
+  if (!bar || !el || !plainFindBoxes.value.length) {
+    plainFindDodge.value = false;
+    return;
+  }
+  // Both editors lay the boxes out in the textarea's parent (the block, or the
+  // flat editor's frame); the bar is positioned in its own offset parent.
+  // Compare in viewport coordinates.
+  const container = el.parentElement;
+  const frame = bar.offsetParent as HTMLElement | null;
+  if (!container || !frame) return;
+  const cRect = container.getBoundingClientRect();
+  const fRect = frame.getBoundingClientRect();
+  // Judge against where the bar sits when docked at the top (top: 8px,
+  // right: 16px), whichever way it is docked now — or it would flip back and
+  // forth between the two.
+  const barRight = fRect.right - 16;
+  const barLeft = barRight - bar.offsetWidth;
+  const barTop = fRect.top + 8;
+  const barBottom = barTop + bar.offsetHeight;
+  plainFindDodge.value = plainFindBoxes.value.some((r) => {
+    const top = cRect.top + r.top;
+    const left = cRect.left + r.left;
+    return top < barBottom && top + r.height > barTop && left + r.width > barLeft && left < barRight;
+  });
 }
 
 function gotoPlainMatch(delta: number) {
@@ -1482,9 +1729,21 @@ function replacePlainCurrent() {
       if (plainMatchIndex.value >= plainMatches.value.length) plainMatchIndex.value = 0;
       const nm = plainMatches.value[plainMatchIndex.value];
       if (nm) selectPlainRange(nm.start, nm.end);
+    } else {
+      plainFindBoxes.value = [];
     }
   });
 }
+
+// Edits made while the bar is open (typing in the document, undo, a replace)
+// move every match after them; recount so the counter and the highlight stay
+// on real text instead of on stale offsets.
+watch(plainText, () => {
+  if (!plainFindOpen.value || !plainFindQuery.value) return;
+  runPlainSearch();
+  plainFindFlowCache = null;
+  nextTick(updatePlainFindBoxes);
+});
 
 function replacePlainAll() {
   if (!plainFindQuery.value || !plainMatches.value.length) return;
@@ -3747,6 +4006,21 @@ const cls = computed(() => ({
           class="plain-block__render"
           v-html="block.html"
         ></div>
+        <!-- #330 — the current find match, drawn: the textarea paints no
+             selection while the find box has focus. Positioned inside its
+             own block, so it moves with the text when anything above
+             re-renders to a different height (the browser's scroll anchoring
+             keeps the text still on screen, and a highlight placed in the
+             scroll container's coordinates would be left behind). -->
+        <template v-if="index === plainActiveBlock">
+          <div
+            v-for="(r, i) in plainFindBoxes"
+            :key="'find-' + i"
+            class="plain-find-hl"
+            aria-hidden="true"
+            :style="{ top: r.top + 'px', left: r.left + 'px', width: r.width + 'px', height: r.height + 'px' }"
+          ></div>
+        </template>
       </div>
       <div
         v-if="plainCaretBox"
@@ -3820,19 +4094,37 @@ const cls = computed(() => ({
           height: plainCaretBox.height + 'px',
         }"
       ></div>
+      <!-- #330 — the current find match, drawn: the textarea paints no
+           selection while the find box has focus. -->
+      <div
+        v-for="(r, i) in plainFindBoxes"
+        :key="'find-' + i"
+        class="plain-find-hl"
+        aria-hidden="true"
+        :style="{ top: r.top + 'px', left: r.left + 'px', width: r.width + 'px', height: r.height + 'px' }"
+      ></div>
     </div>
 
     <!-- In-document find / replace (Ctrl+F). The textarea path has no CodeMirror
          search panel, so this provides one. -->
-    <div v-if="plainFindOpen" class="plain-find" @keydown.esc.prevent.stop="closePlainFind">
+    <div
+      v-if="plainFindOpen"
+      ref="plainFindBar"
+      class="plain-find"
+      :class="{ 'plain-find--dodge': plainFindDodge }"
+      @keydown.esc.prevent.stop="closePlainFind(true)"
+    >
       <div class="plain-find__row">
+        <!-- Enter / Shift+Enter step through matches and keep focus here;
+             Esc hands the editor the current match (#330). -->
         <input
           ref="plainFindInput"
           class="plain-find__input"
           :value="plainFindQuery"
           placeholder="Find"
-          @input="(e) => { plainFindQuery = (e.target as HTMLInputElement).value; runPlainSearch(); }"
-          @keydown.enter.prevent="gotoPlainMatch(1)"
+          @input="(e) => onPlainFindInput((e.target as HTMLInputElement).value, (e as InputEvent).isComposing)"
+          @compositionend="(e) => onPlainFindInput((e.target as HTMLInputElement).value)"
+          @keydown.enter="onPlainFindEnter"
         />
         <span class="plain-find__count">{{ plainMatches.length ? (plainMatchIndex + 1) + '/' + plainMatches.length : '0/0' }}</span>
         <button class="plain-find__btn" title="Previous (Shift+Enter)" @click="gotoPlainMatch(-1)">‹</button>
@@ -3841,9 +4133,9 @@ const cls = computed(() => ({
           class="plain-find__btn"
           :class="{ 'plain-find__btn--on': plainFindCaseSensitive }"
           title="Match case"
-          @click="plainFindCaseSensitive = !plainFindCaseSensitive; runPlainSearch()"
+          @click="plainFindCaseSensitive = !plainFindCaseSensitive; revealPlainMatchFromAnchor()"
         >Aa</button>
-        <button class="plain-find__btn" title="Close (Esc)" @click="closePlainFind">✕</button>
+        <button class="plain-find__btn" title="Close (Esc)" @click="closePlainFind(true)">✕</button>
       </div>
       <div class="plain-find__row">
         <input
@@ -3851,7 +4143,7 @@ const cls = computed(() => ({
           :value="plainReplaceValue"
           placeholder="Replace"
           @input="(e) => plainReplaceValue = (e.target as HTMLInputElement).value"
-          @keydown.enter.prevent="replacePlainCurrent"
+          @keydown.enter="(e) => { if (!e.isComposing && e.keyCode !== 229) { e.preventDefault(); replacePlainCurrent(); } }"
         />
         <button class="plain-find__btn plain-find__btn--text" @click="replacePlainCurrent">Replace</button>
         <button class="plain-find__btn plain-find__btn--text" @click="replacePlainAll">All</button>
@@ -3928,6 +4220,22 @@ const cls = computed(() => ({
   border-radius: 8px;
   padding: 6px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+/* #330 — the current match would sit under the bar (only possible near the
+   top of the document, where it cannot be scrolled lower): dock at the bottom. */
+.plain-find--dodge {
+  top: auto;
+  bottom: 8px;
+}
+/* #330 — the current match. Translucent so the glyphs underneath stay legible;
+   above the textarea, never takes a click. */
+.plain-find-hl {
+  position: absolute;
+  z-index: 2;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.35;
+  pointer-events: none;
 }
 .plain-find__row {
   display: flex;
