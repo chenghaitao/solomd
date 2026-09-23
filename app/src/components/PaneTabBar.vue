@@ -23,6 +23,14 @@ const { t } = useI18n();
 
 const tabsEl = ref<HTMLElement | null>(null);
 
+// #263 / #306 — dragging a tab onto the editor splits it, and the new pane
+// had no visible way to close: closing its tab just refills the pane with
+// another one, and "Close Pane" lived only in the command palette. The layout
+// is also restored on the next launch, so people were left with panes they
+// could not get rid of even across reinstalls. Every pane gets a close button
+// while there is more than one.
+const canClosePane = computed(() => tiles.allLeaves.length > 1);
+
 // When the active tab changes (e.g., opening a new file that creates a tab
 // off-screen in a crowded tabbar), scroll it into view so the user sees
 // the switch.
@@ -328,6 +336,22 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <button class="tabbar__new" @click="files.newFile" title="New tab (Ctrl+N)">+</button>
+    <button
+      v-if="canClosePane"
+      class="tabbar__close-pane"
+      :title="t('cmd.tile.closePane')"
+      :aria-label="t('cmd.tile.closePane')"
+      @click.stop="tiles.closePane(paneId)"
+    >
+      <!-- A pane with an × through it — a tab's own × is right next to it
+           and closes the document, which is not what this does. `.stop`:
+           the pane's own click handler would otherwise re-focus the pane that
+           was just closed. -->
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+        <path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+      </svg>
+    </button>
 
     <!-- Context menu -->
     <Teleport to="body">
@@ -471,6 +495,17 @@ onBeforeUnmount(() => {
   padding: 0;
   font-size: 16px;
   color: var(--text-muted);
+}
+.tabbar__close-pane {
+  width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.tabbar__close-pane:hover {
+  color: var(--text);
 }
 .ctx-menu {
   position: fixed;
