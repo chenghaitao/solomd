@@ -60,10 +60,35 @@ const ALIGNS: Array<{ value: TableAlign; label: string }> = [
   { value: 'right', label: '⟶' },
 ];
 
-function onCellInput(row: number, col: number, e: Event) {
-  const value = (e.target as HTMLElement).innerText;
-  model.value = setCell(model.value, row, col, value);
+/** What a cell holds, as the model stores it. Chromium reports a trailing
+ *  line break for an editable block that is (or just was) empty, and the model
+ *  turns line breaks into spaces — so without trimming it, "a" read back as
+ *  "a ", never matched the model, and every keystroke rewrote the cell. */
+function cellText(el: HTMLElement): string {
+  return el.innerText.replace(/\n$/, '').replace(/\r?\n/g, ' ');
 }
+
+function onCellInput(row: number, col: number, e: Event) {
+  model.value = setCell(model.value, row, col, cellText(e.target as HTMLElement));
+}
+
+/**
+ * #319 — a cell's text is written by this directive, not by `{{ cell }}`.
+ * Interpolation re-rendered the cell on every keystroke; rewriting the text
+ * node of the element being typed in puts the caret back at the start, so
+ * "abc" came out as "cba". Write only when the cell shows something other
+ * than the model — a structural change (row/column inserted, moved or
+ * deleted) — never while it already agrees.
+ */
+const vCellText = {
+  mounted(el: HTMLElement, binding: { value: string }) {
+    el.textContent = binding.value ?? '';
+  },
+  updated(el: HTMLElement, binding: { value: string }) {
+    const next = binding.value ?? '';
+    if (cellText(el) !== next) el.textContent = next;
+  },
+};
 
 function focusCell(row: number, col: number) {
   focused.value = { row, col };
@@ -223,7 +248,8 @@ function onKeydown(e: KeyboardEvent) {
                   :style="{ textAlign: model.aligns[c] ?? 'left' }"
                   @focus="focusCell(-1, c)"
                   @input="(e) => onCellInput(-1, c, e)"
-                >{{ cell }}</div>
+                  v-cell-text="cell"
+                ></div>
               </th>
             </tr>
           </thead>
@@ -241,7 +267,8 @@ function onKeydown(e: KeyboardEvent) {
                   :style="{ textAlign: model.aligns[c] ?? 'left' }"
                   @focus="focusCell(r, c)"
                   @input="(e) => onCellInput(r, c, e)"
-                >{{ cell }}</div>
+                  v-cell-text="cell"
+                ></div>
               </td>
             </tr>
           </tbody>
