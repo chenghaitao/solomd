@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, h as hEdit, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
@@ -445,6 +445,56 @@ interface InlineEdit {
 const editing = ref<InlineEdit | null>(null);
 const editInput = ref<HTMLInputElement | null>(null);
 
+// #321 — the inline input shows up where the entry will actually be: at the
+// end of the folder it is created in, or in place of the row being renamed.
+// It used to sit at the very top of the tree whatever the target, so a file
+// created inside a folder three levels down appeared to be going to the
+// root. Nodes are rendered by FileTreeNode (a render function), which draws
+// the row through this. The tree filters (inbox, extension) can hide the
+// target, and then the row falls back to the top, where it always was.
+const editInTree = computed(() => {
+  const e = editing.value;
+  if (!e || showInboxOnly.value || extFilter.value.length) return false;
+  if (e.kind === 'rename') return !!e.original && !!findNode(e.original);
+  return e.parent === root.value?.path || !!findNode(e.parent)?.expanded;
+});
+function renderEditRow(depth: number) {
+  const e = editing.value;
+  if (!e) return null;
+  return hEdit('li', { class: 'ftree__edit', style: { paddingLeft: `${8 + depth * 12}px` } }, [
+    hEdit('span', { class: 'ftree__icon' }, e.kind === 'new-dir' ? '▸' : '•'),
+    hEdit('input', {
+      ref: (el: unknown) => {
+        if (el) editInput.value = el as HTMLInputElement;
+      },
+      value: e.name,
+      class: 'ftree__edit-input',
+      spellcheck: 'false',
+      onInput: (ev: Event) => {
+        if (editing.value) editing.value.name = (ev.target as HTMLInputElement).value;
+      },
+      onKeydown: (ev: KeyboardEvent) => {
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          cancelEdit();
+          return;
+        }
+        onRenameKey(ev);
+      },
+      onBlur: commitEdit,
+      // A click in the box must not reach the row underneath and open or
+      // toggle it.
+      onClick: (ev: MouseEvent) => ev.stopPropagation(),
+      onPointerdown: (ev: PointerEvent) => ev.stopPropagation(),
+    }),
+  ]);
+}
+provide(FTREE_EDIT, { editing, editInTree, renderEditRow });
+// One stable component for the root level: an inline `() => …` in the
+// template would be a new component type on every render, and the input
+// would be torn down — and lose focus — on every keystroke.
+const EditRowAtRoot = () => renderEditRow(0);
+
 function openCtx(e: MouseEvent, node: Node | null) {
   e.preventDefault();
   e.stopPropagation();
@@ -454,8 +504,16 @@ function closeCtx() {
   ctx.value = null;
 }
 
+/** Open a collapsed folder before creating in it, so the new row has
+ *  somewhere to appear. */
+async function expandForCreate(parent: string) {
+  const node = findNode(parent);
+  if (node && node.is_dir && !node.expanded) await toggle(node);
+}
+
 async function startNewFile(parent: string) {
   closeCtx();
+  await expandForCreate(parent);
   editing.value = { kind: 'new-file', parent, name: 'untitled.md' };
   await nextTick();
   // Select just the basename (not the .md) so a single keystroke replaces
@@ -470,6 +528,7 @@ async function startNewFile(parent: string) {
 
 async function startNewFolder(parent: string) {
   closeCtx();
+  await expandForCreate(parent);
   editing.value = { kind: 'new-dir', parent, name: 'New Folder' };
   await nextTick();
   const el = editInput.value;
@@ -1133,8 +1192,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- Inline new/rename input — appears at the top of the tree. -->
-      <div v-if="editing" class="ftree__edit">
+      <!-- Inline new/rename input. Normally drawn in the tree itself (#321,
+           see renderEditRow); here only when a filter hides its target. -->
+      <div v-if="editing && !editInTree" class="ftree__edit">
         <span class="ftree__icon">{{ editing.kind === 'new-dir' ? '▸' : editing.kind === 'rename' ? '•' : '•' }}</span>
         <input
           ref="editInput"
@@ -1202,6 +1262,9 @@ onBeforeUnmount(() => {
           @toggle="toggle"
           @contextmenu="openCtx"
           @press="onNodePress"
+        />
+        <EditRowAtRoot
+          v-if="editInTree && editing && editing.kind !== 'rename' && editing.parent === root.path"
         />
         <li v-if="root.truncated" class="ftree__truncated" :title="`This folder has more than 10,000 entries; showing the first batch. Move groups into subfolders to see them all.`">
           + 10,000+ more —— folder is huge
@@ -1272,7 +1335,15 @@ onBeforeUnmount(() => {
 </template>
 
 <script lang="ts">
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, inject, type ComputedRef, type Ref, type VNode } from 'vue';
+
+/** #321 — how FileTreeNode draws the inline new/rename row in place. */
+export const FTREE_EDIT = Symbol('ftree-edit');
+interface FtreeEditApi {
+  editing: Ref<{ kind: 'new-file' | 'new-dir' | 'rename'; parent: string; original?: string } | null>;
+  editInTree: ComputedRef<boolean>;
+  renderEditRow: (depth: number) => VNode | null;
+}
 
 export const FileTreeNode = defineComponent({
   name: 'FileTreeNode',
@@ -1293,6 +1364,7 @@ export const FileTreeNode = defineComponent({
     // #182 — the full-names toggle lives in settings; this inner component is
     // module-scoped so it can't close over <script setup>'s store instance.
     const nodeSettings = useSettingsStore();
+    const edit = inject<FtreeEditApi | null>(FTREE_EDIT, null);
     const subtreeHasInbox = (node: any): boolean => {
       if (!node.is_dir) return props.inboxPaths.has(node.path);
       if (!node.children) return false;
@@ -1396,8 +1468,10 @@ export const FileTreeNode = defineComponent({
       const displayName =
         !n.is_dir && !nodeSettings.explorerFullNames ? truncateFileName(n.name) : n.name;
 
+      const e = edit?.editInTree.value ? edit.editing.value : null;
+      const renaming = !!e && e.kind === 'rename' && e.original === n.path;
       const items: any[] = [
-        h(
+        renaming ? edit!.renderEditRow(props.depth) : h(
           'li',
           {
             class: [
@@ -1453,6 +1527,8 @@ export const FileTreeNode = defineComponent({
             })
           );
         }
+        // #321 — a new entry being named goes at the end of its folder.
+        if (e && e.kind !== 'rename' && e.parent === n.path) items.push(edit!.renderEditRow(props.depth + 1));
       }
       return items;
     };
