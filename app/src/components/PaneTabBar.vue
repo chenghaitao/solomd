@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { useTabsStore } from '../stores/tabs';
 import { useTilesStore } from '../stores/tiles';
@@ -233,6 +233,43 @@ function onPointerUp(e: PointerEvent) {
   tiles.endTabDrag();
 }
 
+// ---- #218 — every open tab one click away ----
+// With many files open the strip overflows. It scrolls (wheel, middle-drag;
+// #106), but its scrollbar is hidden, so nothing says so — "根本没办法切换，
+// 显示不全". While the strip overflows, a "⌄" button lists every open tab.
+const tabsOverflow = ref(false);
+function measureTabsOverflow() {
+  const el = tabsEl.value;
+  tabsOverflow.value = !!el && el.scrollWidth > el.clientWidth + 1;
+}
+let tabsRO: ResizeObserver | null = null;
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined' && tabsEl.value) {
+    tabsRO = new ResizeObserver(measureTabsOverflow);
+    tabsRO.observe(tabsEl.value);
+  }
+  measureTabsOverflow();
+});
+onBeforeUnmount(() => tabsRO?.disconnect());
+watch(
+  () => tabs.tabs.map((x) => x.fileName).join('\u0000'),
+  () => nextTick(measureTabsOverflow),
+);
+
+const tabListPos = ref<{ top: number; right: number } | null>(null);
+function toggleTabList(e: MouseEvent) {
+  if (tabListPos.value) {
+    tabListPos.value = null;
+    return;
+  }
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  tabListPos.value = { top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) };
+}
+function pickFromTabList(tabId: string) {
+  tabListPos.value = null;
+  tiles.setActiveTab(props.paneId, tabId);
+}
+
 function onTabClick(tabId: string) {
   // Swallow the click that immediately follows a drag-drop.
   if (suppressClick) {
@@ -288,12 +325,12 @@ function onMiddleUp() {
   middleDragging = false;
 }
 
-// Close context menu on click outside
+// Close context menu (and the #218 tab list) on click outside
 function onDocClick() {
   if (ctxMenu.value) closeCtxMenu();
+  if (tabListPos.value) tabListPos.value = null;
 }
 
-import { onMounted, onBeforeUnmount } from 'vue';
 onMounted(() => document.addEventListener('click', onDocClick));
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick);
@@ -335,6 +372,15 @@ onBeforeUnmount(() => {
         >×</button>
       </div>
     </div>
+    <button
+      v-if="tabsOverflow"
+      class="tabbar__list"
+      :class="{ 'tabbar__list--open': tabListPos }"
+      :title="t('tabMenu.allTabs')"
+      :aria-label="t('tabMenu.allTabs')"
+      :aria-expanded="!!tabListPos"
+      @click.stop="toggleTabList"
+    >⌄</button>
     <button class="tabbar__new" @click="files.newFile" title="New tab (Ctrl+N)">+</button>
     <button
       v-if="canClosePane"
@@ -352,6 +398,30 @@ onBeforeUnmount(() => {
         <path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
       </svg>
     </button>
+
+    <!-- #218 — all open tabs -->
+    <Teleport to="body">
+      <div
+        v-if="tabListPos"
+        class="ctx-menu tablist"
+        role="menu"
+        :style="{ top: tabListPos.top + 'px', right: tabListPos.right + 'px' }"
+        @click.stop
+      >
+        <button
+          v-for="tl in tabs.tabs"
+          :key="tl.id"
+          class="ctx-item tablist__item"
+          :class="{ 'tablist__item--active': tl.id === activeTabId }"
+          role="menuitem"
+          :title="tl.filePath || tl.fileName"
+          @click="pickFromTabList(tl.id)"
+        >
+          <span class="tablist__name">{{ tl.fileName }}</span>
+          <span v-if="tabs.isDirty(tl.id)" class="tablist__dot">●</span>
+        </button>
+      </div>
+    </Teleport>
 
     <!-- Context menu -->
     <Teleport to="body">
@@ -495,6 +565,43 @@ onBeforeUnmount(() => {
   padding: 0;
   font-size: 16px;
   color: var(--text-muted);
+}
+.tabbar__list {
+  width: 28px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.tabbar__list:hover,
+.tabbar__list--open {
+  color: var(--text);
+}
+.tablist {
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  min-width: 220px;
+  max-width: 420px;
+}
+.tablist__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tablist__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.tablist__item--active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tablist__dot {
+  color: var(--accent);
+  font-size: 9px;
 }
 .tabbar__close-pane {
   width: 32px;

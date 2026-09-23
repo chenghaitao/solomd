@@ -448,6 +448,7 @@ export const ko: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: '열린 탭 모두 보기',
     close: '닫기',
     closeLeft: '왼쪽 탭 닫기',
     closeRight: '오른쪽 탭 닫기',

@@ -448,6 +448,7 @@ export const tr: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Tüm açık sekmeler',
     close: 'Kapat',
     closeLeft: 'Soldaki Sekmeleri Kapat',
     closeRight: 'Sağdaki Sekmeleri Kapat',

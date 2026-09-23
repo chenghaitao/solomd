@@ -448,6 +448,7 @@ export const nl: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Alle geopende tabbladen',
     close: 'Sluiten',
     closeLeft: 'Tabbladen links sluiten',
     closeRight: 'Tabbladen rechts sluiten',

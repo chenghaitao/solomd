@@ -448,6 +448,7 @@ export const en = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'All open tabs',
     close: 'Close',
     closeLeft: 'Close Tabs to the Left',
     closeRight: 'Close Tabs to the Right',

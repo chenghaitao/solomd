@@ -448,6 +448,7 @@ export const uk: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Усі відкриті вкладки',
     close: 'Закрити',
     closeLeft: 'Закрити вкладки ліворуч',
     closeRight: 'Закрити вкладки праворуч',

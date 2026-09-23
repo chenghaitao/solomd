@@ -448,6 +448,7 @@ export const sv: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Alla öppna flikar',
     close: 'Stäng',
     closeLeft: 'Stäng flikar till vänster',
     closeRight: 'Stäng flikar till höger',

@@ -448,6 +448,7 @@ export const pl: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Wszystkie otwarte karty',
     close: 'Zamknij',
     closeLeft: 'Zamknij karty po lewej',
     closeRight: 'Zamknij karty po prawej',

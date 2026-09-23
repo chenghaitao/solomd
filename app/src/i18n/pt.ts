@@ -450,6 +450,7 @@ export const pt: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Todas as abas abertas',
     close: 'Fechar',
     closeLeft: 'Fechar abas à esquerda',
     closeRight: 'Fechar abas à direita',

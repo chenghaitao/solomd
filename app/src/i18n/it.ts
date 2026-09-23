@@ -448,6 +448,7 @@ export const it: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Tutte le schede aperte',
     close: 'Chiudi',
     closeLeft: 'Chiudi schede a sinistra',
     closeRight: 'Chiudi schede a destra',

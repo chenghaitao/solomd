@@ -448,6 +448,7 @@ export const es: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Todas las pestañas abiertas',
     close: 'Cerrar',
     closeLeft: 'Cerrar pestañas a la izquierda',
     closeRight: 'Cerrar pestañas a la derecha',

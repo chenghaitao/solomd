@@ -448,6 +448,7 @@ export const zh: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: '所有打开的标签',
     close: '关闭',
     closeLeft: '关闭左侧标签',
     closeRight: '关闭右侧标签',

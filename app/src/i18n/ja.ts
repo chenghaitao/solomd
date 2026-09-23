@@ -448,6 +448,7 @@ export const ja: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: '開いているすべてのタブ',
     close: '閉じる',
     closeLeft: '左側のタブを閉じる',
     closeRight: '右側のタブを閉じる',

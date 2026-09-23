@@ -448,6 +448,7 @@ export const fr: I18n = {
     ghImageCdnJsdelivr: 'jsDelivr CDN',
   },
   tabMenu: {
+    allTabs: 'Tous les onglets ouverts',
     close: 'Fermer',
     closeLeft: 'Fermer les onglets à gauche',
     closeRight: 'Fermer les onglets à droite',
