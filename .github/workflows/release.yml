@@ -108,6 +108,35 @@ jobs:
           echo "host triple: $TRIPLE"
           bash scripts/build-mcp-sidecar.sh "$TRIPLE"
 
+      # ----------------------------------------------------------------
+      # Release notes = this tag's section of CHANGELOG.md.
+      #
+      # The body used to open with two links to solomd.app/whats-new. That is
+      # upstream's site describing upstream's releases — for a fork build it is
+      # the one thing the notes must not point at, and a reader had to leave
+      # GitHub to learn anything at all. CHANGELOG.md is the only text that is
+      # guaranteed to describe the binaries attached to this very release, so
+      # the section for the tag is inlined here.
+      #
+      # No section for the tag (a tag pushed without a changelog entry, or a
+      # manual workflow_dispatch run where GITHUB_REF_NAME is a branch) prints a
+      # fallback link instead, and the empty-value guard below means neither
+      # case can fail the release.
+      # ----------------------------------------------------------------
+      - name: Extract this tag's CHANGELOG section
+        id: changelog
+        shell: bash
+        run: |
+          notes="$(node scripts/release-notes.js "$GITHUB_REF_NAME")"
+          if [ -z "$notes" ]; then
+            notes="See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)."
+          fi
+          {
+            echo "notes<<SOLOMD_NOTES_EOF"
+            echo "$notes"
+            echo "SOLOMD_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build & release with tauri-action
         uses: tauri-apps/tauri-action@v0
         env:
@@ -124,7 +153,7 @@ jobs:
 
             ### What's new / 更新内容
 
-            https://solomd.app/whats-new · [中文](https://solomd.app/zh/whats-new)
+            ${{ steps.changelog.outputs.notes }}
 
             ### Install / 安装
 
