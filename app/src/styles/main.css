@@ -887,6 +887,24 @@ mark {
     display: block !important;
     position: static !important;
   }
+  /* #337 — the shell rule `html, body, #app { height: 100%; overflow: hidden }`
+   * makes the printed document exactly one page tall: everything below the
+   * first page was clipped, so "导出 PDF（文字）" came out as one page whatever
+   * the length. Paper has to grow with the content. */
+  html.solomd-printing,
+  html.solomd-printing body.solomd-printing {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* A table that runs onto the next page repeats its header row there, and a
+   * row is never split between two pages. */
+  body.solomd-printing .solomd-print-content thead {
+    display: table-header-group;
+  }
+  body.solomd-printing .solomd-print-content tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   /* #293 — the same "paper can't scroll" argument for prose: a paragraph
    * whose words are joined by NO-BREAK SPACE (Word / web / chat pastes) is
    * one unbreakable run to the layout engine and runs off the page. */

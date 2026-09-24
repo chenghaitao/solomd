@@ -20,6 +20,7 @@ import { renderMarkdown, extractImageRoot } from '../lib/markdown';
 import { initMermaid } from '../lib/mermaid-lazy';
 import { exportDefaultPath } from '../lib/export-paths';
 import { useI18n } from '../i18n';
+import { mountPrintOverlay } from '../lib/print-overlay';
 import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls } from '../lib/image-resolve';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
@@ -578,28 +579,8 @@ export function useExport() {
       ctx.filePath,
     );
 
-    let overlay = document.getElementById('solomd-print-overlay') as HTMLDivElement | null;
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'solomd-print-overlay';
-      document.body.appendChild(overlay);
-    }
-    // KaTeX styling comes from the bundle — `main.ts` imports
-    // `katex/dist/katex.min.css` and its selectors (`.katex`, `.katex-display`)
-    // are global, so the overlay picks them up even though it lives outside
-    // `#app`. This used to <link> katex.min.css off jsDelivr, which meant every
-    // print silently hit the network: math came out unstyled with no
-    // connection, and an offline-first app with no telemetry leaked a request
-    // per print.
-    overlay.innerHTML = `<div class="solomd-print-content preview-content">${body}</div>`;
-    // Print palette, independent of the app theme. The overlay sits outside
-    // #app but still inherits :root's tokens, so a dark theme used to put a
-    // dark code slab on paper. `follow` adds no class and keeps that.
+    // Print palette, independent of the app theme (see mountPrintOverlay).
     const printTheme = settings.printTheme || 'light';
-    overlay.classList.remove('print-theme-light', 'print-theme-dark');
-    if (printTheme !== 'follow') overlay.classList.add(`print-theme-${printTheme}`);
-    document.body.classList.add('solomd-printing');
-    document.body.classList.toggle('solomd-printing--dark', printTheme === 'dark');
 
     // v2.5 F3: inject @page / @media print stylesheet derived from
     // Settings → PDF defaults + per-doc `pdf:` front matter override.
@@ -611,29 +592,16 @@ export function useExport() {
       ctx.content,
       userTouchedPdfDefaults(settings.pdfDefaults),
     );
-    const styleCss = buildPrintStyle(pdfOpts);
-    let styleEl: HTMLStyleElement | null = null;
-    if (styleCss) {
-      styleEl = document.createElement('style');
-      styleEl.id = 'solomd-print-style';
-      styleEl.textContent = styleCss;
-      document.head.appendChild(styleEl);
-    }
-
-    const cleanup = () => {
-      document.body.classList.remove('solomd-printing', 'solomd-printing--dark');
-      overlay?.remove();
-      styleEl?.remove();
-    };
+    const { content: printContent, cleanup } = mountPrintOverlay(
+      body,
+      printTheme,
+      buildPrintStyle(pdfOpts),
+    );
 
     // #301 — swap mermaid fences for SVGs and WAIT for them. This has to
     // happen after the print-theme class is on the overlay (so the diagram
     // palette matches the paper) and before `print_webview`, because the
     // native print sheet snapshots the DOM as it finds it.
-    // Query by class rather than firstElementChild: that only happened to be
-    // the content div because the <link> above was just removed, and the next
-    // person to prepend anything to the overlay would silently skip mermaid.
-    const printContent = overlay.querySelector<HTMLElement>('.solomd-print-content');
     if (printContent) {
       try {
         await renderPrintMermaid(
