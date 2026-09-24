@@ -29,6 +29,7 @@ import {
   TableOfContents,
   LineRuleType,
 } from 'docx';
+import { mermaidToPng } from './diagram-export';
 import { invoke } from '@tauri-apps/api/core';
 import { md, extractImageRoot, preprocessMarkdown } from './markdown';
 import {
@@ -379,6 +380,31 @@ async function buildBody(tokens: Token[], imageRoot: string | null, filePath?: s
       }
       case 'fence':
       case 'code_block': {
+        // #256 — a mermaid fence becomes the diagram, as a PNG (Word has no
+        // reliable SVG support). If it cannot be rendered the source falls
+        // through to the ordinary code block below.
+        if (tok.type === 'fence' && (tok.info || '').trim().split(/\s+/)[0].toLowerCase() === 'mermaid') {
+          const png = await mermaidToPng(tok.content || '');
+          if (png) {
+            const dim = scaleDimensions(png.width, png.height);
+            out.push(
+              new Paragraph({
+                children: [
+                  new ImageRun({
+                    type: 'png',
+                    data: png.data,
+                    transformation: { width: dim.width, height: dim.height },
+                    altText: { name: 'Mermaid diagram', description: 'Mermaid diagram' },
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 160, after: 160 },
+              })
+            );
+            i += 1;
+            break;
+          }
+        }
         const lines = (tok.content || '').replace(/\n$/, '').split('\n');
         const last = lines.length - 1;
         lines.forEach((line, idx) => {

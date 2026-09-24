@@ -158,3 +158,36 @@ declare global {
 
 window.__htmlHarnessCheck = check;
 statusEl.textContent = 'ready — call window.__htmlHarnessCheck({ path, markdown, files })';
+
+// ── #332 / #256: the whole standalone export, and the Word export ──────────
+//
+//     await window.__htmlHarnessExport({ content, title })  → the .html string
+//     await window.__docxHarness(markdown)                  → .docx as base64
+//
+// Both run the app's own builders (`buildStandaloneHtml`, `markdownToDocxBlob`)
+// so what is checked is what the export writes.
+import { buildStandaloneHtml, type StandaloneHtmlInput } from '../lib/html-export';
+
+async function exportWhole(input: StandaloneHtmlInput): Promise<string> {
+  const html = await buildStandaloneHtml(input);
+  statusEl.textContent = `export built — ${html.length} chars`;
+  return html;
+}
+
+async function docx(markdown: string): Promise<string> {
+  const { markdownToDocxBlob } = await import('../lib/docx-export');
+  const blob = await markdownToDocxBlob(markdown, 'harness');
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+declare global {
+  interface Window {
+    __htmlHarnessExport?: (input: StandaloneHtmlInput) => Promise<string>;
+    __docxHarness?: (markdown: string) => Promise<string>;
+  }
+}
+window.__htmlHarnessExport = exportWhole;
+window.__docxHarness = docx;
