@@ -179,6 +179,12 @@ export const uk: I18n = {
     replaceAll: 'Усі',
   },
   explorer: {
+    deleteTitle: 'Видалити',
+    deleteFileMsg: 'Видалити «{name}»?',
+    deleteFolderMsg: 'Видалити теку «{name}» разом з усім її вмістом?',
+    deleteTrash: 'Буде переміщено до системного кошика.',
+    deletePermanent: 'Цю дію неможливо скасувати.',
+    cancel: 'Скасувати',
     heading: 'Провідник',
     revealHidden: 'Не вдалося показати цей файл у дереві — він поза відкритим робочим простором або прихований фільтром.',
     loading: 'Завантаження…',

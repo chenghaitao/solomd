@@ -23,6 +23,8 @@ import {
   clearRevealedPath,
 } from '../composables/useFileTreeReveal';
 import MoveToDialog from './MoveToDialog.vue';
+import { DsButton, DsModal } from '../ui';
+import { parentDirOf, setTreeSelection } from '../lib/new-file-target';
 import {
   dragPath,
   dragIsDir,
@@ -132,6 +134,42 @@ const pendingDeletes = usePendingDeletes();
 
 const root = ref<Node | null>(null);
 
+// ---------------------------------------------------------------------------
+// Selection — the row the user last touched, and the folder a new entry goes
+// into. Clicking a file opens it and clicking a folder toggles it; either way
+// that row becomes the selection. "New file" then means "here": a selected
+// folder is the destination, a selected file sends the note to its own folder
+// (see lib/new-file-target.ts, which the save dialog reads too).
+//
+// The open document drives it as well, so the file being read is the
+// selection without needing a click on its row — which is also what gets the
+// row highlighted in the tree.
+// ---------------------------------------------------------------------------
+const selected = ref<{ path: string; isDir: boolean } | null>(null);
+
+watch(selected, (sel) => setTreeSelection(sel), { immediate: true });
+watch(
+  () => tabs.activeTab?.filePath,
+  (path) => {
+    if (path) selected.value = { path, isDir: false };
+  },
+  { immediate: true },
+);
+
+/** Folder the header ＋ / context menu creates in: the selected folder, the
+ *  selected file's folder, else the vault root. Only rows that are actually in
+ *  the tree count — a selected document can live outside the open workspace,
+ *  and an entry created there would have no row to appear in (#321). */
+function newEntryParent(): string {
+  const sel = selected.value;
+  const node = sel ? findNode(sel.path) : null;
+  if (node) {
+    const dir = node.is_dir ? node.path : parentDirOf(node.path);
+    if (dir) return dir;
+  }
+  return root.value?.path ?? '';
+}
+
 // v2.4 inbox filter — when on, the FileTreeNode subtree below prunes
 // non-inbox files (and dirs whose subtree contains no inbox docs).
 const showInboxOnly = computed(() => inbox.filterMode.value);
@@ -240,6 +278,7 @@ async function refreshRoot() {
 }
 
 async function toggle(node: Node) {
+  selected.value = { path: node.path, isDir: !!node.is_dir };
   if (!node.is_dir) {
     await files.openPath(node.path);
     return;
@@ -267,6 +306,9 @@ watch(
     // A reveal highlight belongs to the workspace it was asked for: the same
     // path in the next one must not inherit it.
     clearRevealedPath();
+    // Same for the selection: a save dialog aimed at the previous vault's
+    // folder is the trap this whole selection exists to avoid.
+    selected.value = null;
     void refreshRoot();
   },
   { immediate: true },
@@ -441,6 +483,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('solomd:saved', onSaved as EventListener);
   window.removeEventListener('solomd:remote-pulled', onRemotePulled as EventListener);
   window.removeEventListener('beforeunload', onBeforeUnload);
+  // Hiding the tree unmounts it; a selection left behind would keep aiming
+  // "new file" at a folder the user can no longer see.
+  setTreeSelection(null);
   if (unlistenIndex) unlistenIndex();
   if (unlistenCapture) unlistenCapture();
   if (refreshDebounce) clearTimeout(refreshDebounce);
@@ -488,6 +533,7 @@ function renderEditRow(depth: number) {
   const e = editing.value;
   if (!e) return null;
   return hEdit('li', { class: 'ftree__edit', style: { paddingLeft: `${8 + depth * 12}px` } }, [
+    ...indentGuides(depth),
     hEdit('span', { class: 'ftree__icon' }, e.kind === 'new-dir' ? '▸' : '•'),
     hEdit('input', {
       ref: (el: unknown) => {
@@ -524,6 +570,10 @@ const EditRowAtRoot = () => renderEditRow(0);
 function openCtx(e: MouseEvent, node: Node | null) {
   e.preventDefault();
   e.stopPropagation();
+  // Right-clicking a row selects it (the usual desktop convention), so the
+  // menu's actions and "new file" agree about what "here" means. Empty-area
+  // clicks keep whatever was selected.
+  if (node) selected.value = { path: node.path, isDir: !!node.is_dir };
   ctx.value = { x: e.clientX, y: e.clientY, node };
 }
 function closeCtx() {
@@ -1056,19 +1106,29 @@ function onRenameKey(e: KeyboardEvent) {
   }
 }
 
-async function deleteNode(node: Node) {
+// ---------------------------------------------------------------------------
+// Delete — confirmed in the app, then held briefly so the toast can take it
+// back.
+//
+// The confirmation used to be `window.confirm`, i.e. the webview's own dialog:
+// unstyled next to everything else, suppressed outright on some platforms, and
+// English-only. A mis-aimed right-click → Delete was also one keystroke away
+// from losing a folder, so the confirmation has to be something the user
+// really sees. It is a real dialog now (DsModal, which handles Escape, focus
+// and the backdrop), with the file/folder wording and the trash-vs-permanent
+// note coming from the locale files.
+// ---------------------------------------------------------------------------
+const deleteTarget = ref<Node | null>(null);
+
+function deleteNode(node: Node) {
   closeCtx();
-  // #112 — desktop deletes now go to the OS trash (recoverable); mobile has
-  // no user-visible trash, so keep the permanent-delete wording there.
-  const suffix = isMobile()
-    ? 'This cannot be undone.'
-    : 'It will be moved to the system Trash / Recycle Bin.';
-  const ok = window.confirm(
-    node.is_dir
-      ? `Delete folder "${node.name}" and everything inside?\n\n${suffix}`
-      : `Delete "${node.name}"?\n\n${suffix}`,
-  );
-  if (!ok) return;
+  deleteTarget.value = node;
+}
+
+async function confirmDelete() {
+  const node = deleteTarget.value;
+  deleteTarget.value = null;
+  if (!node) return;
 
   // The delete is held for a few seconds so the toast can offer Undo. The
   // file is untouched until then; the tree hides it in the meantime.
@@ -1197,7 +1257,7 @@ onBeforeUnmount(() => {
         <button
           class="ftree__hbtn"
           :title="t('explorer.newFile') || 'New file'"
-          @click="root && startNewFile(root.path)"
+          @click="root && startNewFile(newEntryParent())"
           :disabled="!root"
         >＋</button>
         <div class="ftree__filter-wrap">
@@ -1379,6 +1439,7 @@ onBeforeUnmount(() => {
           :key="child.path"
           :node="child"
           :depth="0"
+          :selected-path="selected?.path ?? ''"
           :inbox-only="showInboxOnly"
           :inbox-paths="inbox.inboxPaths.value"
           :ext-filter="extFilter"
@@ -1405,10 +1466,10 @@ onBeforeUnmount(() => {
       @click.stop
     >
       <template v-if="!ctx.node || ctx.node.is_dir">
-        <button class="ftree__ctx-item" @click="startNewFile((ctx.node ?? root!).path)">
+        <button class="ftree__ctx-item" @click="startNewFile(ctx.node ? ctx.node.path : newEntryParent())">
           📄 {{ t('explorer.newFile') || 'New File' }}
         </button>
-        <button class="ftree__ctx-item" @click="startNewFolder((ctx.node ?? root!).path)">
+        <button class="ftree__ctx-item" @click="startNewFolder(ctx.node ? ctx.node.path : newEntryParent())">
           📁 {{ t('explorer.newFolder') || 'New Folder' }}
         </button>
       </template>
@@ -1455,6 +1516,36 @@ onBeforeUnmount(() => {
       @confirm="onMovePicked"
       @cancel="moveDialog = null"
     />
+
+    <!-- Delete confirmation. In-app rather than `window.confirm`: the
+         webview's dialog is unstyled, untranslated and suppressed outright on
+         some platforms, and a mis-aimed right-click → Delete should not be one
+         keystroke away from losing a folder. -->
+    <DsModal
+      :model-value="!!deleteTarget"
+      :title="t('explorer.deleteTitle')"
+      width="420px"
+      @update:model-value="deleteTarget = null"
+    >
+      <p class="ftree__confirm-msg">
+        {{
+          deleteTarget?.is_dir
+            ? t('explorer.deleteFolderMsg', { name: deleteTarget?.name ?? '' })
+            : t('explorer.deleteFileMsg', { name: deleteTarget?.name ?? '' })
+        }}
+      </p>
+      <!-- #112 — desktop deletes go to the OS trash and are recoverable; a
+           phone has no user-visible trash, so the wording stays honest per
+           platform. Server-side, the delete is also held briefly so the toast
+           can undo it. -->
+      <p class="ftree__confirm-note">
+        {{ isMobile() ? t('explorer.deletePermanent') : t('explorer.deleteTrash') }}
+      </p>
+      <template #footer>
+        <DsButton variant="ghost" @click="deleteTarget = null">{{ t('explorer.cancel') }}</DsButton>
+        <DsButton variant="danger" @click="confirmDelete">{{ t('explorer.delete') }}</DsButton>
+      </template>
+    </DsModal>
   </aside>
 </template>
 
@@ -1469,11 +1560,51 @@ interface FtreeEditApi {
   renderEditRow: (depth: number) => VNode | null;
 }
 
+// The indent geometry, in one place: a row's own left padding is
+// `8 + depth * 12`, so level `i`'s guide line sits at `8 + i * 12`.
+const INDENT_BASE = 8;
+const INDENT_STEP = 12;
+
+/**
+ * The visual tree: one dotted vertical line per ancestor level, plus the short
+ * stub that joins the row to its parent's line. A flat list of names at
+ * slightly different left offsets is hard to read once a vault nests a few
+ * folders deep — the guides are what make a depth obvious at a glance.
+ *
+ * They are absolutely positioned so they cannot disturb the row's layout
+ * (padding, gap, hit-testing for drags all stay exactly as they were), and
+ * `pointer-events: none` keeps them out of the way of a click.
+ */
+function indentGuides(depth: number): VNode[] {
+  if (depth <= 0) return [];
+  const guides: VNode[] = [];
+  for (let i = 0; i < depth; i++) {
+    guides.push(
+      h('i', {
+        class: 'ftree__guide',
+        style: { left: `${INDENT_BASE + i * INDENT_STEP}px` },
+        'aria-hidden': 'true',
+      }),
+    );
+  }
+  guides.push(
+    h('i', {
+      class: 'ftree__stub',
+      style: { left: `${INDENT_BASE + (depth - 1) * INDENT_STEP}px` },
+      'aria-hidden': 'true',
+    }),
+  );
+  return guides;
+}
+
 export const FileTreeNode = defineComponent({
   name: 'FileTreeNode',
   props: {
     node: { type: Object as () => any, required: true },
     depth: { type: Number, default: 0 },
+    /** Path of the selected row, so FileTreeNode can tint it without holding
+     *  any selection state of its own. */
+    selectedPath: { type: String, default: '' },
     inboxOnly: { type: Boolean, default: false },
     inboxPaths: { type: Object as () => Set<string>, default: () => new Set() },
     /** #282 — lower-case extensions without the dot ('' = no extension).
@@ -1588,6 +1719,7 @@ export const FileTreeNode = defineComponent({
             class: [
               'ftree__item',
               n.is_dir ? 'ftree__item--dir' : 'ftree__item--file',
+              props.selectedPath === n.path ? 'ftree__item--selected' : '',
               dragPath.value === n.path ? 'ftree__item--dragging' : '',
               n.is_dir && dropTarget.value === n.path ? 'ftree__item--drop' : '',
               revealedPath.value === n.path ? 'ftree__item--revealed' : '',
@@ -1615,6 +1747,7 @@ export const FileTreeNode = defineComponent({
             title: n.path,
           },
           [
+            ...indentGuides(props.depth),
             h('span', { class: 'ftree__icon' }, n.is_dir ? (n.expanded ? '▾' : '▸') : getFileIcon(n.name)),
             nameNode,
             !n.is_dir && props.inboxPaths.has(n.path)
@@ -1629,6 +1762,7 @@ export const FileTreeNode = defineComponent({
             h(FileTreeNode, {
               node: c,
               depth: props.depth + 1,
+              selectedPath: props.selectedPath,
               inboxOnly: props.inboxOnly,
               inboxPaths: props.inboxPaths,
               extFilter: props.extFilter,
@@ -2017,9 +2151,38 @@ export const FileTreeNode = defineComponent({
   cursor: pointer;
   color: var(--text);
   border-radius: 0;
+  /* Anchors the indent guides drawn by indentGuides(). */
+  position: relative;
 }
 :deep(.ftree__item:hover) {
   background: var(--bg-hover, color-mix(in srgb, var(--accent) 10%, transparent));
+}
+
+/* Indent guides — dotted lines down each ancestor level plus the stub joining
+   the row to its parent's line (see indentGuides()). Absolutely positioned, so
+   every row keeps the geometry it had before they existed. */
+:deep(.ftree__guide) {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dotted var(--tree-guide, color-mix(in srgb, var(--text-faint) 65%, transparent));
+  pointer-events: none;
+}
+:deep(.ftree__stub) {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  border-top: 1px dotted var(--tree-guide, color-mix(in srgb, var(--text-faint) 65%, transparent));
+  pointer-events: none;
+}
+/* The row "new file" is aimed at: a folder for a folder selection, the file's
+   own folder for a file selection. Louder than hover so it reads as a state,
+   not as the pointer happening to be there. */
+:deep(.ftree__item--selected) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
 /* #290 / #267 — drag to move. The node being dragged fades; the folder that
@@ -2178,6 +2341,24 @@ export const FileTreeNode = defineComponent({
   align-items: center;
   gap: 6px;
   padding: 3px 14px 3px 8px;
+  /* The inline row draws the same indent guides as the rows around it. */
+  position: relative;
+}
+:deep(.ftree__edit) {
+  position: relative;
+}
+.ftree__confirm-msg {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.ftree__confirm-note {
+  margin: var(--sp-2, 8px) 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 .ftree__edit-input {
   flex: 1;

@@ -181,6 +181,12 @@ export const pt: I18n = {
     replaceAll: 'Tudo',
   },
   explorer: {
+    deleteTitle: 'Excluir',
+    deleteFileMsg: 'Excluir “{name}”?',
+    deleteFolderMsg: 'Excluir a pasta “{name}” e tudo dentro dela?',
+    deleteTrash: 'Será movido para a Lixeira do sistema.',
+    deletePermanent: 'Esta ação não pode ser desfeita.',
+    cancel: 'Cancelar',
     heading: 'Explorador',
     revealHidden: 'Não foi possível mostrar este arquivo na árvore — ele está fora do espaço de trabalho aberto ou oculto por um filtro.',
     loading: 'Carregando…',

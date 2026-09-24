@@ -179,6 +179,12 @@ export const nl: I18n = {
     replaceAll: 'Alles',
   },
   explorer: {
+    deleteTitle: 'Verwijderen',
+    deleteFileMsg: '“{name}” verwijderen?',
+    deleteFolderMsg: 'Map “{name}” en alles erin verwijderen?',
+    deleteTrash: 'Wordt naar de prullenbak van het systeem verplaatst.',
+    deletePermanent: 'Dit kan niet ongedaan worden gemaakt.',
+    cancel: 'Annuleren',
     heading: 'Verkenner',
     revealHidden: 'Dit bestand kon niet in de boom worden getoond — het valt buiten de geopende werkmap of wordt door een filter verborgen.',
     loading: 'Laden…',

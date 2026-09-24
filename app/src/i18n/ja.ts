@@ -179,6 +179,12 @@ export const ja: I18n = {
     replaceAll: 'すべて',
   },
   explorer: {
+    deleteTitle: '削除',
+    deleteFileMsg: '「{name}」を削除しますか？',
+    deleteFolderMsg: 'フォルダ「{name}」と中身をすべて削除しますか？',
+    deleteTrash: 'システムのゴミ箱に移動します。',
+    deletePermanent: 'この操作は取り消せません。',
+    cancel: 'キャンセル',
     heading: 'エクスプローラー',
     revealHidden: 'このファイルをツリーに表示できませんでした —— 現在のワークスペース外か、ツリーの絞り込みで隠れています。',
     loading: '読み込み中…',

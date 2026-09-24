@@ -179,6 +179,12 @@ export const tr: I18n = {
     replaceAll: 'Tümü',
   },
   explorer: {
+    deleteTitle: 'Sil',
+    deleteFileMsg: '“{name}” silinsin mi?',
+    deleteFolderMsg: '“{name}” klasörü ve içindekiler silinsin mi?',
+    deleteTrash: 'Sistem Geri Dönüşüm Kutusuna taşınır.',
+    deletePermanent: 'Bu işlem geri alınamaz.',
+    cancel: 'İptal',
     heading: 'Gezgin',
     revealHidden: 'Bu dosya ağaçta gösterilemedi — açık çalışma alanının dışında ya da bir ağaç süzgeciyle gizlenmiş.',
     loading: 'Yükleniyor…',

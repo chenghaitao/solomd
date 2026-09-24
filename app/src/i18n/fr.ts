@@ -179,6 +179,12 @@ export const fr: I18n = {
     replaceAll: 'Tout',
   },
   explorer: {
+    deleteTitle: 'Supprimer',
+    deleteFileMsg: 'Supprimer « {name} » ?',
+    deleteFolderMsg: 'Supprimer le dossier « {name} » et tout son contenu ?',
+    deleteTrash: 'Il sera placé dans la corbeille du système.',
+    deletePermanent: 'Cette action est irréversible.',
+    cancel: 'Annuler',
     heading: 'Explorateur',
     revealHidden: 'Impossible d’afficher ce fichier dans l’arborescence — il est hors de l’espace de travail ouvert, ou masqué par un filtre.',
     loading: 'Chargement…',

@@ -179,6 +179,12 @@ export const ko: I18n = {
     replaceAll: '모두',
   },
   explorer: {
+    deleteTitle: '삭제',
+    deleteFileMsg: '“{name}”을(를) 삭제할까요?',
+    deleteFolderMsg: '폴더 “{name}”와 그 안의 모든 항목을 삭제할까요?',
+    deleteTrash: '시스템 휴지통으로 이동합니다.',
+    deletePermanent: '이 작업은 되돌릴 수 없습니다.',
+    cancel: '취소',
     heading: '탐색기',
     revealHidden: '이 파일을 트리에 표시할 수 없습니다 —— 현재 작업 공간 밖이거나 트리 필터로 숨겨져 있습니다.',
     loading: '불러오는 중…',

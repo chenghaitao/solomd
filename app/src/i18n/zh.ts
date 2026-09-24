@@ -204,6 +204,13 @@ export const zh: I18n = {
     newFolder: '新建文件夹',
     rename: '重命名',
     delete: '删除',
+    // 删除确认（应用内对话框，不再用 window.confirm）。
+    deleteTitle: '删除确认',
+    deleteFileMsg: '确定删除“{name}”？',
+    deleteFolderMsg: '确定删除文件夹“{name}”及其中全部内容？',
+    deleteTrash: '将移动到系统回收站，可从回收站找回。',
+    deletePermanent: '此操作无法撤销。',
+    cancel: '取消',
     copyPath: '复制路径',
     copyRelPath: '复制相对路径',
     copyPathDone: '路径已复制。',

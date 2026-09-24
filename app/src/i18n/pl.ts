@@ -179,6 +179,12 @@ export const pl: I18n = {
     replaceAll: 'Wszystkie',
   },
   explorer: {
+    deleteTitle: 'Usuń',
+    deleteFileMsg: 'Usunąć „{name}”?',
+    deleteFolderMsg: 'Usunąć folder „{name}” wraz z całą zawartością?',
+    deleteTrash: 'Zostanie przeniesiony do kosza systemowego.',
+    deletePermanent: 'Tej operacji nie można cofnąć.',
+    cancel: 'Anuluj',
     heading: 'Eksplorator',
     revealHidden: 'Nie udało się pokazać tego pliku w drzewie — jest poza otwartym obszarem roboczym lub ukryty przez filtr.',
     loading: 'Wczytywanie…',

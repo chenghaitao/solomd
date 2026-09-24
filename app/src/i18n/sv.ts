@@ -179,6 +179,12 @@ export const sv: I18n = {
     replaceAll: 'Alla',
   },
   explorer: {
+    deleteTitle: 'Radera',
+    deleteFileMsg: 'Radera ”{name}”?',
+    deleteFolderMsg: 'Radera mappen ”{name}” och allt i den?',
+    deleteTrash: 'Flyttas till systemets papperskorg.',
+    deletePermanent: 'Detta kan inte ångras.',
+    cancel: 'Avbryt',
     heading: 'Utforskaren',
     revealHidden: 'Kunde inte visa filen i trädet — den ligger utanför den öppna arbetsytan eller döljs av ett filter.',
     loading: 'Läser in…',
