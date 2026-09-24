@@ -1,6 +1,8 @@
 import { createApp, defineAsyncComponent } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
+import { isLang, loadLocale } from './i18n';
+import { useSettingsStore } from './stores/settings';
 import './styles/cjk-font.css';
 import './styles/main.css';
 import './styles/hljs-theme.css';
@@ -23,5 +25,14 @@ const rootComponent = isSlideshow
     ? defineAsyncComponent(() => import('./components/QuickCapture.vue'))
     : App;
 const app = createApp(rootComponent);
-app.use(createPinia());
-app.mount('#app');
+const pinia = createPinia();
+app.use(pinia);
+
+// The locale dictionaries are code-split — only English is bundled, the other
+// 13 are chunks (they were ~1.1 MB inside the entry chunk before). Await the
+// one in use before the first paint so a translated UI never flashes English;
+// `t()` falls back to English for the few ms until the chunk lands.
+const settings = useSettingsStore(pinia);
+void loadLocale(isLang(settings.language) ? settings.language : 'en').finally(() => {
+  app.mount('#app');
+});

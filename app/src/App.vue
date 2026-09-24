@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch, watchEffect, computed, provide, nextTick } from 'vue';
+import { onMounted, onBeforeUnmount, ref, watch, watchEffect, computed, provide, nextTick, defineAsyncComponent } from 'vue';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -14,18 +14,9 @@ import StatusBar from './components/StatusBar.vue';
 import CommandPalette from './components/CommandPalette.vue';
 import QuickSwitcher from './components/QuickSwitcher.vue';
 import Outline from './components/Outline.vue';
-import BacklinksPanel from './components/BacklinksPanel.vue';
 import AndroidFolderPicker from './components/AndroidFolderPicker.vue';
-import NeighborhoodPanel from './components/NeighborhoodPanel.vue';
-import RelationshipsPanel from './components/RelationshipsPanel.vue';
-import TagsPanel from './components/TagsPanel.vue';
-import TasksPanel from './components/TasksPanel.vue';
 import TableEditor from './components/TableEditor.vue';
 import FormulaEditor from './components/FormulaEditor.vue';
-import TypesPanel from './components/TypesPanel.vue';
-import HistoryPanel from './components/HistoryPanel.vue';
-import PropertiesInspector from './components/PropertiesInspector.vue';
-import AgentPanel from './components/AgentPanel.vue';
 import RsSplitter from './components/RsSplitter.vue';
 import { useAutoCommit } from './composables/useAutoCommit';
 import { useGithubSync } from './composables/useGithubSync';
@@ -33,12 +24,9 @@ import { useSessionRestore } from './composables/useSessionRestore';
 import SessionRestoreDialog from './components/SessionRestoreDialog.vue';
 import WhiteboardOverlay from './components/WhiteboardOverlay.vue';
 import AIRewriteOverlay from './components/AIRewriteOverlay.vue';
-import BasesView from './components/BasesView.vue';
 import { BASES_OPEN_EVENT, BASES_CLOSE_EVENT } from './composables/useBasesView';
-import InboxView from './components/InboxView.vue';
 import { INBOX_OPEN_EVENT, INBOX_CLOSE_EVENT } from './composables/useInboxView';
 // v4.6.1 F2 — Type lens (center-pane filtered view of one type's members).
-import TypeLensView from './components/TypeLensView.vue';
 import { TYPE_LENS_OPEN_EVENT, TYPE_LENS_CLOSE_EVENT } from './composables/useTypeLens';
 import FileTree from './components/FileTree.vue';
 // v4.6 F5 — Saved filtered views (sidebar panel + filtered list + editor).
@@ -48,7 +36,8 @@ import ViewEditorDialog from './components/ViewEditorDialog.vue';
 import { VIEW_OPEN_EVENT, VIEW_CLOSE_EVENT } from './composables/useSavedViews';
 import SettingsPanel from './components/SettingsPanel.vue';
 import MarkdownHelp from './components/MarkdownHelp.vue';
-import GlobalSearch from './components/GlobalSearch.vue';
+// Kept eager: both are mounted unconditionally (they show/hide through their
+// `open` prop), so an async wrapper would fetch them at startup anyway.
 import RagSearch from './components/RagSearch.vue';
 import CjkProofread from './components/CjkProofread.vue';
 import ReadingView from './components/ReadingView.vue';
@@ -82,7 +71,28 @@ import { useSavedViewsStore } from './stores/savedViews';
 import { usePropertiesStore } from './stores/properties';
 import { useRagStore } from './stores/rag';
 import { IS_APP_STORE_BUILD } from './lib/app-build';
-import UiPreview from './components/UiPreview.vue';
+
+// Right-side panes and the alternate center-pane views are opened by hand and
+// are `v-if`-gated, so each one becomes a chunk loaded the first time the user
+// actually asks for it (a few ms off local disk) instead of being parsed by
+// every launch. `defineAsyncComponent` only defers the import until first
+// render, so this list must stay limited to components the template really
+// does render conditionally — anything mounted unconditionally would just be
+// fetched at startup anyway.
+const BacklinksPanel = defineAsyncComponent(() => import('./components/BacklinksPanel.vue'));
+const NeighborhoodPanel = defineAsyncComponent(() => import('./components/NeighborhoodPanel.vue'));
+const RelationshipsPanel = defineAsyncComponent(() => import('./components/RelationshipsPanel.vue'));
+const TagsPanel = defineAsyncComponent(() => import('./components/TagsPanel.vue'));
+const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'));
+const TypesPanel = defineAsyncComponent(() => import('./components/TypesPanel.vue'));
+const HistoryPanel = defineAsyncComponent(() => import('./components/HistoryPanel.vue'));
+const PropertiesInspector = defineAsyncComponent(() => import('./components/PropertiesInspector.vue'));
+const AgentPanel = defineAsyncComponent(() => import('./components/AgentPanel.vue'));
+const GlobalSearch = defineAsyncComponent(() => import('./components/GlobalSearch.vue'));
+const BasesView = defineAsyncComponent(() => import('./components/BasesView.vue'));
+const InboxView = defineAsyncComponent(() => import('./components/InboxView.vue'));
+const TypeLensView = defineAsyncComponent(() => import('./components/TypeLensView.vue'));
+const UiPreview = defineAsyncComponent(() => import('./components/UiPreview.vue'));
 
 /* v4.6 dev-only UI gallery. `?uikit` renders ONLY the design-system preview
  * and skips the normal app, so the token layer can be eyeballed in isolation.

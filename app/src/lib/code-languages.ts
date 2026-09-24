@@ -1,16 +1,4 @@
 import { LanguageDescription } from '@codemirror/language';
-import { javascript } from '@codemirror/lang-javascript';
-import { python } from '@codemirror/lang-python';
-import { rust } from '@codemirror/lang-rust';
-import { html as htmlLang } from '@codemirror/lang-html';
-import { css as cssLang } from '@codemirror/lang-css';
-import { json as jsonLang } from '@codemirror/lang-json';
-import { cpp } from '@codemirror/lang-cpp';
-import { java } from '@codemirror/lang-java';
-import { go } from '@codemirror/lang-go';
-import { yaml } from '@codemirror/lang-yaml';
-import { sql } from '@codemirror/lang-sql';
-import { xml } from '@codemirror/lang-xml';
 
 /**
  * The languages the code editor can actually highlight.
@@ -22,19 +10,74 @@ import { xml } from '@codemirror/lang-xml';
  *
  * Moved out of `Editor.vue` for exactly that reason (issue #297). Behaviour is
  * unchanged: same entries, same order, same supports.
+ *
+ * Each grammar is a `load()` description, not a `support()`, so it becomes its
+ * own chunk and is fetched the first time a fence actually asks for it. All 13
+ * grammars up front were ~390 kB of parser tables in the eager bundle — paid
+ * by every launch, including documents with no code in them at all. lezer
+ * accepts an unresolved description: it skips the nested parse and schedules a
+ * fresh one when the promise lands (`ParseContext.getSkippingParser`), so a
+ * block highlights a few ms after it scrolls into view instead of never.
  */
 export const codeLanguages = [
-  LanguageDescription.of({ name: 'javascript', alias: ['js', 'jsx'], support: javascript({ jsx: true }) }),
-  LanguageDescription.of({ name: 'typescript', alias: ['ts', 'tsx'], support: javascript({ jsx: true, typescript: true }) }),
-  LanguageDescription.of({ name: 'python', alias: ['py'], support: python() }),
-  LanguageDescription.of({ name: 'rust', alias: ['rs'], support: rust() }),
-  LanguageDescription.of({ name: 'html', support: htmlLang() }),
-  LanguageDescription.of({ name: 'css', support: cssLang() }),
-  LanguageDescription.of({ name: 'json', support: jsonLang() }),
-  LanguageDescription.of({ name: 'cpp', alias: ['c', 'c++'], support: cpp() }),
-  LanguageDescription.of({ name: 'java', support: java() }),
-  LanguageDescription.of({ name: 'go', alias: ['golang'], support: go() }),
-  LanguageDescription.of({ name: 'yaml', alias: ['yml'], support: yaml() }),
-  LanguageDescription.of({ name: 'sql', support: sql() }),
-  LanguageDescription.of({ name: 'xml', support: xml() }),
+  LanguageDescription.of({
+    name: 'javascript',
+    alias: ['js', 'jsx'],
+    load: () => import('@codemirror/lang-javascript').then((m) => m.javascript({ jsx: true })),
+  }),
+  LanguageDescription.of({
+    name: 'typescript',
+    alias: ['ts', 'tsx'],
+    load: () =>
+      import('@codemirror/lang-javascript').then((m) => m.javascript({ jsx: true, typescript: true })),
+  }),
+  LanguageDescription.of({
+    name: 'python',
+    alias: ['py'],
+    load: () => import('@codemirror/lang-python').then((m) => m.python()),
+  }),
+  LanguageDescription.of({
+    name: 'rust',
+    alias: ['rs'],
+    load: () => import('@codemirror/lang-rust').then((m) => m.rust()),
+  }),
+  LanguageDescription.of({
+    name: 'html',
+    load: () => import('@codemirror/lang-html').then((m) => m.html()),
+  }),
+  LanguageDescription.of({
+    name: 'css',
+    load: () => import('@codemirror/lang-css').then((m) => m.css()),
+  }),
+  LanguageDescription.of({
+    name: 'json',
+    load: () => import('@codemirror/lang-json').then((m) => m.json()),
+  }),
+  LanguageDescription.of({
+    name: 'cpp',
+    alias: ['c', 'c++'],
+    load: () => import('@codemirror/lang-cpp').then((m) => m.cpp()),
+  }),
+  LanguageDescription.of({
+    name: 'java',
+    load: () => import('@codemirror/lang-java').then((m) => m.java()),
+  }),
+  LanguageDescription.of({
+    name: 'go',
+    alias: ['golang'],
+    load: () => import('@codemirror/lang-go').then((m) => m.go()),
+  }),
+  LanguageDescription.of({
+    name: 'yaml',
+    alias: ['yml'],
+    load: () => import('@codemirror/lang-yaml').then((m) => m.yaml()),
+  }),
+  LanguageDescription.of({
+    name: 'sql',
+    load: () => import('@codemirror/lang-sql').then((m) => m.sql()),
+  }),
+  LanguageDescription.of({
+    name: 'xml',
+    load: () => import('@codemirror/lang-xml').then((m) => m.xml()),
+  }),
 ];
