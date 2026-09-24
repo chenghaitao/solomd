@@ -109,31 +109,34 @@ jobs:
           bash scripts/build-mcp-sidecar.sh "$TRIPLE"
 
       # ----------------------------------------------------------------
-      # Release notes = this tag's section of CHANGELOG.md.
+      # Release notes = this tag's section of CHANGELOG.md plus the static
+      # Install / Verify blocks — both composed by scripts/release-notes.js.
       #
-      # The body used to open with two links to solomd.app/whats-new. That is
-      # upstream's site describing upstream's releases — for a fork build it is
-      # the one thing the notes must not point at, and a reader had to leave
-      # GitHub to learn anything at all. CHANGELOG.md is the only text that is
-      # guaranteed to describe the binaries attached to this very release, so
-      # the section for the tag is inlined here.
+      # The body used to open with two links to solomd.app/whats-new: upstream's
+      # site, describing upstream's releases, on a fork build whose releases are
+      # its own. It also told macOS users to download a `.dmg` that is not in the
+      # assets (macOS is built locally, see the script).
+      #
+      # Kept in the script rather than inline here so that rewriting the notes of
+      # an already-built draft release is `gh release edit --notes-file` on the
+      # same output, with nothing to keep in sync by hand.
       #
       # No section for the tag (a tag pushed without a changelog entry, or a
       # manual workflow_dispatch run where GITHUB_REF_NAME is a branch) prints a
-      # fallback link instead, and the empty-value guard below means neither
-      # case can fail the release.
+      # fallback link instead, and the empty-value guard below means neither case
+      # can fail the release.
       # ----------------------------------------------------------------
-      - name: Extract this tag's CHANGELOG section
-        id: changelog
+      - name: Compose the release notes
+        id: notes
         shell: bash
         run: |
-          notes="$(node scripts/release-notes.js "$GITHUB_REF_NAME")"
-          if [ -z "$notes" ]; then
-            notes="See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)."
+          body="$(node scripts/release-notes.js "$GITHUB_REF_NAME")"
+          if [ -z "$body" ]; then
+            body="See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)."
           fi
           {
-            echo "notes<<SOLOMD_NOTES_EOF"
-            echo "$notes"
+            echo "body<<SOLOMD_NOTES_EOF"
+            echo "$body"
             echo "SOLOMD_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -148,30 +151,7 @@ jobs:
           projectPath: app
           tagName: ${{ github.ref_name }}
           releaseName: 'SoloMD ${{ github.ref_name }}'
-          releaseBody: |
-            ## SoloMD ${{ github.ref_name }}
-
-            ### What's new / 更新内容
-
-            ${{ steps.changelog.outputs.notes }}
-
-            ### Install / 安装
-
-            - **macOS**: download `.dmg`, drag SoloMD to `/Applications`
-            - **Windows**: download `.msi`. On first launch you may see "Windows protected your PC" → click **More info** → **Run anyway** (one-time, until SmartScreen reputation builds). 首次运行点 "更多信息" → "仍要运行" 即可
-            - **Linux**: download `.AppImage` (`chmod +x` and run) or `.deb` / `.rpm`
-
-            ### Verify / 校验
-
-            The Windows builds are not code-signed yet, so Chrome's Enhanced
-            Protection scans each new release and reports "No viruses detected"
-            — that is a pass, not a warning. `SHA256SUMS.txt` is attached below
-            if you want to verify the download yourself.
-
-            Windows 版尚未代码签名，Chrome「增强保护」会扫描每个新版本并提示
-            "未检测到病毒" —— 这是通过，不是警告。附件 `SHA256SUMS.txt` 可用于自行校验。
-
-            🤖 Auto-built by GitHub Actions
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

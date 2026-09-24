@@ -2,7 +2,7 @@
 import { computed, h as hEdit, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { revealInFileManager } from '../lib/reveal-in-file-manager';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useFiles } from '../composables/useFiles';
 import { useInbox } from '../composables/useInbox';
@@ -22,6 +22,7 @@ import {
   clearRevealRequest,
   clearRevealedPath,
 } from '../composables/useFileTreeReveal';
+import { newFileInTreeRequest, clearNewFileInTreeRequest } from '../composables/useFileTreeNewFile';
 import MoveToDialog from './MoveToDialog.vue';
 import { DsButton, DsModal } from '../ui';
 import { parentDirOf, setTreeSelection } from '../lib/new-file-target';
@@ -277,16 +278,32 @@ async function refreshRoot() {
   }
 }
 
-async function toggle(node: Node) {
+async function toggle(node: Node, how: 'click' | 'dblclick' = 'click') {
+  // #338 — with "double-click opens folders" a single click on a folder only
+  // selects it, and the double click toggles. Without it, a double click is
+  // just two clicks (open, close) as it always was, so its own event is
+  // ignored — and files open on the first click either way.
+  const dblFolders = node.is_dir && settings.explorerDoubleClickFolders;
+  if (how === 'dblclick' && !dblFolders) return;
   selected.value = { path: node.path, isDir: !!node.is_dir };
   if (!node.is_dir) {
     await files.openPath(node.path);
     return;
   }
+  if (dblFolders && how === 'click') return;
   if (node.expanded) {
     node.expanded = false;
     return;
   }
+  await expandDir(node);
+}
+
+/** Open a folder row, listing it first if it has never been opened. Used by
+ *  the code paths that need a folder open (create in it, reveal, drag-hover)
+ *  — unlike toggle() it neither closes an open folder, moves the selection,
+ *  nor waits for a double click. */
+async function expandDir(node: Node) {
+  if (node.expanded) return;
   if (!node.children) {
     node.loading = true;
     const { children, truncated } = await loadDir(node.path);
@@ -534,7 +551,8 @@ function renderEditRow(depth: number) {
   if (!e) return null;
   return hEdit('li', { class: 'ftree__edit', style: { paddingLeft: `${8 + depth * 12}px` } }, [
     ...indentGuides(depth),
-    hEdit('span', { class: 'ftree__icon' }, e.kind === 'new-dir' ? '▸' : '•'),
+    hEdit('span', { class: 'ftree__caret' }, e.kind === 'new-dir' ? '›' : ''),
+    hEdit('span', { class: 'ftree__icon' }, e.kind === 'new-dir' ? '📁' : e.kind === 'new-file' ? '📝' : '•'),
     hEdit('input', {
       ref: (el: unknown) => {
         if (el) editInput.value = el as HTMLInputElement;
@@ -584,7 +602,7 @@ function closeCtx() {
  *  somewhere to appear. */
 async function expandForCreate(parent: string) {
   const node = findNode(parent);
-  if (node && node.is_dir && !node.expanded) await toggle(node);
+  if (node && node.is_dir && !node.expanded) await expandDir(node);
 }
 
 async function startNewFile(parent: string) {
@@ -888,7 +906,7 @@ async function revealRow(path: string): Promise<boolean> {
   for (const seg of parts.slice(0, -1)) {
     const dir = node.children?.find((c) => c.is_dir && c.name === seg);
     if (!dir) return false;
-    if (!dir.expanded) await toggle(dir);
+    if (!dir.expanded) await expandDir(dir);
     node = dir;
   }
   if (!node.children?.some((c) => c.path === path)) return false;
@@ -921,6 +939,18 @@ watch(
   { immediate: true },
 );
 
+// #338 — the "new file in selected folder" shortcut. Same parked-request
+// shape as the reveal above: served once the root has listed.
+watch(
+  [newFileInTreeRequest, () => root.value?.path, () => root.value?.loading],
+  () => {
+    if (!newFileInTreeRequest.value || !root.value || root.value.loading) return;
+    clearNewFileInTreeRequest();
+    void startNewFile(newEntryParent());
+  },
+  { immediate: true },
+);
+
 /** Which folder the pointer is currently over, or null. Files are not drop
  *  targets: filing into a file's parent reads as "dropped into the file" and
  *  there is no honest way to highlight that. */
@@ -949,7 +979,7 @@ function armAutoExpand(dest: string | null) {
   if (!node || !node.is_dir || node.expanded) return;
   expandTimer = setTimeout(() => {
     expandTimer = null;
-    if (dragActive && !node.expanded) void toggle(node);
+    if (dragActive && !node.expanded) void expandDir(node);
   }, AUTO_EXPAND_MS);
 }
 
@@ -1159,9 +1189,9 @@ async function confirmDelete() {
 async function revealNode(node: Node) {
   closeCtx();
   try {
-    await revealItemInDir(node.path);
+    await revealInFileManager(node.path);
   } catch (e) {
-    console.warn('reveal failed', e);
+    toasts.error(`${e}`);
   }
 }
 
@@ -1737,8 +1767,9 @@ export const FileTreeNode = defineComponent({
                 suppressClick.value = false;
                 return;
               }
-              emit('toggle', n);
+              emit('toggle', n, 'click');
             },
+            onDblclick: () => emit('toggle', n, 'dblclick'),
             onContextmenu: (e: MouseEvent) => {
               e.preventDefault();
               e.stopPropagation();
@@ -1748,7 +1779,13 @@ export const FileTreeNode = defineComponent({
           },
           [
             ...indentGuides(props.depth),
-            h('span', { class: 'ftree__icon' }, n.is_dir ? (n.expanded ? '▾' : '▸') : getFileIcon(n.name)),
+            // #338 — a folder row is caret + folder glyph; a file row keeps the
+            // caret column empty, so its icon lines up with the folder glyph
+            // and every file sits visibly to the right of the folders at its
+            // level (the file emoji used to be further left than the folder's
+            // small caret, which read as "files are the parents").
+            h('span', { class: ['ftree__caret', n.is_dir && n.expanded ? 'ftree__caret--open' : ''] }, n.is_dir ? '›' : ''),
+            h('span', { class: 'ftree__icon' }, n.is_dir ? (n.expanded ? '📂' : '📁') : getFileIcon(n.name)),
             nameNode,
             !n.is_dir && props.inboxPaths.has(n.path)
               ? h('span', { class: 'ftree__inbox-dot', title: 'inbox' }, '●')
@@ -1767,7 +1804,7 @@ export const FileTreeNode = defineComponent({
               inboxPaths: props.inboxPaths,
               extFilter: props.extFilter,
               filterDirs: props.filterDirs,
-              onToggle: (target: any) => emit('toggle', target),
+              onToggle: (target: any, how?: 'click' | 'dblclick') => emit('toggle', target, how),
               onContextmenu: (event: MouseEvent, target: any) => emit('contextmenu', event, target),
               onPress: (event: PointerEvent, target: any) => emit('press', event, target),
             })
@@ -2230,9 +2267,22 @@ export const FileTreeNode = defineComponent({
   color: var(--text-faint);
   font-size: 10px;
 }
+:deep(.ftree__caret) {
+  width: 10px;
+  flex-shrink: 0;
+  margin-right: -3px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+:deep(.ftree__caret--open) {
+  transform: rotate(90deg);
+}
 :deep(.ftree__item--dir .ftree__icon) {
-  color: var(--accent);
-  font-size: 11px;
+  font-size: 14px;
+  line-height: 1;
 }
 :deep(.ftree__item--file .ftree__icon) {
   color: var(--text-muted);

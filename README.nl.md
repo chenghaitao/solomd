@@ -102,9 +102,9 @@ Beveiligd tegen path traversal. Geen netwerkpoort. Het LLM ziet alleen waar je d
 
 Nieuwste release: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — universele dmg (Apple Silicon + Intel, gesigneerd + genotariseerd)
+### macOS — lokaal gebouwd, voorlopig niet aangeboden
 
-Download de universele `.dmg` van de [nieuwste release](https://github.com/chenghaitao/solomd/releases/latest).
+macOS wordt lokaal gebouwd door de maintainer (universele dmg, gesigneerd + genotariseerd, via `scripts/build-mac.sh`). De releases hier bevatten alleen Windows en Linux — de macOS-build wordt voorlopig niet toegevoegd.
 
 ### Windows — x64
 

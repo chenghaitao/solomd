@@ -72,6 +72,10 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   // ---- File ----
   { id: 'file.new', label: 'New Note', category: 'file', defaults: ['Mod+N', 'Mod+T'] },
   { id: 'file.newText', label: 'New Plain Text File', category: 'file', defaults: ['Mod+Alt+N'] },
+  // #338 — a note in the folder selected in the file tree (or the selected
+  // file's folder). No native menu item carries it, so it needs no entry in
+  // MENU_ITEM_BY_ACTION.
+  { id: 'file.newInFolder', label: 'New Note in Selected Folder', category: 'file', defaults: ['Mod+Alt+Shift+N'] },
   { id: 'file.open', label: 'Open File…', category: 'file', defaults: ['Mod+O'] },
   { id: 'file.import', label: 'Import Documents…', category: 'file', defaults: ['Mod+Shift+L'] },
   { id: 'file.save', label: 'Save', category: 'file', defaults: ['Mod+S'] },

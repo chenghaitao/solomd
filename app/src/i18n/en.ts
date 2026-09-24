@@ -320,6 +320,8 @@ export const en = {
     codeBlockWrapHint: 'Soft-wraps code lines wider than the block instead of showing a horizontal scrollbar. PDF/print always wraps.',
     explorerFullNames: 'Full file names in Explorer',
     explorerFullNamesHint: 'Wraps long file names across lines in the sidebar tree instead of shortening them with a middle ellipsis.',
+    explorerDoubleClickFolders: 'Double-click to open folders in Explorer',
+    explorerDoubleClickFoldersHint: 'A single click on a folder only selects it (e.g. as the place a new file goes); a double click opens or closes it. Files always open on a single click.',
     explorerShowHidden: 'Show hidden files',
     explorerShowHiddenHint: 'Lists dot-files and dot-folders (.git, .obsidian, .gitignore) and image attachment folders (_assets, *.assets) in the Explorer tree.',
     distinctSplitPanes: 'Distinguish the editor and preview panes',
@@ -1793,6 +1795,7 @@ export const en = {
     file: {
       new: 'New Markdown File',
       newText: 'New Plain Text File',
+      newInFolder: 'New Note in Selected Folder',
       open: 'Open File…',
       import: 'Import Documents…',
       save: 'Save',

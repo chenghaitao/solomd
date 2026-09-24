@@ -19,6 +19,7 @@ import {
   findCleanCut,
   findPageBreaks,
   isCleanRowData,
+  isStructuralRowData,
   searchWindowPx,
 } from './pdf-paginate.ts';
 
@@ -149,9 +150,11 @@ test('page breaks never slice a line, on white or on a code background', () => {
 
   const cuts = findPageBreaks(raster.width, raster.rows, pageHeightPx, searchUpPx, raster.readBand);
 
-  assert.equal(cuts.length, pageCount - 1);
+  // A cut that climbed pushes the rest along, so there may be one page more.
+  assert.ok(cuts.length >= pageCount - 1 && cuts.length <= pageCount);
   for (const [i, cut] of cuts.entries()) {
-    const nominal = (i + 1) * pageHeightPx;
+    const from = i === 0 ? 0 : cuts[i - 1];
+    const nominal = from + pageHeightPx;
     assert.ok(cut <= nominal, `cut ${cut} must not run past its boundary ${nominal}`);
     assert.ok(cut >= nominal - searchUpPx, `cut ${cut} must stay inside the search window`);
     assert.equal(slicesALine(cut, raster), false, `cut ${cut} sliced a line`);
@@ -197,4 +200,90 @@ test('search window is about a line and a half, capped to the page', () => {
   assert.equal(searchWindowPx(400, 2, 2078), Math.round(2078 * 0.08));
   // Never so small that a single line has nowhere to go.
   assert.equal(searchWindowPx(1, 1, 2078), 8);
+});
+
+test('no page is ever taller than a page slot', () => {
+  // The fixed grid (k × pageHeight) broke this: with cuts at 991 and 2000 the
+  // second page was 1009 rows, and its last 9 rows — the bottom of a line of
+  // text — were painted over by the third page.
+  const pageHeightPx = 1000;
+  const raster = makeRaster(pageHeightPx * 6);
+  const cuts = findPageBreaks(raster.width, raster.rows, pageHeightPx, 60, raster.readBand);
+  let from = 0;
+  for (const cut of [...cuts, raster.rows]) {
+    assert.ok(cut - from <= pageHeightPx, `page ${from}..${cut} overflows its slot`);
+    from = cut;
+  }
+});
+
+/**
+ * A table the way the export draws one: rows `ROW_H` tall separated by a
+ * horizontal rule, a light column border at x=2 / mid / width-3 running
+ * through every row, and a line of dark text in each row. No row of it is
+ * uniform, which is exactly why the clean-row rule alone cut through cell text
+ * (#337).
+ */
+const ROW_H = 90;
+const TEXT_TOP = 30;
+const TEXT_H = 30;
+function makeTable(rows: number, width = 64): Raster {
+  const data = new Uint8ClampedArray(rows * width * 4);
+  const put = (x: number, y: number, c: [number, number, number]) => {
+    const o = (y * width + x) * 4;
+    data[o] = c[0];
+    data[o + 1] = c[1];
+    data[o + 2] = c[2];
+    data[o + 3] = 255;
+  };
+  const BORDER: [number, number, number] = [230, 226, 216];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < width; x++) put(x, y, WHITE);
+    // The table sits inside the page's side padding, so even its horizontal
+    // rules share their row with white paper and are not uniform either.
+    if (y % ROW_H === 0) for (let x = 2; x < width - 2; x++) put(x, y, BORDER);
+    for (const x of [2, width >> 1, width - 3]) put(x, y, BORDER);
+    const inRow = y % ROW_H;
+    if (inRow >= TEXT_TOP && inRow < TEXT_TOP + TEXT_H) {
+      // Glyph pixels: short dark runs, different on every row.
+      for (let x = 4 + (y % 3); x < (width >> 1) - 2; x += 5) put(x, y, [20, 20, 20]);
+    }
+  }
+  const lines: { top: number; bottom: number }[] = [];
+  for (let top = TEXT_TOP; top + TEXT_H <= rows; top += ROW_H) {
+    lines.push({ top, bottom: top + TEXT_H - 1 });
+  }
+  return {
+    rows,
+    width,
+    lines,
+    readBand: (top, count) => data.subarray(top * width * 4, (top + count) * width * 4),
+  };
+}
+
+test('inside a table the cut lands between rows, never through cell text', () => {
+  // 1045 = 11 rows + 55: the first boundary falls in the middle of a row's text.
+  const pageHeightPx = 1045;
+  const table = makeTable(pageHeightPx * 4);
+  // The clean-row rule alone finds nothing here and falls back to the
+  // boundary: the fixture must reproduce that, or the next assertion is vacuous.
+  const blind = findPageBreaks(table.width, table.rows, pageHeightPx, 60, table.readBand);
+  assert.equal(blind.some((cut) => slicesALine(cut, table)), true);
+
+  const cuts = findPageBreaks(table.width, table.rows, pageHeightPx, 60, table.readBand, 300, 52);
+  assert.ok(cuts.length >= 3);
+  for (const cut of cuts) {
+    assert.equal(slicesALine(cut, table), false, `cut ${cut} sliced a row of cell text`);
+  }
+});
+
+test('a structural row needs its short runs to persist; text does not', () => {
+  const table = makeTable(400);
+  const row = (y: number) => table.readBand(y, 1);
+  // Padding between two rows: background plus column borders.
+  assert.equal(isStructuralRowData(row(95), row(95 - 52), row(95 + 52)), true);
+  // Through a line of cell text.
+  assert.equal(isStructuralRowData(row(40), row(40 - 52), row(40 + 52)), false);
+  // A long dark run (a CJK "一" stroke, a dark code slab) is never background.
+  const dark = new Uint8ClampedArray(32 * 4).fill(20);
+  assert.equal(isStructuralRowData(dark, dark, dark), false);
 });

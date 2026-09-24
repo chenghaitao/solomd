@@ -101,9 +101,9 @@ Path traversal zabezpieczony. Żaden port sieciowy. LLM widzi tylko to, na co sk
 
 Najnowsza wersja: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — Universal dmg (Apple Silicon + Intel, podpisany + notarialny)
+### macOS — budowany lokalnie, na razie niedostępny
 
-Pobierz uniwersalny `.dmg` z [najnowszego wydania](https://github.com/chenghaitao/solomd/releases/latest).
+macOS jest budowany lokalnie przez opiekuna (uniwersalny dmg, podpisany + notarialny, przez `scripts/build-mac.sh`). Wydania w tym repozytorium zawierają tylko Windows i Linux — kompilacja macOS na razie nie jest dołączana.
 
 ### Windows — x64
 

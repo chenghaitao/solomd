@@ -12,7 +12,7 @@
  */
 
 // @ts-ignore — html2pdf.js ships no types
-import { inlineMermaidBlocks } from './mermaid-inline';
+import { initMermaid } from './mermaid-lazy';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import type { ResolvedPdfOptions } from './pdf-options';
 import { rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
@@ -176,11 +176,33 @@ const PDF_CSS = `
   }
 `;
 
-/**
- * Diagrams sit on white paper, so the light theme is not negotiable here.
- */
+let mermaidId = 0;
+
 async function processMermaidBlocks(container: HTMLElement) {
-  await inlineMermaidBlocks(container, { idPrefix: 'pdf-mmd-', theme: 'default' });
+  const blocks = container.querySelectorAll('pre > code.language-mermaid');
+  if (!blocks.length) return;   // no diagrams: never pay for the renderer
+  const mermaid = await initMermaid({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'default',
+  });
+  for (const block of Array.from(blocks)) {
+    const pre = block.parentElement as HTMLElement | null;
+    if (!pre) continue;
+    const code = (block.textContent || '').trim();
+    const id = `pdf-mmd-${++mermaidId}`;
+    try {
+      const { svg } = await mermaid.render(id, code);
+      const wrap = document.createElement('div');
+      wrap.className = 'mermaid-block';
+      wrap.innerHTML = svg;
+      pre.replaceWith(wrap);
+    } catch (e) {
+      const err = document.createElement('pre');
+      err.textContent = `Mermaid error: ${(e as Error).message}`;
+      pre.replaceWith(err);
+    }
+  }
 }
 
 /**
@@ -292,6 +314,8 @@ export interface PdfRasterCapture {
   pageHeightPx: number;
   /** How far above a boundary a page cut may look, in raster pixels. */
   searchUpPx: number;
+  /** One body line in raster pixels (drives the between-table-rows cut). */
+  lineHeightPx: number;
   /** Hand back a re-paginated raster for `finish()` to slice. */
   useCanvas(canvas: HTMLCanvasElement): void;
   /** Slice the raster into pages and assemble the PDF. */
@@ -422,6 +446,7 @@ export async function capturePdfRaster(
       canvas,
       pageHeightPx: geometry.pageHeightPx,
       searchUpPx: geometry.searchUpPx,
+      lineHeightPx: geometry.lineHeightPx,
       useCanvas(replacement: HTMLCanvasElement) {
         if (prop) prop.canvas = replacement;
       },
@@ -447,22 +472,20 @@ function pdfPaginationGeometry(
   canvas: HTMLCanvasElement | null,
   inner: { width: number; height: number } | undefined,
   page: HTMLElement,
-): { pageHeightPx: number; searchUpPx: number } {
+): { pageHeightPx: number; searchUpPx: number; lineHeightPx: number } {
   if (!canvas || !inner || !(inner.width > 0) || !(inner.height > 0)) {
-    return { pageHeightPx: 0, searchUpPx: 0 };
+    return { pageHeightPx: 0, searchUpPx: 0, lineHeightPx: 0 };
   }
   const pageHeightPx = Math.floor(canvas.width * (inner.height / inner.width));
   // html2pdf's container is exactly the printable width, declared in mm, so
   // this converts raster pixels back to CSS pixels for the line-height cap.
   const rasterPerCssPx = canvas.width / (inner.width * CSS_PX_PER_MM);
-  const lineHeightPx = parseFloat(getComputedStyle(page).lineHeight);
+  const measured = parseFloat(getComputedStyle(page).lineHeight);
+  const lineHeightPx = Number.isFinite(measured) ? measured : FALLBACK_LINE_HEIGHT_PX;
   return {
     pageHeightPx,
-    searchUpPx: searchWindowPx(
-      Number.isFinite(lineHeightPx) ? lineHeightPx : FALLBACK_LINE_HEIGHT_PX,
-      rasterPerCssPx,
-      pageHeightPx,
-    ),
+    searchUpPx: searchWindowPx(lineHeightPx, rasterPerCssPx, pageHeightPx),
+    lineHeightPx: Math.round(lineHeightPx * rasterPerCssPx),
   };
 }
 
@@ -498,7 +521,12 @@ export async function markdownToPdfBlob(
       // line of text sits on the boundary. Re-lay the raster as whole pages
       // first, so every slice lands on a row with no ink in it.
       const paged = capture.canvas
-        ? buildPagedCanvas(capture.canvas, capture.pageHeightPx, capture.searchUpPx)
+        ? buildPagedCanvas(
+            capture.canvas,
+            capture.pageHeightPx,
+            capture.searchUpPx,
+            capture.lineHeightPx,
+          )
         : null;
       if (paged) capture.useCanvas(paged.canvas);
       return await capture.finish();

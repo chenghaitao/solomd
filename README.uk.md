@@ -101,9 +101,9 @@ solomd agent "перепиши щоденні нотатки цього тижн
 
 Останній реліз: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — універсальний dmg (Apple Silicon + Intel, підписаний + нотаризований)
+### macOS — збирається локально, наразі не надається
 
-Завантажте універсальний `.dmg` з [останнього релізу](https://github.com/chenghaitao/solomd/releases/latest).
+macOS збирає локально супроводжувач (універсальний dmg, підписаний + нотаризований, через `scripts/build-mac.sh`). Релізи цього репозиторію містять лише Windows і Linux — збірка macOS наразі не додається.
 
 ### Windows — x64
 

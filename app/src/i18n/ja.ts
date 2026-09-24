@@ -319,6 +319,8 @@ export const ja: I18n = {
     codeBlockWrapHint: 'ブロック幅を超えるコード行を横スクロールではなく折り返して表示します。PDF/印刷では常に折り返します。',
     explorerFullNames: 'エクスプローラーで完全なファイル名を表示',
     explorerFullNamesHint: 'サイドバーのツリーで長いファイル名を中央省略せず、折り返して完全に表示します。',
+    explorerDoubleClickFolders: 'エクスプローラーでフォルダーをダブルクリックで開く',
+    explorerDoubleClickFoldersHint: 'フォルダーをシングルクリックすると選択のみ(新規ファイルの作成先などに使われます)、ダブルクリックで開閉します。ファイルは常にシングルクリックで開きます。',
     explorerShowHidden: '隠しファイルを表示',
     explorerShowHiddenHint: 'ドットで始まるファイルとフォルダー（.git、.obsidian、.gitignore など）と、画像の添付フォルダー（_assets、*.assets）をファイルツリーに表示します。',
     distinctSplitPanes: '編集エリアとプレビューを見分けやすくする',
@@ -1769,6 +1771,7 @@ export const ja: I18n = {
     file: {
       new: '新規 Markdown ファイル',
       newText: '新規プレーンテキストファイル',
+      newInFolder: '選択中のフォルダーに新規ノート',
       open: 'ファイルを開く…',
       import: 'ドキュメントを取り込む…',
       save: '保存',

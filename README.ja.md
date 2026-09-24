@@ -101,9 +101,9 @@ solomd agent "今週の日報を週次レビューに書き直してコミット
 
 最新リリース: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — universal dmg（Apple Silicon + Intel、署名 + notarize 済み）
+### macOS — ローカルビルドのみ、当面は未提供
 
-ユニバーサル `.dmg` を [最新リリース](https://github.com/chenghaitao/solomd/releases/latest) からダウンロードしてください。
+macOS はメンテナがローカルでビルドします（ユニバーサル dmg、署名 + notarize 済み、`scripts/build-mac.sh`）。本リポジトリのリリースは Windows と Linux のみで、macOS ビルドは当面添付しません。
 
 ### Windows — x64
 

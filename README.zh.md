@@ -102,9 +102,9 @@ solomd agent "把这周的 daily 整理成 weekly review，提交并推送"
 **系统要求:**Windows 10+、macOS 10.15+、主流 Linux 发行版、iOS 15+、Android 7+(API 24)。
 Windows 7/8/8.1 无法支持——编译 SoloMD 的 Rust 工具链自 1.78 起要求 Windows 10,且微软已将 Windows 7 上的 WebView2(SoloMD 的渲染引擎)冻结在 109 版并停止安全更新——也不存在可用的历史版本。
 
-### macOS — universal dmg(Apple Silicon + Intel,已签名 + 公证)
+### macOS — 由本地构建、暂不提供
 
-从 [最新发布](https://github.com/chenghaitao/solomd/releases/latest) 下载通用 `.dmg`。
+macOS 版由维护者在本地构建(通用 dmg,已签名 + 公证,脚本 `scripts/build-mac.sh`)。本仓库的 Releases 目前只提供 Windows 与 Linux,macOS 构建暂不上传。
 
 ### Windows — x64
 

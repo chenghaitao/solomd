@@ -101,9 +101,9 @@ Path traversal'a karşı korumalı. Ağ portu yok. LLM yalnızca çalışma alan
 
 En son sürüm: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — Universal dmg (Apple Silicon + Intel, imzalı + noterlenmiş)
+### macOS — yerel derleme, şimdilik sağlanmıyor
 
-Evrensel `.dmg` dosyasını [en son sürümden](https://github.com/chenghaitao/solomd/releases/latest) indirin.
+macOS, geliştirici tarafından yerel olarak derlenir (evrensel dmg, imzalı + noterlenmiş, `scripts/build-mac.sh`). Bu depodaki sürümler yalnızca Windows ve Linux içerir — macOS derlemesi şimdilik eklenmiyor.
 
 ### Windows — x64
 

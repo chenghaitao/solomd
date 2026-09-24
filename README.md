@@ -118,9 +118,9 @@ Builds: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases) �
 **System requirements:** Windows 10+, macOS 10.15+, current mainstream Linux, iOS 15+, Android 7+ (API 24).
 Windows 7/8/8.1 cannot be supported — the Rust toolchain requires Windows 10 (since Rust 1.78) and Microsoft froze WebView2 (SoloMD's rendering engine) at version 109 on Windows 7 with no security updates — and no legacy build exists.
 
-### macOS — universal dmg (Apple Silicon + Intel, signed + notarized)
+### macOS — built locally, not provided for now
 
-Download the universal `.dmg` from the [latest release](https://github.com/chenghaitao/solomd/releases/latest).
+macOS is built locally by the maintainer (universal dmg, signed + notarized, via `scripts/build-mac.sh`). The releases here ship Windows and Linux only — the macOS build is not attached for the time being.
 
 ### Windows — x64
 

@@ -102,6 +102,9 @@
     }
   },
   "plugins": {
+    "opener": {
+      "requireLiteralLeadingDot": false
+    },
     "deep-link": {
       "mobile": [
         {

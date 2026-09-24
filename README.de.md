@@ -102,9 +102,9 @@ Pfad-Traversal abgesichert. Kein Netzwerkport. Das LLM sieht nur, worauf Sie den
 
 Neueste Version: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — Universal dmg (Apple Silicon + Intel, signiert + notarisiert)
+### macOS — lokal gebaut, vorerst nicht angeboten
 
-Laden Sie das universelle `.dmg` aus der [neuesten Release](https://github.com/chenghaitao/solomd/releases/latest).
+macOS wird vom Maintainer lokal gebaut (universelles dmg, signiert + notarisiert, über `scripts/build-mac.sh`). Die Releases hier enthalten nur Windows und Linux — der macOS-Build wird vorerst nicht angehängt.
 
 ### Windows — x64
 

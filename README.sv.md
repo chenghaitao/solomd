@@ -101,9 +101,9 @@ Path traversal-skyddad. Ingen nätverksport. LLM:et ser bara det du pekar worksp
 
 Senaste release: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — Universell dmg (Apple Silicon + Intel, signerad + notariserad)
+### macOS — byggs lokalt, tillhandahålls inte än
 
-Ladda ner den universella `.dmg`-filen från [senaste releasen](https://github.com/chenghaitao/solomd/releases/latest).
+macOS byggs lokalt av underhållaren (universell dmg, signerad + notariserad, via `scripts/build-mac.sh`). Releases här innehåller bara Windows och Linux — macOS-bygget bifogas inte än.
 
 ### Windows — x64
 

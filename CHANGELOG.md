@@ -15,6 +15,60 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.6] — 2026-09-24
+
+一条线：**同步上游 13 个提交**，并把与本地功能重叠的部分按「上游为主、本地特性叠加」的方式合并。
+
+### 上游同步
+
+合并上游 13 个提交（`595209a..e71aee9`），两侧改到了同一批文件，10 个文件冲突：
+
+| 上游提交 | 内容 |
+|---|---|
+| `838ed88` | 代码块围栏语言补全（#297），语法包搬进 `lib/code-languages.ts` |
+| `c764ea8` `118ac93` `dda2b4c` | PDF：分页不再切字、文字版 PDF 每页都能打印、长表格重复表头、表格内分页落在行之间 |
+| `77ef464` `0168f60` | 导出：独立 HTML 内嵌本地图片、图表与公式（无 CDN），Word 里的图表（#332 #256 #313） |
+| `8059e07` | 剩余菜单本地化、所有文件选择器都有合理起始目录、reveal-in-tree |
+| `4a57e9d` `328d8d2` | 文件树：缩进辅助线、按选中项决定新建位置、删除确认、文件夹图标、双击打开选项（#338） |
+| `516237f` | 回车续写列表（Windows 编辑 / 分栏的普通 textarea，#341） |
+| `d8cd976` | 图片查看器：Esc 在任意焦点位置都能关闭（#339） |
+| `9b9b754` `e71aee1` | 「用默认程序打开」真的能打开，并拒绝更多可执行类型（#331 #333） |
+
+### 合并取舍（本地特性怎么保下来的）
+
+- **mermaid 导出**：本地上一个版本在 `lib/mermaid-inline.ts` 里做过一遍（HTML / 剪贴板），上游的
+  `lib/diagram-export.ts` 覆盖得更全（还管 PlantUML、Word 位图、WebKit canvas 污染问题），
+  所以**删掉本地实现、改用上游的**；只把本地那半边——「复制为 HTML」用 2× PNG——作为
+  `inlineDiagramsInHtml({ asPng: true })` 的选项加在上游文件里（注释里标了 fork addition）。
+- **Esc 关闭图片查看器**：上游 #339 的修法与本地完全一致（监听 window 捕获阶段），而且把
+  `removeAllListeners` 的 capture 参数也一并修了 —— 直接采用上游版本，本地改动作废。
+- **文件树**：本地 4.14.4 做的缩进线 / 选中决定新建位置 / 删除确认，上游同样做了（另加文件夹图标与
+  双击打开），采用上游版本。
+- **回车续写列表**：采用上游 `lib/list-continuation.ts` 的规则（多级引用、围栏内不续写、光标在标记内
+  不续写），在它上面叠加本地两个开关与多级编号：`computeListContinuation()` 增加
+  `ListContinuationOptions` 参数，行首编号支持 `1.1` → `1.2`（`bumpNumberedToken`）。CodeMirror
+  侧上游没有接线，本地补 `lib/cm-list-continuation.ts`（`insertNewlineContinueMarkup` 在本项目里
+  并未被引用）。单测由上游 11 条 + 本地 7 条合并成 18 条。
+- **入口体积优化**：上游的 `code-languages.ts` 仍是 13 个语法静态导入，本地的按需 `load()` 版本保留
+  （`fence-languages.ts` 只读 `name`/`alias`，不受影响）。
+- **无遥测**：上游这些提交不带遥测，但采用上游 `useExport.ts` 会把本地删掉的 `track()` 调用带回来，
+  已重新剔除（`lib/telemetry.ts` 在本 fork 里不存在，否则构建直接失败）。
+
+### 顺带修的本地问题
+
+- `lib/katex-standalone.ts`（上游新增）用 `import.meta.glob('/node_modules/katex/dist/fonts/*.woff2')`
+  取字体，在 Windows 上 Vite 会把它解析成 `/d:/...` 并生成
+  `../../../../../../../d:/Code/...?url` 这种无法解析的路径，**本地构建直接失败**。改为相对写法
+  `'../../node_modules/...'`（同样是相对导入者目录解析）。
+
+### 发布说明与文档
+
+- Release 正文不再指向上游站点：新增 `scripts/release-notes.js`，输出「本 tag 对应的 CHANGELOG 章节 +
+  Install / Verify 固定段落」整份正文，workflow 直接用它（改草稿正文也能复用同一份输出）。
+- **macOS 文案改为「由本地构建、暂不提供」**：14 个 README 的 macOS 小节 + Release 正文里的安装说明
+  （CI 没有 macOS 任务，产物里从来就没有 dmg）。
+- 新增 `scripts/release-notes.js`、`.github/workflows/release.yml` 的对应步骤。
+
 ## [4.14.5] — 2026-09-24
 
 ### Mermaid 图表的导出（HTML / 剪贴板）

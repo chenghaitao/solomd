@@ -319,6 +319,8 @@ export const fr: I18n = {
     codeBlockWrapHint: "Replie les lignes de code plus larges que le bloc au lieu d'afficher une barre de défilement horizontale. PDF/impression replie toujours.",
     explorerFullNames: 'Noms de fichiers complets dans l’explorateur',
     explorerFullNamesHint: 'Replie les noms de fichiers longs dans l’arborescence au lieu de les raccourcir par une ellipse centrale.',
+    explorerDoubleClickFolders: 'Ouvrir les dossiers de l’explorateur par double-clic',
+    explorerDoubleClickFoldersHint: 'Un simple clic sur un dossier le sélectionne seulement (par exemple comme emplacement d’un nouveau fichier) ; un double-clic l’ouvre ou le ferme. Les fichiers s’ouvrent toujours d’un simple clic.',
     explorerShowHidden: 'Afficher les fichiers masqués',
     explorerShowHiddenHint: 'Affiche les fichiers et dossiers commençant par un point (.git, .obsidian, .gitignore) ainsi que les dossiers de pièces jointes images (_assets, *.assets) dans l’arborescence.',
     distinctSplitPanes: 'Distinguer l’éditeur de l’aperçu',
@@ -1769,6 +1771,7 @@ export const fr: I18n = {
     file: {
       new: 'Nouveau fichier Markdown',
       newText: 'Nouveau fichier texte brut',
+      newInFolder: 'Nouvelle note dans le dossier sélectionné',
       open: 'Ouvrir un fichier…',
       import: 'Importer des documents…',
       save: 'Enregistrer',

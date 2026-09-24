@@ -102,9 +102,9 @@ solomd agent "이번 주 일일 노트를 주간 리뷰로 다시 써서 커밋�
 
 최신 릴리스: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
-### macOS — universal dmg (Apple Silicon + Intel, 서명 + notarize)
+### macOS — 로컬 빌드만, 당분간 미제공
 
-유니버설 `.dmg` 를 [최신 릴리스](https://github.com/chenghaitao/solomd/releases/latest) 에서 다운로드하세요.
+macOS는 관리자가 로컬에서 빌드합니다(유니버설 dmg, 서명 + notarize, `scripts/build-mac.sh`). 이 저장소의 릴리스는 Windows와 Linux만 제공하며, macOS 빌드는 당분간 첨부하지 않습니다.
 
 ### Windows — x64
 

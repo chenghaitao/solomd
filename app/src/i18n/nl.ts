@@ -319,6 +319,8 @@ export const nl: I18n = {
     codeBlockWrapHint: 'Laat coderegels breder dan het blok teruglopen in plaats van een horizontale schuifbalk te tonen. PDF/afdrukken loopt altijd terug.',
     explorerFullNames: 'Volledige bestandsnamen in verkenner',
     explorerFullNamesHint: 'Laat lange bestandsnamen in de zijbalkboom teruglopen in plaats van ze in het midden af te korten.',
+    explorerDoubleClickFolders: 'Mappen in de verkenner openen met dubbelklik',
+    explorerDoubleClickFoldersHint: 'Eén klik op een map selecteert hem alleen (bijvoorbeeld als plek voor een nieuw bestand); dubbelklikken opent of sluit hem. Bestanden openen altijd met één klik.',
     explorerShowHidden: 'Verborgen bestanden tonen',
     explorerShowHiddenHint: 'Toont bestanden en mappen die met een punt beginnen (.git, .obsidian, .gitignore) en mappen met afbeeldingsbijlagen (_assets, *.assets) in de verkennerboom.',
     distinctSplitPanes: 'Editor en voorbeeld onderscheiden',
@@ -1786,6 +1788,7 @@ export const nl: I18n = {
     file: {
       new: 'Nieuw Markdown-bestand',
       newText: 'Nieuw platte-tekstbestand',
+      newInFolder: 'Nieuwe notitie in geselecteerde map',
       open: 'Bestand openen…',
       import: 'Documenten importeren…',
       save: 'Opslaan',

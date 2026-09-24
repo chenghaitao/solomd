@@ -48,7 +48,7 @@ interface ActiveOverlay {
   viewport: HTMLDivElement;
   contentEl: HTMLDivElement;
   zoomPct: HTMLSpanElement;
-  listeners: Array<{ el: EventTarget; type: string; fn: EventListener; opts?: AddEventListenerOptions }>;
+  listeners: Array<{ el: EventTarget; type: string; fn: EventListener; capture: boolean }>;
   triggerEl: HTMLElement | null;
   didPan: boolean;
 }
@@ -201,15 +201,13 @@ function on(
   opts?: AddEventListenerOptions,
 ) {
   el.addEventListener(type, fn, opts);
-  active!.listeners.push({ el, type, fn, opts });
+  active!.listeners.push({ el, type, fn, capture: !!opts?.capture });
 }
 
 function removeAllListeners() {
   if (!active) return;
-  // `opts` must be handed back: a capture listener is only removable by
-  // matching `capture`, and a leftover one keeps swallowing the key forever.
-  for (const { el, type, fn, opts } of active.listeners) {
-    el.removeEventListener(type, fn, opts);
+  for (const { el, type, fn, capture } of active.listeners) {
+    el.removeEventListener(type, fn, capture);
   }
   active.listeners.length = 0;
 }
@@ -500,33 +498,35 @@ export function openImageOverlay(opts: OverlayOptions) {
     zoomAt(scale + delta, e.clientX, e.clientY);
   }) as EventListener, { passive: false });
 
-  // Keyboard. Bound on the document, not on the backdrop: opening the overlay
-  // never moves focus into it (the file-tree row / preview keeps it), so a
-  // listener on the backdrop saw no key at all — Escape, which the header above
-  // has always advertised as a way out, did nothing. Same for the ⌘/Ctrl zoom
-  // keys. Capture phase so the overlay closes *before* the app's own Escape
-  // handlers (palettes, side panels) can act on the same keypress; a modal owns
-  // the keyboard while it is up.
-  on(document, 'keydown', ((e: KeyboardEvent) => {
+  // Keyboard — on the window, in the capture phase. #339: the overlay is
+  // opened from places that keep focus (a file-tree row, the editor), so a
+  // listener on the backdrop only heard Escape once something inside the
+  // overlay had been clicked. Capturing on the window also means the Escape
+  // that closes the viewer is not seen again by the editor or the app shell
+  // (leave focus mode, close the find bar, …) underneath it.
+  on(window, 'keydown', ((e: KeyboardEvent) => {
     const mod = e.metaKey || e.ctrlKey;
     if (e.key === 'Escape') {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       closeOverlay();
       return;
     }
     if (mod && (e.key === '=' || e.key === '+')) {
       e.preventDefault();
+      e.stopImmediatePropagation();
       zoomTo(scale + ZOOM_STEP);
       return;
     }
     if (mod && e.key === '-') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       zoomTo(scale - ZOOM_STEP);
       return;
     }
     if (mod && e.key === '0') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       fitToScreen();
       return;
     }

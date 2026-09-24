@@ -81,6 +81,7 @@ export function useShortcuts(hooks: Hooks = {}) {
   const actions: Record<string, () => boolean | void> = {
     'file.new': () => void files.newFile(),
     'file.newText': () => void files.newTextFile(),
+    'file.newInFolder': () => runById('file.newInFolder'),
     'file.open': () => void files.openFile(),
     'file.import': () => void files.importDocuments(),
     'file.save': () => void files.saveActive(),

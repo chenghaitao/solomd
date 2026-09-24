@@ -319,6 +319,8 @@ export const pl: I18n = {
     codeBlockWrapHint: 'Zawija wiersze kodu szersze niż blok zamiast pokazywać poziomy pasek przewijania. PDF/druk zawsze zawija.',
     explorerFullNames: 'Pełne nazwy plików w eksploratorze',
     explorerFullNamesHint: 'Zawija długie nazwy plików w drzewie bocznym zamiast skracać je wielokropkiem w środku.',
+    explorerDoubleClickFolders: 'Otwieraj foldery w eksploratorze dwukrotnym kliknięciem',
+    explorerDoubleClickFoldersHint: 'Pojedyncze kliknięcie folderu tylko go zaznacza (np. jako miejsce na nowy plik); dwukrotne kliknięcie go otwiera lub zamyka. Pliki zawsze otwierają się pojedynczym kliknięciem.',
     explorerShowHidden: 'Pokaż ukryte pliki',
     explorerShowHiddenHint: 'Wyświetla pliki i foldery zaczynające się od kropki (.git, .obsidian, .gitignore) oraz foldery z załącznikami graficznymi (_assets, *.assets) w drzewie plików.',
     distinctSplitPanes: 'Odróżnij edytor od podglądu',
@@ -1786,6 +1788,7 @@ export const pl: I18n = {
     file: {
       new: 'Nowy plik Markdown',
       newText: 'Nowy plik tekstowy',
+      newInFolder: 'Nowa notatka w zaznaczonym folderze',
       open: 'Otwórz plik…',
       import: 'Importuj dokumenty…',
       save: 'Zapisz',

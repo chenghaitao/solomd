@@ -35,10 +35,20 @@ const STRIP = 90;
 
 const ctx2d = (canvas: HTMLCanvasElement): CanvasRenderingContext2D => canvas.getContext('2d')!;
 
+/**
+ * Whether row `y` carries *text* ink: a pixel darker than any background,
+ * border or rule the export draws (the lightest text colour is the quote grey
+ * #6a6560). Not "any non-uniform row" — a table's column borders make every
+ * row inside a table non-uniform, and a cut between two table rows would then
+ * read as a shear although no glyph is touched (#337).
+ */
 function rowHasInk(canvas: HTMLCanvasElement, y: number): boolean {
   if (y < 0 || y >= canvas.height) return false;
-  const ctx = ctx2d(canvas);
-  return !isCleanRowData(ctx.getImageData(0, y, canvas.width, 1).data);
+  const d = ctx2d(canvas).getImageData(0, y, canvas.width, 1).data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] < 140) return true;
+  }
+  return false;
 }
 
 /** A boundary is sheared when ink sits on both sides of it — a sliced glyph. */
@@ -266,7 +276,7 @@ async function run(
   try {
     const raw = capture.canvas;
     if (!raw) throw new Error('html2pdf did not hand back a raster');
-    const { pageHeightPx, searchUpPx } = capture;
+    const { pageHeightPx, searchUpPx, lineHeightPx } = capture;
     const pageCount = Math.ceil(raw.height / pageHeightPx);
 
     // What the export used to produce: jsPDF slicing this very raster at a
@@ -286,7 +296,7 @@ async function run(
     }
 
     // What it produces now.
-    const paged = buildPagedCanvas(raw, pageHeightPx, searchUpPx);
+    const paged = buildPagedCanvas(raw, pageHeightPx, searchUpPx, lineHeightPx);
     if (!paged) throw new Error('buildPagedCanvas produced nothing');
     const exportBoundaries: BoundaryCheck[] = paged.breaks.map((cut, i) => {
       const boundary = (i + 1) * pageHeightPx;

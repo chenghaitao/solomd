@@ -9,7 +9,7 @@
 
 // html2pdf.js bundles html2canvas; we import it directly for image-only use.
 // @ts-ignore — no types
-import { inlineMermaidBlocks } from './mermaid-inline';
+import { initMermaid } from './mermaid-lazy';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import { rewriteImageUrls } from './image-resolve';
 
@@ -101,12 +101,31 @@ const IMAGE_CSS = `
   .img-footer .brand { color: #ff9f40; font-weight: 600; }
 `;
 
-/**
- * Diagrams sit on white paper, so the light theme is not negotiable here.
- * A broken diagram is skipped: the code block stays, the capture goes on.
- */
+let mermaidId = 0;
+
 async function processMermaidBlocks(container: HTMLElement) {
-  await inlineMermaidBlocks(container, { idPrefix: 'img-mmd-', theme: 'default', onError: 'skip' });
+  const blocks = container.querySelectorAll('pre > code.language-mermaid');
+  if (!blocks.length) return;
+  const mermaid = await initMermaid({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'default',
+  });
+  for (const block of Array.from(blocks)) {
+    const pre = block.parentElement as HTMLElement | null;
+    if (!pre) continue;
+    const code = (block.textContent || '').trim();
+    const id = `img-mmd-${++mermaidId}`;
+    try {
+      const { svg } = await mermaid.render(id, code);
+      const wrap = document.createElement('div');
+      wrap.className = 'mermaid-block';
+      wrap.innerHTML = svg;
+      pre.replaceWith(wrap);
+    } catch {
+      // silently skip broken mermaid
+    }
+  }
 }
 
 export async function markdownToImageBlob(

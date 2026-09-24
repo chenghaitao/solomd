@@ -288,6 +288,10 @@ interface Settings {
   // #182: show full file names in the Explorer tree (wrapped across lines)
   // instead of the default middle-ellipsis truncation.
   explorerFullNames: boolean;
+  // #338 — folders in the Explorer open on a double click instead of a single
+  // one (a single click then only selects the folder, e.g. as the target of
+  // "new file"). Files always open on a single click. Default off.
+  explorerDoubleClickFolders: boolean;
   // Show dot-files / dot-folders in the Explorer tree. Off by default: a
   // vault's `.git`, `.obsidian` and friends are noise for most people. On,
   // they're reachable from inside the app instead of only from Finder.
@@ -632,6 +636,7 @@ function defaults(): Settings {
     codeBlockLineNumbers: false,
     codeBlockWrap: false,
     explorerFullNames: false,
+    explorerDoubleClickFolders: false,
     explorerShowHidden: false,
     explorerExtFilter: [] as string[],
     distinctSplitPanes: false,
@@ -1329,6 +1334,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleExplorerFullNames() {
       this.explorerFullNames = !this.explorerFullNames;
+      this.persist();
+    },
+    toggleExplorerDoubleClickFolders() {
+      this.explorerDoubleClickFolders = !this.explorerDoubleClickFolders;
       this.persist();
     },
     toggleExplorerShowHidden() {
