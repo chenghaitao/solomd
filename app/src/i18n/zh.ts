@@ -317,6 +317,8 @@ export const zh: I18n = {
     codeBlockWrapHint: '超出代码块宽度的长行自动折行显示,不再出现横向滚动条。PDF/打印始终自动换行。',
     explorerFullNames: '文件树显示完整文件名',
     explorerFullNamesHint: '侧边栏文件树中的长文件名换行完整显示,不再用省略号截断中段。',
+    explorerDoubleClickFolders: '文件树中双击展开文件夹',
+    explorerDoubleClickFoldersHint: '单击文件夹只选中它(例如作为新建文件的位置),双击才展开或折叠。文件始终单击打开。',
     explorerShowHidden: '显示隐藏文件',
     explorerShowHiddenHint: '在文件树里列出以点开头的文件和文件夹（.git、.obsidian、.gitignore 等），以及存放图片附件的文件夹（_assets、*.assets）。',
     distinctSplitPanes: '区分编辑区与预览区',
@@ -1776,6 +1778,7 @@ export const zh: I18n = {
     file: {
       new: '新建 Markdown 文件',
       newText: '新建纯文本文件',
+      newInFolder: '在选中的文件夹中新建笔记',
       open: '打开文件…',
       import: '导入文档…',
       save: '保存',

@@ -315,6 +315,8 @@ export const sv: I18n = {
     codeBlockWrapHint: 'Radbryter kodrader som är bredare än blocket i stället för en horisontell rullningslist. PDF/utskrift radbryter alltid.',
     explorerFullNames: 'Fullständiga filnamn i utforskaren',
     explorerFullNamesHint: 'Radbryter långa filnamn i sidofältsträdet i stället för att korta dem med ellips i mitten.',
+    explorerDoubleClickFolders: 'Öppna mappar i utforskaren med dubbelklick',
+    explorerDoubleClickFoldersHint: 'Ett klick på en mapp markerar den bara (till exempel som plats för en ny fil); ett dubbelklick öppnar eller stänger den. Filer öppnas alltid med ett klick.',
     explorerShowHidden: 'Visa dolda filer',
     explorerShowHiddenHint: 'Visar filer och mappar som börjar med punkt (.git, .obsidian, .gitignore) samt mappar med bildbilagor (_assets, *.assets) i filträdet.',
     distinctSplitPanes: 'Skilj redigeraren från förhandsvisningen',
@@ -1789,6 +1791,7 @@ export const sv: I18n = {
     file: {
       new: 'Ny Markdown-fil',
       newText: 'Ny oformaterad textfil',
+      newInFolder: 'Ny anteckning i markerad mapp',
       open: 'Öppna fil…',
       import: 'Importera dokument…',
       save: 'Spara',

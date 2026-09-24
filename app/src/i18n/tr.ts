@@ -315,6 +315,8 @@ export const tr: I18n = {
     codeBlockWrapHint: 'Bloktan geniş kod satırlarını yatay kaydırma çubuğu yerine alt satıra kaydırır. PDF/yazdırma her zaman kaydırır.',
     explorerFullNames: 'Gezginde tam dosya adları',
     explorerFullNamesHint: 'Kenar çubuğu ağacındaki uzun dosya adlarını ortadan kısaltmak yerine alt satıra kaydırarak tam gösterir.',
+    explorerDoubleClickFolders: 'Gezginde klasörleri çift tıklamayla aç',
+    explorerDoubleClickFoldersHint: 'Bir klasöre tek tıklamak yalnızca onu seçer (örneğin yeni dosyanın konumu olarak); çift tıklama açar veya kapatır. Dosyalar her zaman tek tıklamayla açılır.',
     explorerShowHidden: 'Gizli dosyaları göster',
     explorerShowHiddenHint: 'Nokta ile başlayan dosya ve klasörleri (.git, .obsidian, .gitignore) ve görsel eki klasörlerini (_assets, *.assets) dosya ağacında listeler.',
     distinctSplitPanes: 'Düzenleyici ile önizlemeyi ayırt et',
@@ -1789,6 +1791,7 @@ export const tr: I18n = {
     file: {
       new: 'Yeni Markdown Dosyası',
       newText: 'Yeni Düz Metin Dosyası',
+      newInFolder: 'Seçili klasörde yeni not',
       open: 'Dosya Aç…',
       import: 'Belgeleri içe aktar…',
       save: 'Kaydet',

@@ -315,6 +315,8 @@ export const de: I18n = {
     codeBlockWrapHint: 'Bricht Codezeilen, die breiter als der Block sind, um statt horizontal zu scrollen. PDF/Druck bricht immer um.',
     explorerFullNames: 'Vollständige Dateinamen im Explorer',
     explorerFullNamesHint: 'Bricht lange Dateinamen im Seitenleistenbaum um, statt sie mit Auslassungspunkten in der Mitte zu kürzen.',
+    explorerDoubleClickFolders: 'Ordner im Explorer per Doppelklick öffnen',
+    explorerDoubleClickFoldersHint: 'Ein einfacher Klick auf einen Ordner wählt ihn nur aus (z. B. als Ziel für eine neue Datei); ein Doppelklick öffnet oder schließt ihn. Dateien öffnen sich immer mit einem einfachen Klick.',
     explorerShowHidden: 'Versteckte Dateien anzeigen',
     explorerShowHiddenHint: 'Zeigt Dateien und Ordner mit führendem Punkt (.git, .obsidian, .gitignore) sowie Ordner für Bildanhänge (_assets, *.assets) im Explorer-Baum.',
     distinctSplitPanes: 'Editor- und Vorschaubereich unterscheiden',
@@ -1772,6 +1774,7 @@ export const de: I18n = {
     file: {
       new: 'Neue Markdown-Datei',
       newText: 'Neue Klartextdatei',
+      newInFolder: 'Neue Notiz im ausgewählten Ordner',
       open: 'Datei öffnen…',
       import: 'Dokumente importieren…',
       save: 'Speichern',

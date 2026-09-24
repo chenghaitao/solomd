@@ -315,6 +315,8 @@ export const it: I18n = {
     codeBlockWrapHint: 'Manda a capo le righe di codice più larghe del blocco invece di mostrare una barra di scorrimento orizzontale. PDF/stampa va sempre a capo.',
     explorerFullNames: 'Nomi file completi nell’esplora risorse',
     explorerFullNamesHint: 'Manda a capo i nomi lunghi nell’albero laterale invece di abbreviarli con i puntini centrali.',
+    explorerDoubleClickFolders: 'Apri le cartelle dell’esplora risorse con doppio clic',
+    explorerDoubleClickFoldersHint: 'Un clic su una cartella la seleziona soltanto (ad esempio come destinazione di un nuovo file); un doppio clic la apre o la chiude. I file si aprono sempre con un solo clic.',
     explorerShowHidden: 'Mostra i file nascosti',
     explorerShowHiddenHint: 'Elenca file e cartelle che iniziano con un punto (.git, .obsidian, .gitignore) e le cartelle degli allegati immagine (_assets, *.assets) nell’albero laterale.',
     distinctSplitPanes: 'Distingui editor e anteprima',
@@ -1772,6 +1774,7 @@ export const it: I18n = {
     file: {
       new: 'Nuovo file Markdown',
       newText: 'Nuovo file di testo semplice',
+      newInFolder: 'Nuova nota nella cartella selezionata',
       open: 'Apri file…',
       import: 'Importa documenti…',
       save: 'Salva',

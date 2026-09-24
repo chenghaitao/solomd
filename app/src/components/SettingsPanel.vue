@@ -770,6 +770,18 @@ function onSelectPdfFont(v: string) {
           <label>
             <input
               type="checkbox"
+              :checked="settings.explorerDoubleClickFolders"
+              @change="settings.toggleExplorerDoubleClickFolders()"
+            />
+            {{ t('settings.explorerDoubleClickFolders') }}
+          </label>
+          <p class="setting-hint">{{ t('settings.explorerDoubleClickFoldersHint') }}</p>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input
+              type="checkbox"
               :checked="settings.explorerShowHidden"
               @change="settings.toggleExplorerShowHidden()"
             />

@@ -29,6 +29,7 @@ import { useAutoCommit } from './useAutoCommit';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { useGitHistoryStore } from '../stores/gitHistory';
 import { useWorkspaceStore } from '../stores/workspace';
+import { requestNewFileInTree } from './useFileTreeNewFile';
 import { useGithubSyncStore } from '../stores/githubSync';
 import { useGithubSync } from './useGithubSync';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
@@ -151,6 +152,20 @@ export function useCommands(): Command[] {
   const all: Command[] = [
     { id: 'file.new', title: 'New Markdown File', shortcut: kb('file.new'), run: () => files.newFile() },
     { id: 'file.newText', title: 'New Plain Text File', shortcut: kb('file.newText'), run: () => files.newTextFile() },
+    {
+      // #338 — create in the folder selected in the file tree (the selected
+      // file's folder for a file), named inline like the tree's own ＋. With
+      // no folder open there is no tree to name it in, so it is a plain new
+      // note.
+      id: 'file.newInFolder',
+      title: 'New Note in Selected Folder',
+      shortcut: kb('file.newInFolder'),
+      run: () => {
+        if (!ws.currentFolder) return void files.newFile();
+        if (!settings.showFileTree) settings.toggleFileTree();
+        requestNewFileInTree();
+      },
+    },
     { id: 'file.open', title: 'Open File…', shortcut: kb('file.open'), run: () => files.openFile() },
     { id: 'file.save', title: 'Save', shortcut: kb('file.save'), run: () => files.saveActive() },
     { id: 'file.saveAs', title: 'Save As…', shortcut: kb('file.saveAs'), run: () => files.saveActiveAs() },
