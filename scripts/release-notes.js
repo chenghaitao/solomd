@@ -5,7 +5,13 @@
 // plus the static Install / Verify blocks.
 //
 //   node scripts/release-notes.js v4.14.5 > notes.md
+//   node scripts/release-notes.js v4.14.5 notes.md   (writes the file itself)
 //   gh release edit v4.14.5 --notes-file notes.md
+//
+// The optional second argument exists for Windows: piping Node's stdout through
+// PowerShell re-decodes it with the console code page and turns the Chinese in
+// these notes into mojibake, and `>` writes UTF-16. fs.writeFileSync is UTF-8
+// with no BOM, which is what `gh --notes-file` expects.
 //
 // The body used to open with two links to solomd.app/whats-new — upstream's
 // site, describing upstream's releases, on a fork build. A reader had to leave
@@ -29,6 +35,7 @@ const fs = require('fs');
 const path = require('path');
 
 const tag = process.argv[2] || '';
+const outPath = process.argv[3] || '';
 const version = tag.replace(/^v/, '');
 
 if (!version) {
@@ -101,4 +108,5 @@ Windows 版尚未代码签名，Chrome「增强保护」会扫描每个新版本
 🤖 Auto-built by GitHub Actions
 `;
 
-process.stdout.write(body);
+process.stdout.write(outPath ? '' : body);
+if (outPath) fs.writeFileSync(outPath, body, 'utf8');
