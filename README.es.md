@@ -2,14 +2,16 @@
 
 > El editor donde viven los agentes.
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)**
 
-[**Descargar v4.0**](https://github.com/zhitongblog/solomd/releases/latest) · [**Post de lanzamiento**](https://solomd.app/blog/v4-0-0-agent-native-author/) · [**Sitio web**](https://solomd.app) · [**Seguridad**](https://solomd.app/security)
+[**Descargar v4.0**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **Este repositorio es un fork de [zhitongblog/solomd](https://github.com/zhitongblog/solomd).**
+> Todos los cambios locales y las diferencias con el upstream están en [`CHANGELOG.md`](CHANGELOG.md).
 
 ![Editor SoloMD](web/public/demo/solomd-demo.svg)
 
@@ -97,43 +99,19 @@ Path-traversal protegido. Sin puerto de red. El LLM solo ve a lo que apuntes el 
 
 ## Instalación
 
-Última release: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+Última release: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
 ### macOS — universal dmg (Apple Silicon + Intel, firmado + notarizado)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-O descargar el dmg directamente:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-O instalación shell de una línea:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+Descarga el `.dmg` universal desde la [última release](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe) (NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — sin instalador
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+Descarga el `.msi` (instalador), el `.exe` (NSIS) o el `-portable.zip` (sin instalador) desde la [última release](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage` (universal), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — ambas arquitecturas desde [la página de releases](https://github.com/zhitongblog/solomd/releases/latest).
+- `.AppImage` (universal), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — ambas arquitecturas desde [la página de releases](https://github.com/chenghaitao/solomd/releases/latest).
 - Usuarios Arch: [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin) en AUR.
 
 ### iPad
@@ -148,14 +126,12 @@ Puramente del lado del cliente. Tus archivos `.md` permanecen en la carpeta que 
 
 La sync E2EE usa Argon2id (parámetros por defecto RFC9106) → XChaCha20-Poly1305 con nonces deterministas y ruta-como-AAD. El texto plano permanece en tus dispositivos; el remoto solo ve cifrado. El parseo fallido de `sync.json` es fail-closed — rehúsa empujar en lugar de degradarse a texto plano (un fix de auditoría v3.0.x).
 
-Writeup completo: <https://solomd.app/security>.
-
 ## Compilar desde fuente
 
 Requisitos: Rust (stable), Node 18+, pnpm.
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # dev con hot reload
@@ -168,15 +144,8 @@ El servidor MCP es un crate separado en `mcp-server/`; el harness MCP dev usado 
 
 ## Contribuir
 
-Issues y PRs bienvenidos — [abre uno](https://github.com/zhitongblog/solomd/issues). Para un sentido de la dirección, ver [`docs/roadmap.md`](docs/roadmap.md). El log de build v4.0 está en [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) — empieza ahí si quieres entender los principios de ingeniería antes de enviar un PR.
-
-## Contacto
-
-Un mantenedor, dos puertas de entrada. Asíncrono en [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions). Chat en tiempo real:
-
-- **Telegram (internacional):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — anuncios de release + chat
-- **WeChat (中文):** escanea para añadirme — nota "SoloMD"
+Issues y PRs bienvenidos — [abre uno](https://github.com/chenghaitao/solomd/issues). Para un sentido de la dirección, ver [`docs/roadmap.md`](docs/roadmap.md) y [`CHANGELOG.md`](CHANGELOG.md), que lista los cambios de este fork frente al upstream.
 
 ## Licencia y créditos
 
-[MIT](LICENSE) © 2026 xiangdong li. SoloMD se apoya en Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` y `rmcp`. Patrocina en [GitHub Sponsors](https://github.com/sponsors/zhitongblog) o vía [solomd.app/#sponsor](https://solomd.app/#sponsor).
+[MIT](LICENSE) © 2026 xiangdong li. SoloMD se apoya en Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` y `rmcp`. El proyecto upstream se patrocina en [GitHub Sponsors](https://github.com/sponsors/zhitongblog).

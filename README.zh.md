@@ -2,15 +2,16 @@
 
 > 让 Agent 住进来的编辑器。
 
-[![最新版本](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![下载量](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![官网](https://img.shields.io/badge/官网-solomd.app-ff9f40.svg)](https://solomd.app/zh)
-[![Gitee 镜像](https://img.shields.io/badge/镜像-gitee.com%2Fzhitong45%2Fsolomd-c71d23.svg)](https://gitee.com/zhitong45/solomd)
+[![最新版本](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![下载量](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)**
 
-[**下载 v4.0**](https://github.com/zhitongblog/solomd/releases/latest) · [**Gitee 镜像下载**](https://gitee.com/zhitong45/solomd/releases) · [**v4.0 发布说明**](https://solomd.app/zh/blog/v4-0-0-agent-native-author/) · [**官网**](https://solomd.app/zh) · [**安全说明**](https://solomd.app/zh/security)
+[**下载最新版本**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **本仓库是 [zhitongblog/solomd](https://github.com/zhitongblog/solomd) 的 fork。**
+> 本 fork 的每次改动、以及与上游的功能差异,都记在 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ![SoloMD 编辑器](web/public/demo/solomd-demo.svg)
 
@@ -96,46 +97,22 @@ solomd agent "把这周的 daily 整理成 weekly review，提交并推送"
 
 ## 安装
 
-最新版本:[**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest)。
+构建产物在 [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases)——每次打 tag 由 CI 构建(msi / NSIS exe / 免安装 zip / AppImage / deb / rpm)。
 
 **系统要求:**Windows 10+、macOS 10.15+、主流 Linux 发行版、iOS 15+、Android 7+(API 24)。
 Windows 7/8/8.1 无法支持——编译 SoloMD 的 Rust 工具链自 1.78 起要求 Windows 10,且微软已将 Windows 7 上的 WebView2(SoloMD 的渲染引擎)冻结在 109 版并停止安全更新——也不存在可用的历史版本。
 
 ### macOS — universal dmg(Apple Silicon + Intel,已签名 + 公证)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-或直接下 dmg:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-或 curl 一键安装:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+从 [最新发布](https://github.com/chenghaitao/solomd/releases/latest) 下载通用 `.dmg`。
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe)(NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — 免安装版
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+从 [最新发布](https://github.com/chenghaitao/solomd/releases/latest) 下载 `.msi`(安装版)、`.exe`(NSIS)或 `-portable.zip`(免安装版)。
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage`(通用)、`.deb`(Debian/Ubuntu)、`.rpm`(Fedora/RHEL)—— 两种架构都在 [发布页](https://github.com/zhitongblog/solomd/releases/latest)。
+- `.AppImage`(通用)、`.deb`(Debian/Ubuntu)、`.rpm`(Fedora/RHEL)—— 两种架构都在 [发布页](https://github.com/chenghaitao/solomd/releases/latest)。
 - Arch 用户:[`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin)(AUR)。
 
 ### iPad
@@ -164,7 +141,7 @@ winget install solomd
 | Markdown 白板(tldraw) | ❌ | 🟡 Canvas(私有格式) | ❌ | ✅ |
 | CJK 编码(GBK / Big5) | ✅ 自动识别 | ❌ | ❌ | ❌ |
 
-详细对比:[vs Obsidian](https://solomd.app/zh/compare/vs-obsidian) · [vs Typora](https://solomd.app/zh/compare/vs-typora) · [vs Tolaria](https://solomd.app/zh/compare/vs-tolaria) · [vs Marktext](https://solomd.app/zh/compare/vs-marktext)。
+详细对比见上面的表格。
 
 ## 隐私与安全
 
@@ -174,14 +151,14 @@ winget install solomd
 
 E2EE 同步用 Argon2id(RFC9106 默认参数)→ XChaCha20-Poly1305,确定性 nonce + path-as-AAD。明文留在你的设备上;远端只看到密文。`sync.json` 解析失败会**拒绝推送**,绝不降级到明文(v3.0.x 审计修过的一条)。
 
-完整说明:<https://solomd.app/zh/security>。
+完整说明见上文「隐私与安全」。
 
 ## 从源码编译
 
 依赖:Rust(stable)、Node 18+、pnpm。
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # 热重载开发
@@ -194,21 +171,10 @@ MCP server 是独立 crate,在 `mcp-server/` 目录;端到端测试用的 dev MC
 
 ## 贡献
 
-欢迎 Issue / PR —— [开一个](https://github.com/zhitongblog/solomd/issues)。方向参考 [`docs/roadmap.md`](docs/roadmap.md)。v4.0 的工程笔记在 [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) —— 想理解工程原则后再 PR,从这里开始。
-
-## 联系
-
-一个维护者,两个入口。异步:[GitHub Discussions](https://github.com/zhitongblog/solomd/discussions)。即时:
-
-- **Telegram(国际):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — 发版通知 + 闲聊
-- **微信(中文):** 扫码加我,备注 "SoloMD"
-
-<a href="https://solomd.app/#contact"><img src="web/public/contact/wechat.jpg" alt="微信 — 智通" width="180" /></a>
-&nbsp;&nbsp;
-<a href="https://t.me/SOLOMDAPP"><img src="web/public/contact/telegram.jpg" alt="Telegram @SOLOMDAPP" width="180" /></a>
+欢迎 Issue / PR —— [开一个](https://github.com/chenghaitao/solomd/issues)。方向参考 [`docs/roadmap.md`](docs/roadmap.md),与上游的差异见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## License & 致谢
 
-[MIT](LICENSE) © 2026 xiangdong li。SoloMD 站在 Tauri 2、Vue 3、CodeMirror 6、markdown-it、KaTeX、Mermaid、libgit2、Pandoc、Hunspell、`keyring-rs` 和 `rmcp` 的肩膀上。赞助:[GitHub Sponsors](https://github.com/sponsors/zhitongblog) 或 [solomd.app/#sponsor](https://solomd.app/#sponsor)。
+[MIT](LICENSE) © 2026 xiangdong li。SoloMD 站在 Tauri 2、Vue 3、CodeMirror 6、markdown-it、KaTeX、Mermaid、libgit2、Pandoc、Hunspell、`keyring-rs` 和 `rmcp` 的肩膀上。上游的赞助入口:[GitHub Sponsors](https://github.com/sponsors/zhitongblog)。
 </content>
 </invoke>

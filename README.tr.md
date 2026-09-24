@@ -2,14 +2,16 @@
 
 > Ajanların yaşadığı editör.
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)**
 
-[**v4.0'u indir**](https://github.com/zhitongblog/solomd/releases/latest) · [**Lansman yazısı**](https://solomd.app/blog/v4-0-0-agent-native-author/) · [**Web sitesi**](https://solomd.app) · [**Güvenlik**](https://solomd.app/security)
+[**v4.0'u indir**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **Bu depo [zhitongblog/solomd](https://github.com/zhitongblog/solomd) projesinin bir fork'udur.**
+> Tüm yerel değişiklikler ve upstream'den farkları [`CHANGELOG.md`](CHANGELOG.md) dosyasında.
 
 ![SoloMD Editor](web/public/demo/solomd-demo.svg)
 
@@ -97,43 +99,19 @@ Path traversal'a karşı korumalı. Ağ portu yok. LLM yalnızca çalışma alan
 
 ## Kurulum
 
-En son sürüm: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+En son sürüm: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
 ### macOS — Universal dmg (Apple Silicon + Intel, imzalı + noterlenmiş)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-Veya dmg'yi doğrudan indirin:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-Veya tek satırlık shell kurulumu:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+Evrensel `.dmg` dosyasını [en son sürümden](https://github.com/chenghaitao/solomd/releases/latest) indirin.
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe) (NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — kurulumcu yok
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+`.msi` (kurulum), `.exe` (NSIS) veya `-portable.zip` (kurulum gerekmez) dosyasını [en son sürümden](https://github.com/chenghaitao/solomd/releases/latest) indirin.
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage` (evrensel), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — her iki mimari de [sürümler sayfasından](https://github.com/zhitongblog/solomd/releases/latest).
+- `.AppImage` (evrensel), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — her iki mimari de [sürümler sayfasından](https://github.com/chenghaitao/solomd/releases/latest).
 - Arch kullanıcıları: AUR'da [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin).
 
 ### iPad
@@ -148,14 +126,12 @@ Saf istemci tarafı. `.md` dosyalarınız seçtiğiniz klasörde kalır. API ana
 
 E2EE senkronizasyonu Argon2id (RFC9106 varsayılan parametreleri) → deterministik nonce'lar ve AAD olarak yol ile XChaCha20-Poly1305 kullanır. Düz metin cihazlarınızda kalır; uzaktaki yalnızca şifreli metni görür. `sync.json` ayrıştırma başarısızlığı fail-closed'tır — düz metne düşmek yerine push'u reddeder (bir v3.0.x denetim düzeltmesi).
 
-Tam yazı: <https://solomd.app/security>.
-
 ## Kaynaktan derleme
 
 Önkoşullar: Rust (stable), Node 18+, pnpm.
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # hot reload ile dev
@@ -168,15 +144,8 @@ MCP sunucusu `mcp-server/` altında ayrı bir crate'tir; uçtan uca testler içi
 
 ## Katkıda bulunma
 
-Issue ve PR'lar memnuniyetle karşılanır — [bir tane açın](https://github.com/zhitongblog/solomd/issues). Yön hissi için [`docs/roadmap.md`](docs/roadmap.md)'e bakın. v4.0 derleme günlüğü [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) adresindedir — bir PR göndermeden önce mühendislik ilkelerini anlamak istiyorsanız oradan başlayın.
-
-## İletişim
-
-Tek bir bakımcı, iki ön kapı. Asenkron olarak [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions). Gerçek zamanlı sohbet:
-
-- **Telegram (uluslararası):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — sürüm duyuruları + sohbet
-- **WeChat (中文):** beni eklemek için tarayın — not "SoloMD"
+Issue ve PR'lar memnuniyetle karşılanır — [bir tane açın](https://github.com/chenghaitao/solomd/issues). Yön hissi için [`docs/roadmap.md`](docs/roadmap.md)'e ve upstream'den farklar için [`CHANGELOG.md`](CHANGELOG.md) dosyasına bakın.
 
 ## Lisans ve katkıda bulunanlar
 
-[MIT](LICENSE) © 2026 xiangdong li. SoloMD; Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` ve `rmcp` üzerinde durur. [GitHub Sponsors](https://github.com/sponsors/zhitongblog) veya [solomd.app/#sponsor](https://solomd.app/#sponsor) üzerinden sponsor olun.
+[MIT](LICENSE) © 2026 xiangdong li. SoloMD; Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` ve `rmcp` üzerinde durur. Upstream, [GitHub Sponsors](https://github.com/sponsors/zhitongblog) üzerinden destekleniyor.

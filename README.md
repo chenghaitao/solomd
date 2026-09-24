@@ -2,14 +2,16 @@
 
 > The editor where agents live.
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
-🌐 **[中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)** · 🪞 **[Gitee mirror →](https://gitee.com/zhitong45/solomd)** (faster downloads from China)
+🌐 **[中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)**
 
-[**Download the latest release**](https://github.com/zhitongblog/solomd/releases/latest) · [**Launch post**](https://solomd.app/blog/v4-0-0-agent-native-author/) · [**How we built it**](https://solomd.app/blog/v4-0-0-how-we-built-it/) · [**Website**](https://solomd.app) · [**Security**](https://solomd.app/security)
+[**Download the latest release**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **This is a fork of [zhitongblog/solomd](https://github.com/zhitongblog/solomd).**
+> Downloads, release notes and every local change — including how this fork differs from upstream — are in [`CHANGELOG.md`](CHANGELOG.md).
 
 ![SoloMD editor](web/public/demo/solomd-demo.svg)
 
@@ -40,7 +42,7 @@ The structural half Obsidian and Tolaria had and SoloMD didn't — now built, an
 - **Inbox workflow** — `⌘E` mark-organized + auto-advance to inbox-zero.
 - **tldraw whiteboards** — Markdown-backed boards (` ```tldraw ` fence), cross-compatible with Tolaria's on-disk format, lazy-loaded so the core stays light.
 
-Plus a **unified macOS title bar** (traffic lights inline in the toolbar) and a from-scratch design-system + Vue component library. Still ~15–32 MB, still free, still local-first. → [Compare vs Obsidian / Typora / Tolaria](https://solomd.app/compare)
+Plus a **unified macOS title bar** (traffic lights inline in the toolbar) and a from-scratch design-system + Vue component library. Still ~15–32 MB, still free, still local-first. → [Compare vs Obsidian / Typora / Tolaria](#compared)
 
 ## Three halves of one product
 
@@ -111,45 +113,23 @@ Path-traversal guarded. No network port. The LLM only sees what you point the wo
 
 ## Install
 
-Latest release: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+Builds: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases) — every tag is built by CI (msi / NSIS exe / portable zip / AppImage / deb / rpm).
 
 **System requirements:** Windows 10+, macOS 10.15+, current mainstream Linux, iOS 15+, Android 7+ (API 24).
 Windows 7/8/8.1 cannot be supported — the Rust toolchain requires Windows 10 (since Rust 1.78) and Microsoft froze WebView2 (SoloMD's rendering engine) at version 109 on Windows 7 with no security updates — and no legacy build exists.
 
 ### macOS — universal dmg (Apple Silicon + Intel, signed + notarized)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-Or download the dmg directly:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-Or one-line shell install:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+Download the universal `.dmg` from the [latest release](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — no installer
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+Grab the `.msi` (installer) or the `-portable.zip` (no installer) from the
+[latest release](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage` (universal), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — both architectures from [the releases page](https://github.com/zhitongblog/solomd/releases/latest).
+- `.AppImage` (universal), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — both architectures from [the releases page](https://github.com/chenghaitao/solomd/releases/latest).
 - Arch users: [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin) on AUR.
 
 ### iPad
@@ -171,7 +151,7 @@ The bundled `solomd-mcp` server runs against any folder of Markdown files — yo
 
 Available as:
 
-- **[Skill Pack](https://github.com/zhitongblog/solomd/releases/latest/download/solomd-skills-v4.4.1.zip)** — 11 reference Agent Recipes (weekly review, todo extract, link suggester, …) you can drop into `<vault>/.solomd/agents/`. Ships with every release.
+- **[Skill Pack](https://github.com/chenghaitao/solomd/releases/latest/download/solomd-skills-v4.4.1.zip)** — 11 reference Agent Recipes (weekly review, todo extract, link suggester, …) you can drop into `<vault>/.solomd/agents/`. Ships with every release.
 - **[Claude Code Skill](marketplace/claude-code-skill/)** — `SKILL.md` + `install.sh` that registers `solomd-mcp` as a user-scope MCP server and exposes the 13 tools to Claude Code with patterns and starter recipes.
 - **Smithery** — `smithery.yaml` + Dockerfile at [`marketplace/smithery/`](marketplace/smithery/) (submission pending).
 - **Awesome MCP Servers** — PR entries for the three biggest community indices (`punkpeye/`, `appcypher/`, `wong2/awesome-mcp-servers`, ~14k forks combined) at [`marketplace/awesome-mcp/`](marketplace/awesome-mcp/).
@@ -200,8 +180,6 @@ Full overview + submission status: [`marketplace/README.md`](marketplace/README.
 | Markdown whiteboards (tldraw) | ❌ | 🟡 Canvas (own format) | ❌ | ✅ |
 | CJK encodings (GBK / Big5) | ✅ auto-detect | ❌ | ❌ | ❌ |
 
-Detailed breakdowns: [vs Obsidian](https://solomd.app/compare/vs-obsidian) · [vs Typora](https://solomd.app/compare/vs-typora) · [vs Tolaria](https://solomd.app/compare/vs-tolaria) · [vs Marktext](https://solomd.app/compare/vs-marktext).
-
 ## Privacy & security
 
 Pure client-side. Your `.md` files stay in the folder you chose. API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Linux libsecret), never in `localStorage` or any config file. AI requests go direct from your machine to the provider you picked — no SoloMD relay. RAG embeddings and the AutoGit repo are local-only. The MCP server speaks stdio, never opens a network port. The whole codebase is MIT and auditable.
@@ -210,14 +188,12 @@ Pure client-side. Your `.md` files stay in the folder you chose. API keys live i
 
 E2EE sync uses Argon2id (RFC9106 default params) → XChaCha20-Poly1305 with deterministic nonces and path-as-AAD. Plaintext stays on your devices; the remote sees only ciphertext. Failed `sync.json` parsing is fail-closed — refuses to push rather than degrading to plaintext (a v3.0.x audit fix).
 
-Full writeup: <https://solomd.app/security>.
-
 ## Build from source
 
 Prereqs: Rust (stable), Node 18+, pnpm.
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # dev with hot reload
@@ -230,19 +206,8 @@ The MCP server is a separate crate at `mcp-server/`; the dev MCP harness used fo
 
 ## Contributing
 
-Issues and PRs welcome — [open one](https://github.com/zhitongblog/solomd/issues). For a sense of direction, see [`docs/roadmap.md`](docs/roadmap.md). The v4.0 build log is at [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) — start there if you want to understand the engineering principles before sending a PR.
-
-## Contact / 联系
-
-One maintainer, two front doors. Async on [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions). Real-time chat:
-
-- **Telegram (international):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — release announcements + chat
-- **WeChat (中文):** scan to add me — note "SoloMD" 注明 SoloMD 直接通过
-
-<a href="https://solomd.app/#contact"><img src="web/public/contact/wechat.jpg" alt="WeChat — 智通" width="180" /></a>
-&nbsp;&nbsp;
-<a href="https://t.me/SOLOMDAPP"><img src="web/public/contact/telegram.jpg" alt="Telegram @SOLOMDAPP" width="180" /></a>
+Issues and PRs welcome — [open one](https://github.com/chenghaitao/solomd/issues). For a sense of direction, see [`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md), which lists what this fork changes relative to upstream.
 
 ## License & credits
 
-[MIT](LICENSE) © 2026 xiangdong li. SoloMD stands on Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs`, and `rmcp`. Sponsor on [GitHub Sponsors](https://github.com/sponsors/zhitongblog) or via [solomd.app/#sponsor](https://solomd.app/#sponsor).
+[MIT](LICENSE) © 2026 xiangdong li. SoloMD stands on Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs`, and `rmcp`. Upstream development is sponsored via [GitHub Sponsors](https://github.com/sponsors/zhitongblog).

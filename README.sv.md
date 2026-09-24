@@ -2,14 +2,16 @@
 
 > Editorn där agenter bor.
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Українська](README.uk.md)**
 
-[**Ladda ner v4.0**](https://github.com/zhitongblog/solomd/releases/latest) · [**Lanseringsinlägg**](https://solomd.app/blog/v4-0-0-agent-native-author/) · [**Webbplats**](https://solomd.app) · [**Säkerhet**](https://solomd.app/security)
+[**Ladda ner v4.0**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **Det här repot är en fork av [zhitongblog/solomd](https://github.com/zhitongblog/solomd).**
+> Alla lokala ändringar och skillnaderna mot upstream finns i [`CHANGELOG.md`](CHANGELOG.md).
 
 ![SoloMD Editor](web/public/demo/solomd-demo.svg)
 
@@ -97,43 +99,19 @@ Path traversal-skyddad. Ingen nätverksport. LLM:et ser bara det du pekar worksp
 
 ## Installation
 
-Senaste release: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+Senaste release: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
 ### macOS — Universell dmg (Apple Silicon + Intel, signerad + notariserad)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-Eller ladda ner dmg direkt:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-Eller en-rads shell-installation:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+Ladda ner den universella `.dmg`-filen från [senaste releasen](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe) (NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — ingen installer
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+Ladda ner `.msi` (installationsprogram), `.exe` (NSIS) eller `-portable.zip` (ingen installer) från [senaste releasen](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage` (universell), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — båda arkitekturerna från [releases-sidan](https://github.com/zhitongblog/solomd/releases/latest).
+- `.AppImage` (universell), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — båda arkitekturerna från [releases-sidan](https://github.com/chenghaitao/solomd/releases/latest).
 - Arch-användare: [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin) på AUR.
 
 ### iPad
@@ -148,14 +126,12 @@ Rent klientsidigt. Dina `.md`-filer stannar i mappen du valde. API-nycklar bor i
 
 E2EE-sync använder Argon2id (RFC9106 standardparametrar) → XChaCha20-Poly1305 med deterministiska nonces och sökväg-som-AAD. Klartext stannar på dina enheter; remote ser bara chiffertext. Misslyckad `sync.json`-parsning är fail-closed — vägrar pusha istället för att degradera till klartext (en v3.0.x revisionsfix).
 
-Fullständig genomgång: <https://solomd.app/security>.
-
 ## Bygga från källa
 
 Förkrav: Rust (stable), Node 18+, pnpm.
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # dev med hot reload
@@ -168,15 +144,8 @@ MCP-servern är en separat crate under `mcp-server/`; dev-MCP-harnesset för end
 
 ## Bidra
 
-Issues och PR:s välkomna — [öppna ett](https://github.com/zhitongblog/solomd/issues). För en känsla av riktningen, se [`docs/roadmap.md`](docs/roadmap.md). v4.0-byggloggen finns på [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) — börja där om du vill förstå ingenjörsprinciperna innan du skickar en PR.
-
-## Kontakt
-
-En underhållare, två ytterdörrar. Asynkront på [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions). Realtidschatt:
-
-- **Telegram (internationellt):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — release-aviseringar + chatt
-- **WeChat (中文):** skanna för att lägga till mig — notera "SoloMD"
+Issues och PR:s välkomna — [öppna ett](https://github.com/chenghaitao/solomd/issues). För en känsla av riktningen, se [`docs/roadmap.md`](docs/roadmap.md) och [`CHANGELOG.md`](CHANGELOG.md) för skillnaderna mot upstream.
 
 ## Licens och credits
 
-[MIT](LICENSE) © 2026 xiangdong li. SoloMD står på Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` och `rmcp`. Sponsra via [GitHub Sponsors](https://github.com/sponsors/zhitongblog) eller [solomd.app/#sponsor](https://solomd.app/#sponsor).
+[MIT](LICENSE) © 2026 xiangdong li. SoloMD står på Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` och `rmcp`. Upstream sponsras via [GitHub Sponsors](https://github.com/sponsors/zhitongblog).

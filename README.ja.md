@@ -2,14 +2,16 @@
 
 > Agent が住みつくエディタ。
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [中文](README.zh.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)**
 
-[**v4.0 をダウンロード**](https://github.com/zhitongblog/solomd/releases/latest) · [**ローンチ記事**](https://solomd.app/ja/blog/) · [**ウェブサイト**](https://solomd.app/ja/) · [**セキュリティ**](https://solomd.app/ja/security/)
+[**v4.0 をダウンロード**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **このリポジトリは [zhitongblog/solomd](https://github.com/zhitongblog/solomd) の fork です。**
+> 本 fork の変更点と上流との差分は [`CHANGELOG.md`](CHANGELOG.md) にまとめています。
 
 ![SoloMD エディタ](web/public/demo/solomd-demo.svg)
 
@@ -97,43 +99,19 @@ solomd agent "今週の日報を週次レビューに書き直してコミット
 
 ## インストール
 
-最新リリース: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+最新リリース: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
 ### macOS — universal dmg（Apple Silicon + Intel、署名 + notarize 済み）
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-または dmg を直接ダウンロード:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-または 1 行シェルインストール:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+ユニバーサル `.dmg` を [最新リリース](https://github.com/chenghaitao/solomd/releases/latest) からダウンロードしてください。
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe) (NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — インストーラなし
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+`.msi`（インストーラ）、`.exe`（NSIS）、`-portable.zip`（インストーラなし）を [最新リリース](https://github.com/chenghaitao/solomd/releases/latest) からダウンロードしてください。
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage`（ユニバーサル）、`.deb`（Debian/Ubuntu）、`.rpm`（Fedora/RHEL） — 両アーキテクチャを [リリースページ](https://github.com/zhitongblog/solomd/releases/latest) から。
+- `.AppImage`（ユニバーサル）、`.deb`（Debian/Ubuntu）、`.rpm`（Fedora/RHEL） — 両アーキテクチャを [リリースページ](https://github.com/chenghaitao/solomd/releases/latest) から。
 - Arch ユーザー: AUR の [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin)。
 
 ### iPad
@@ -148,14 +126,12 @@ winget install solomd
 
 E2EE 同期は Argon2id（RFC9106 デフォルトパラメータ） → XChaCha20-Poly1305、決定論的 nonce、パスを AAD として使用。平文はあなたのデバイスに残り、リモートには暗号文のみ。`sync.json` パース失敗は fail-closed — 平文降格よりも push 拒否（v3.0.x 監査での修正）。
 
-詳細: <https://solomd.app/ja/security/>。
-
 ## ソースからビルド
 
 前提: Rust（stable）、Node 18+、pnpm。
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # ホットリロード付き dev
@@ -168,15 +144,8 @@ MCP サーバーは `mcp-server/` の別 crate; エンドツーエンドテス�
 
 ## コントリビュート
 
-Issue や PR を歓迎 — [開いてください](https://github.com/zhitongblog/solomd/issues)。方向性は [`docs/roadmap.md`](docs/roadmap.md) を参照。v4.0 のビルドログは [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) に — PR を送る前にエンジニアリング原則を理解したいならそこから。
-
-## お問い合わせ
-
-メンテナは 1 人、入り口は 2 つ。非同期は [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions)。リアルタイムチャット:
-
-- **Telegram（国際）:** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — リリース告知 + チャット
-- **WeChat（中文）:** スキャンで友達追加 — 「SoloMD」と書いてください
+Issue や PR を歓迎 — [開いてください](https://github.com/chenghaitao/solomd/issues)。方向性は [`docs/roadmap.md`](docs/roadmap.md) を、上流との差分は [`CHANGELOG.md`](CHANGELOG.md) を参照。
 
 ## ライセンス & クレジット
 
-[MIT](LICENSE) © 2026 xiangdong li。SoloMD は Tauri 2、Vue 3、CodeMirror 6、markdown-it、KaTeX、Mermaid、libgit2、Pandoc、Hunspell、`keyring-rs`、`rmcp` の上に立っています。[GitHub Sponsors](https://github.com/sponsors/zhitongblog) または [solomd.app/#sponsor](https://solomd.app/#sponsor) で後援を。
+[MIT](LICENSE) © 2026 xiangdong li。SoloMD は Tauri 2、Vue 3、CodeMirror 6、markdown-it、KaTeX、Mermaid、libgit2、Pandoc、Hunspell、`keyring-rs`、`rmcp` の上に立っています。アップストリームの支援は [GitHub Sponsors](https://github.com/sponsors/zhitongblog) から。

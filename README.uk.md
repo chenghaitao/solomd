@@ -2,14 +2,16 @@
 
 > Редактор, у якому живуть агенти.
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md)**
 
-[**Завантажити v4.0**](https://github.com/zhitongblog/solomd/releases/latest) · [**Допис до релізу**](https://solomd.app/blog/v4-0-0-agent-native-author/) · [**Сайт**](https://solomd.app) · [**Безпека**](https://solomd.app/security)
+[**Завантажити v4.0**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **Цей репозиторій — fork проєкту [zhitongblog/solomd](https://github.com/zhitongblog/solomd).**
+> Усі локальні зміни та відмінності від upstream — у [`CHANGELOG.md`](CHANGELOG.md).
 
 ![SoloMD Editor](web/public/demo/solomd-demo.svg)
 
@@ -97,43 +99,19 @@ solomd agent "перепиши щоденні нотатки цього тижн
 
 ## Встановлення
 
-Останній реліз: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+Останній реліз: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
 ### macOS — універсальний dmg (Apple Silicon + Intel, підписаний + нотаризований)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-Або завантажте dmg напряму:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-Або встановлення shell-командою в один рядок:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+Завантажте універсальний `.dmg` з [останнього релізу](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe) (NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — без інсталятора
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+Завантажте `.msi` (інсталятор), `.exe` (NSIS) або `-portable.zip` (без інсталятора) з [останнього релізу](https://github.com/chenghaitao/solomd/releases/latest).
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage` (універсальний), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — обидві архітектури зі [сторінки релізів](https://github.com/zhitongblog/solomd/releases/latest).
+- `.AppImage` (універсальний), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — обидві архітектури зі [сторінки релізів](https://github.com/chenghaitao/solomd/releases/latest).
 - Користувачі Arch: [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin) в AUR.
 
 ### iPad
@@ -148,14 +126,12 @@ winget install solomd
 
 E2EE-синхронізація використовує Argon2id (стандартні параметри RFC9106) → XChaCha20-Poly1305 з детермінованими nonce та шляхом як AAD. Відкритий текст залишається на ваших пристроях; remote бачить лише шифротекст. Невдалий парсинг `sync.json` — fail-closed: відмовляє в push, замість деградації до відкритого тексту (виправлення з аудиту v3.0.x).
 
-Повний опис: <https://solomd.app/security>.
-
 ## Збірка з джерел
 
 Передумови: Rust (stable), Node 18+, pnpm.
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # dev з hot reload
@@ -168,15 +144,8 @@ MCP-сервер — окремий crate в `mcp-server/`; dev-MCP-harness дл
 
 ## Внесок
 
-Issues та PR вітаються — [відкрийте один](https://github.com/zhitongblog/solomd/issues). Щоб відчути напрям, дивіться [`docs/roadmap.md`](docs/roadmap.md). Журнал збірки v4.0 — на [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/) — починайте звідти, якщо хочете зрозуміти інженерні принципи перед надсиланням PR.
-
-## Контакти
-
-Один підтримувач, двоє вхідних дверей. Асинхронно — [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions). Чат у реальному часі:
-
-- **Telegram (міжнародний):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — анонси релізів + чат
-- **WeChat (中文):** скануйте, щоб додати мене — у нотатці "SoloMD"
+Issues та PR вітаються — [відкрийте один](https://github.com/chenghaitao/solomd/issues). Щоб відчути напрям, дивіться [`docs/roadmap.md`](docs/roadmap.md), а відмінності від upstream — у [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Ліцензія та подяки
 
-[MIT](LICENSE) © 2026 xiangdong li. SoloMD стоїть на Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` та `rmcp`. Спонсорство на [GitHub Sponsors](https://github.com/sponsors/zhitongblog) або через [solomd.app/#sponsor](https://solomd.app/#sponsor).
+[MIT](LICENSE) © 2026 xiangdong li. SoloMD стоїть на Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs` та `rmcp`. Upstream підтримується через [GitHub Sponsors](https://github.com/sponsors/zhitongblog).

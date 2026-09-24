@@ -2,14 +2,16 @@
 
 > Agent가 머무는 에디터.
 
-[![Latest release](https://img.shields.io/github/v/release/zhitongblog/solomd)](https://github.com/zhitongblog/solomd/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/zhitongblog/solomd?color=orange)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zhitongblog/solomd/total)](https://github.com/zhitongblog/solomd/releases)
-[![Website](https://img.shields.io/badge/website-solomd.app-ff9f40.svg)](https://solomd.app)
+[![Latest release](https://img.shields.io/github/v/release/chenghaitao/solomd)](https://github.com/chenghaitao/solomd/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/chenghaitao/solomd?color=orange)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/chenghaitao/solomd/total)](https://github.com/chenghaitao/solomd/releases)
 
 🌐 **[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Nederlands](README.nl.md) · [Türkçe](README.tr.md) · [Svenska](README.sv.md) · [Українська](README.uk.md)**
 
-[**v4.0 다운로드**](https://github.com/zhitongblog/solomd/releases/latest) · [**런치 글**](https://solomd.app/ko/blog/) · [**웹사이트**](https://solomd.app/ko/) · [**보안**](https://solomd.app/ko/security/)
+[**v4.0 다운로드**](https://github.com/chenghaitao/solomd/releases/latest)
+
+> **이 저장소는 [zhitongblog/solomd](https://github.com/zhitongblog/solomd) 의 fork입니다.**
+> 이 fork의 변경 사항과 업스트림과의 차이는 [`CHANGELOG.md`](CHANGELOG.md) 에 있습니다.
 
 ![SoloMD 에디터](web/public/demo/solomd-demo.svg)
 
@@ -98,43 +100,19 @@ solomd agent "이번 주 일일 노트를 주간 리뷰로 다시 써서 커밋�
 
 ## 설치
 
-최신 릴리스: [**v4.0.0**](https://github.com/zhitongblog/solomd/releases/latest).
+최신 릴리스: [**GitHub Releases**](https://github.com/chenghaitao/solomd/releases).
 
 ### macOS — universal dmg (Apple Silicon + Intel, 서명 + notarize)
 
-```bash
-brew install --cask zhitongblog/solomd/solomd
-```
-
-또는 dmg 직접 다운로드:
-
-```
-https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_universal.dmg
-```
-
-또는 한 줄 셸 설치:
-
-```bash
-curl -fsSL https://solomd.app/install.sh | bash
-```
+유니버설 `.dmg` 를 [최신 릴리스](https://github.com/chenghaitao/solomd/releases/latest) 에서 다운로드하세요.
 
 ### Windows — x64
 
-- [`SoloMD_4.0.0_x64_en-US.msi`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64_en-US.msi)
-- [`SoloMD_4.0.0_x64-setup.exe`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-setup.exe) (NSIS)
-- [`SoloMD_4.0.0_x64-portable.zip`](https://github.com/zhitongblog/solomd/releases/latest/download/SoloMD_4.0.0_x64-portable.zip) — 인스톨러 없음
-
-```powershell
-irm https://solomd.app/install.ps1 | iex
-```
-
-```powershell
-winget install solomd
-```
+`.msi`（설치 프로그램）, `.exe`（NSIS）, `-portable.zip`（부설치）를 [최신 릴리스](https://github.com/chenghaitao/solomd/releases/latest) 에서 다운로드하세요.
 
 ### Linux — x86_64 + aarch64
 
-- `.AppImage` (유니버설), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — 두 아키텍처를 [릴리스 페이지](https://github.com/zhitongblog/solomd/releases/latest)에서.
+- `.AppImage` (유니버설), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) — 두 아키텍처를 [릴리스 페이지](https://github.com/chenghaitao/solomd/releases/latest)에서.
 - Arch 사용자: AUR의 [`solomd-bin`](https://aur.archlinux.org/packages/solomd-bin).
 
 ### iPad
@@ -149,14 +127,12 @@ winget install solomd
 
 E2EE 동기화는 Argon2id (RFC9106 기본 매개변수) → XChaCha20-Poly1305, 결정론적 nonce, 경로를 AAD로 사용. 평문은 본인 기기에 남고 원격은 암호문만 봅니다. `sync.json` 파싱 실패는 fail-closed — 평문 강등보다 push 거부 (v3.0.x 감사 수정).
 
-자세한 내용: <https://solomd.app/ko/security/>.
-
 ## 소스에서 빌드
 
 선행 조건: Rust (stable), Node 18+, pnpm.
 
 ```bash
-git clone https://github.com/zhitongblog/solomd.git
+git clone https://github.com/chenghaitao/solomd.git
 cd solomd/app
 pnpm install
 pnpm tauri dev      # 핫 리로드 dev
@@ -169,15 +145,8 @@ MCP 서버는 `mcp-server/`의 별도 crate; 엔드투엔드 테스트용 dev MC
 
 ## 기여
 
-Issue와 PR 환영 — [열어주세요](https://github.com/zhitongblog/solomd/issues). 방향성은 [`docs/roadmap.md`](docs/roadmap.md) 참조. v4.0 빌드 로그는 [solomd.app/blog/v4-0-0-how-we-built-it/](https://solomd.app/blog/v4-0-0-how-we-built-it/)에 — PR을 보내기 전에 엔지니어링 원칙을 이해하고 싶다면 거기서.
-
-## 문의
-
-메인테이너 1명, 입구 2개. 비동기는 [GitHub Discussions](https://github.com/zhitongblog/solomd/discussions). 실시간 채팅:
-
-- **Telegram (국제):** [@SOLOMDAPP](https://t.me/SOLOMDAPP) — 릴리스 공지 + 채팅
-- **WeChat (中文):** 친구 추가 스캔 — "SoloMD"라고 적어주세요
+Issue와 PR 환영 — [열여주세요](https://github.com/chenghaitao/solomd/issues). 방향성은 [`docs/roadmap.md`](docs/roadmap.md) 를, 업스트림과의 차이는 [`CHANGELOG.md`](CHANGELOG.md) 를 참조하세요.
 
 ## 라이선스 & 크레딧
 
-[MIT](LICENSE) © 2026 xiangdong li. SoloMD는 Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs`, `rmcp` 위에 서 있습니다. [GitHub Sponsors](https://github.com/sponsors/zhitongblog) 또는 [solomd.app/#sponsor](https://solomd.app/#sponsor)에서 후원하세요.
+[MIT](LICENSE) © 2026 xiangdong li. SoloMD는 Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs`, `rmcp` 위에 서 있습니다. 업스트림 후원은 [GitHub Sponsors](https://github.com/sponsors/zhitongblog) 에서.
