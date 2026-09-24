@@ -179,6 +179,12 @@ export const de: I18n = {
     replaceAll: 'Alle',
   },
   explorer: {
+    deleteTitle: 'Löschen',
+    deleteFileMsg: '„{name}“ löschen?',
+    deleteFolderMsg: 'Ordner „{name}“ mit allem Inhalt löschen?',
+    deleteTrash: 'Wird in den Papierkorb des Systems verschoben.',
+    deletePermanent: 'Das lässt sich nicht rückgängig machen.',
+    cancel: 'Abbrechen',
     heading: 'Explorer',
     revealHidden: 'Diese Datei konnte nicht im Baum angezeigt werden — sie liegt außerhalb des geöffneten Arbeitsbereichs oder wird von einem Baumfilter verdeckt.',
     loading: 'Lädt…',

@@ -179,6 +179,12 @@ export const it: I18n = {
     replaceAll: 'Tutti',
   },
   explorer: {
+    deleteTitle: 'Elimina',
+    deleteFileMsg: 'Eliminare «{name}»?',
+    deleteFolderMsg: 'Eliminare la cartella «{name}» e tutto il suo contenuto?',
+    deleteTrash: 'Verrà spostato nel Cestino di sistema.',
+    deletePermanent: 'Questa azione non può essere annullata.',
+    cancel: 'Annulla',
     heading: 'Esplora risorse',
     revealHidden: 'Impossibile mostrare questo file nell’albero — è fuori dall’area di lavoro aperta o nascosto da un filtro.',
     loading: 'Caricamento…',

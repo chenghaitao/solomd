@@ -179,6 +179,12 @@ export const es: I18n = {
     replaceAll: 'Todo',
   },
   explorer: {
+    deleteTitle: 'Eliminar',
+    deleteFileMsg: '¿Eliminar «{name}»?',
+    deleteFolderMsg: '¿Eliminar la carpeta «{name}» y todo su contenido?',
+    deleteTrash: 'Se moverá a la Papelera de reciclaje del sistema.',
+    deletePermanent: 'Esta acción no se puede deshacer.',
+    cancel: 'Cancelar',
     heading: 'Explorador',
     revealHidden: 'No se pudo mostrar este archivo en el árbol: está fuera del espacio de trabajo abierto o lo oculta un filtro.',
     loading: 'Cargando…',

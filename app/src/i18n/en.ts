@@ -203,6 +203,13 @@ export const en = {
     newFolder: 'New folder',
     rename: 'Rename',
     delete: 'Delete',
+    // Delete confirmation (the explorer's own dialog, not window.confirm).
+    deleteTitle: 'Delete',
+    deleteFileMsg: 'Delete “{name}”?',
+    deleteFolderMsg: 'Delete the folder “{name}” and everything inside it?',
+    deleteTrash: 'It will be moved to the system Trash / Recycle Bin.',
+    deletePermanent: 'This cannot be undone.',
+    cancel: 'Cancel',
     copyPath: 'Copy path',
     copyRelPath: 'Copy relative path',
     copyPathDone: 'Path copied.',

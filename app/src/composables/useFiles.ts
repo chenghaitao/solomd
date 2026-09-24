@@ -17,6 +17,7 @@ import { useI18n } from '../i18n';
 import type { FileReadResult, Tab } from '../types';
 import { isSafPath, fromSafPath, safRead, safWrite, safLaunchPicker } from '../lib/saf-fs';
 import { baseNameOf, fileNameOf, claimImportName, joinInFolder } from '../lib/import-plan';
+import { newFileDirFor, treeSelection } from '../lib/new-file-target';
 
 // Save dialogs only — opening uses no filter so any file is selectable.
 // (rfd treats `'*'` literally as the extension `*`, not as wildcard, so we
@@ -775,8 +776,17 @@ export function useFiles() {
       // straight to app Documents; user surfaces / moves via Files app.
       path = await iosResolvePath(tab);
     } else {
+      // A document with no path yet (File → New, the toolbar ＋, Ctrl+N) is
+      // being named for the first time: open the dialog in the folder the user
+      // is actually looking at — the Explorer's selection (a folder, or the
+      // folder of the selected file), else the open document's folder —
+      // instead of wherever the OS save dialog remembered last. An existing
+      // file keeps its own path, which is what "Save As" means.
+      const dir = tab.filePath
+        ? null
+        : await pickerStartDir(newFileDirFor(treeSelection(), tabs.activeTab?.filePath));
       path = await saveDialog({
-        defaultPath: tab.filePath ?? defaultName,
+        defaultPath: tab.filePath ?? (dir ? joinInFolder(dir, defaultName) : defaultName),
         filters: SAVE_FILTERS,
       });
       if (!path) return false;
