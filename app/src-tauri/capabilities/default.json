@@ -24,7 +24,82 @@
     "core:webview:allow-create-webview-window",
     "core:webview:allow-set-webview-zoom",
     "opener:default",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ],
+      "deny": [
+        {
+          "path": "**/*.[eE][xX][eE]"
+        },
+        {
+          "path": "**/*.[cC][oO][mM]"
+        },
+        {
+          "path": "**/*.[bB][aA][tT]"
+        },
+        {
+          "path": "**/*.[cC][mM][dD]"
+        },
+        {
+          "path": "**/*.[pP][sS][11]"
+        },
+        {
+          "path": "**/*.[vV][bB][sS]"
+        },
+        {
+          "path": "**/*.[vV][bB][eE]"
+        },
+        {
+          "path": "**/*.[jJ][sS]"
+        },
+        {
+          "path": "**/*.[jJ][sS][eE]"
+        },
+        {
+          "path": "**/*.[wW][sS][fF]"
+        },
+        {
+          "path": "**/*.[wW][sS][hH]"
+        },
+        {
+          "path": "**/*.[mM][sS][iI]"
+        },
+        {
+          "path": "**/*.[mM][sS][cC]"
+        },
+        {
+          "path": "**/*.[sS][cC][rR]"
+        },
+        {
+          "path": "**/*.[pP][iI][fF]"
+        },
+        {
+          "path": "**/*.[cC][pP][lL]"
+        },
+        {
+          "path": "**/*.[hH][tT][aA]"
+        },
+        {
+          "path": "**/*.[rR][eE][gG]"
+        },
+        {
+          "path": "**/*.[lL][nN][kK]"
+        },
+        {
+          "path": "**/*.[aA][pP][pP]"
+        },
+        {
+          "path": "**/*.[cC][oO][mM][mM][aA][nN][dD]"
+        },
+        {
+          "path": "**/*.[sS][hH]"
+        }
+      ]
+    },
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
@@ -50,14 +125,5 @@
         }
       ]
     }
-  ],
-  "scope": {
-    "opener": {
-      "allow": [
-        {
-          "path": "$HOME/**"
-        }
-      ]
-    }
-  }
+  ]
 }

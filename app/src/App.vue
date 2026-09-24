@@ -830,7 +830,7 @@ async function openExternalFile() {
   try {
     await openPath(filePath);
   } catch (e) {
-    console.warn('openExternal failed', e);
+    (await import('./stores/toasts')).useToastsStore().error(String(e));
   }
 }
 

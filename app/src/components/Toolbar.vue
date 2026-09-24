@@ -277,9 +277,8 @@ async function onOpenExternal() {
     return;
   }
   // iOS: tauri-plugin-opener calls UIApplication.shared.open(URL:) which
-  // doesn't handle `file://` URLs — and the JS plugin's scope check
-  // (`$HOME/**`) rejects paths from deep-linked Files-app sources before
-  // we even get to the native call. Route through the Web Share API
+  // doesn't handle `file://` URLs, so a deep-linked Files-app source never
+  // opens. Route through the Web Share API
   // instead — iOS 15+ WKWebView surfaces the standard iOS share sheet
   // (AirDrop / Messages / Mail / Files / iCloud) for File payloads.
   if (isIOS()) {

@@ -2,7 +2,7 @@
 import { computed, h as hEdit, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { revealInFileManager } from '../lib/reveal-in-file-manager';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useFiles } from '../composables/useFiles';
 import { useInbox } from '../composables/useInbox';
@@ -1189,9 +1189,9 @@ async function confirmDelete() {
 async function revealNode(node: Node) {
   closeCtx();
   try {
-    await revealItemInDir(node.path);
+    await revealInFileManager(node.path);
   } catch (e) {
-    console.warn('reveal failed', e);
+    toasts.error(`${e}`);
   }
 }
 

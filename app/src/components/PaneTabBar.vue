@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { revealInFileManager } from '../lib/reveal-in-file-manager';
 import { useTabsStore } from '../stores/tabs';
+import { useToastsStore } from '../stores/toasts';
 import { useTilesStore } from '../stores/tiles';
 import { useSettingsStore } from '../stores/settings';
 import { useWorkspaceStore } from '../stores/workspace';
@@ -110,7 +111,7 @@ async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'close
   if (action === 'revealInFolder') {
     const path = list[idx]?.filePath;
     if (!path) return;
-    try { await revealItemInDir(path); } catch (e) { console.warn('reveal failed', e); }
+    try { await revealInFileManager(path); } catch (e) { useToastsStore().error(`${e}`); }
     return;
   }
   if (action === 'revealInFileTree') {
