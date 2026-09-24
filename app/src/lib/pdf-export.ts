@@ -314,6 +314,8 @@ export interface PdfRasterCapture {
   pageHeightPx: number;
   /** How far above a boundary a page cut may look, in raster pixels. */
   searchUpPx: number;
+  /** One body line in raster pixels (drives the between-table-rows cut). */
+  lineHeightPx: number;
   /** Hand back a re-paginated raster for `finish()` to slice. */
   useCanvas(canvas: HTMLCanvasElement): void;
   /** Slice the raster into pages and assemble the PDF. */
@@ -444,6 +446,7 @@ export async function capturePdfRaster(
       canvas,
       pageHeightPx: geometry.pageHeightPx,
       searchUpPx: geometry.searchUpPx,
+      lineHeightPx: geometry.lineHeightPx,
       useCanvas(replacement: HTMLCanvasElement) {
         if (prop) prop.canvas = replacement;
       },
@@ -469,22 +472,20 @@ function pdfPaginationGeometry(
   canvas: HTMLCanvasElement | null,
   inner: { width: number; height: number } | undefined,
   page: HTMLElement,
-): { pageHeightPx: number; searchUpPx: number } {
+): { pageHeightPx: number; searchUpPx: number; lineHeightPx: number } {
   if (!canvas || !inner || !(inner.width > 0) || !(inner.height > 0)) {
-    return { pageHeightPx: 0, searchUpPx: 0 };
+    return { pageHeightPx: 0, searchUpPx: 0, lineHeightPx: 0 };
   }
   const pageHeightPx = Math.floor(canvas.width * (inner.height / inner.width));
   // html2pdf's container is exactly the printable width, declared in mm, so
   // this converts raster pixels back to CSS pixels for the line-height cap.
   const rasterPerCssPx = canvas.width / (inner.width * CSS_PX_PER_MM);
-  const lineHeightPx = parseFloat(getComputedStyle(page).lineHeight);
+  const measured = parseFloat(getComputedStyle(page).lineHeight);
+  const lineHeightPx = Number.isFinite(measured) ? measured : FALLBACK_LINE_HEIGHT_PX;
   return {
     pageHeightPx,
-    searchUpPx: searchWindowPx(
-      Number.isFinite(lineHeightPx) ? lineHeightPx : FALLBACK_LINE_HEIGHT_PX,
-      rasterPerCssPx,
-      pageHeightPx,
-    ),
+    searchUpPx: searchWindowPx(lineHeightPx, rasterPerCssPx, pageHeightPx),
+    lineHeightPx: Math.round(lineHeightPx * rasterPerCssPx),
   };
 }
 
@@ -520,7 +521,12 @@ export async function markdownToPdfBlob(
       // line of text sits on the boundary. Re-lay the raster as whole pages
       // first, so every slice lands on a row with no ink in it.
       const paged = capture.canvas
-        ? buildPagedCanvas(capture.canvas, capture.pageHeightPx, capture.searchUpPx)
+        ? buildPagedCanvas(
+            capture.canvas,
+            capture.pageHeightPx,
+            capture.searchUpPx,
+            capture.lineHeightPx,
+          )
         : null;
       if (paged) capture.useCanvas(paged.canvas);
       return await capture.finish();
