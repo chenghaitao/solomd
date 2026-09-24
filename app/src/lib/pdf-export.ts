@@ -12,7 +12,7 @@
  */
 
 // @ts-ignore — html2pdf.js ships no types
-import { initMermaid } from './mermaid-lazy';
+import { inlineMermaidBlocks } from './mermaid-inline';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import type { ResolvedPdfOptions } from './pdf-options';
 import { rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
@@ -176,33 +176,11 @@ const PDF_CSS = `
   }
 `;
 
-let mermaidId = 0;
-
+/**
+ * Diagrams sit on white paper, so the light theme is not negotiable here.
+ */
 async function processMermaidBlocks(container: HTMLElement) {
-  const blocks = container.querySelectorAll('pre > code.language-mermaid');
-  if (!blocks.length) return;   // no diagrams: never pay for the renderer
-  const mermaid = await initMermaid({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'default',
-  });
-  for (const block of Array.from(blocks)) {
-    const pre = block.parentElement as HTMLElement | null;
-    if (!pre) continue;
-    const code = (block.textContent || '').trim();
-    const id = `pdf-mmd-${++mermaidId}`;
-    try {
-      const { svg } = await mermaid.render(id, code);
-      const wrap = document.createElement('div');
-      wrap.className = 'mermaid-block';
-      wrap.innerHTML = svg;
-      pre.replaceWith(wrap);
-    } catch (e) {
-      const err = document.createElement('pre');
-      err.textContent = `Mermaid error: ${(e as Error).message}`;
-      pre.replaceWith(err);
-    }
-  }
+  await inlineMermaidBlocks(container, { idPrefix: 'pdf-mmd-', theme: 'default' });
 }
 
 /**

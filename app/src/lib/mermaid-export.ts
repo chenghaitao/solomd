@@ -64,10 +64,15 @@ export async function svgToPngBlob(svg: SVGElement, opts: SvgPngOptions = {}): P
   });
 }
 
+/** True when the app UI is in its dark theme. */
+export function isDarkTheme(): boolean {
+  return (
+    document.documentElement.getAttribute('data-theme') === 'dark' ||
+    document.documentElement.classList.contains('dark')
+  );
+}
+
 /** Theme-matched export background: dark diagrams get a dark canvas. */
 export function diagramBackground(): string {
-  const isDark =
-    document.documentElement.getAttribute('data-theme') === 'dark' ||
-    document.documentElement.classList.contains('dark');
-  return isDark ? '#1e1e1e' : '#ffffff';
+  return isDarkTheme() ? '#1e1e1e' : '#ffffff';
 }

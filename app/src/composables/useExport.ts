@@ -15,9 +15,11 @@ const markdownToPdfBlob: typeof import('../lib/pdf-export')['markdownToPdfBlob']
 const markdownToImageBlob: typeof import('../lib/image-export')['markdownToImageBlob'] =
   async (...args) => (await import('../lib/image-export')).markdownToImageBlob(...args);
 import { renderMarkdown, extractImageRoot } from '../lib/markdown';
-// Tiny shim: the mermaid bundle itself stays behind a dynamic import inside
-// it, so touching this module costs nothing at startup.
-import { initMermaid } from '../lib/mermaid-lazy';
+// Diagrams are rewritten after the markdown pass, by one shared implementation
+// (see lib/mermaid-inline.ts). The mermaid bundle itself stays behind a
+// dynamic import inside it, so touching this module costs nothing at startup.
+import { inlineMermaidBlocks, inlineMermaidInHtml } from '../lib/mermaid-inline';
+import { diagramBackground, isDarkTheme } from '../lib/mermaid-export';
 import { exportDefaultPath } from '../lib/export-paths';
 import { useI18n } from '../i18n';
 import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls } from '../lib/image-resolve';
@@ -166,6 +168,22 @@ const HTML_TEMPLATE = (title: string, body: string) => `<!doctype html>
     border-radius: 6px;
     margin: 1.2em 0;
     box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  }
+  /* Diagrams — centered like the app's preview, and inline SVG carries its own
+     styling (mermaid writes the theme CSS inside the <svg>), so the exported
+     file stays a single self-contained page. */
+  .mermaid-block {
+    display: flex;
+    justify-content: center;
+    margin: 1.5em 0;
+  }
+  .mermaid-block svg,
+  .mermaid-block img { max-width: 100%; height: auto; }
+  .mermaid-error {
+    color: #b3261e;
+    background: rgba(179, 38, 30, .06);
+    border-left: 3px solid #b3261e;
+    white-space: pre-wrap;
   }
   .katex-display { overflow-x: auto; overflow-y: hidden; margin: 1.2em 0; }
 </style>
@@ -341,10 +359,6 @@ function getEditorSelectionMd(content?: string): string | null {
   return text.trim() ? text : null;
 }
 
-// Mermaid ids must be unique per render across the whole session — mermaid
-// keys internal state off them and reusing one yields an empty diagram.
-let printMermaidId = 0;
-
 export function useExport() {
   const tabs = useTabsStore();
   const toasts = useToastsStore();
@@ -440,7 +454,16 @@ export function useExport() {
       imageRoot,
       ctx.filePath,
     );
-    const html = HTML_TEMPLATE(ctx.baseName, body);
+    // ```mermaid fences only become diagrams *after* the markdown pass: the
+    // renderer is async and lazily loaded, so `renderMarkdown` cannot wait for
+    // it. Left alone, the exported page carried the diagram's source code
+    // instead of the diagram. Light theme is deliberate — the template below
+    // is light paper regardless of the app theme.
+    const withDiagrams = await inlineMermaidInHtml(body, {
+      idPrefix: 'html-mmd-',
+      theme: 'default',
+    });
+    const html = HTML_TEMPLATE(ctx.baseName, withDiagrams);
     try {
       await invoke('write_file', { path, content: html, encoding: 'UTF-8' });
       toasts.success(isIOS() ? iosSavedToast(filename) : 'Exported to HTML');
@@ -515,33 +538,10 @@ export function useExport() {
    * width-clamped on paper without any extra CSS.
    */
   async function renderPrintMermaid(container: HTMLElement, dark: boolean) {
-    const blocks = container.querySelectorAll('pre > code.language-mermaid');
-    if (!blocks.length) return;   // no diagrams: never load the renderer
-    const mermaid = await initMermaid({
-      startOnLoad: false,
-      securityLevel: 'strict',
+    await inlineMermaidBlocks(container, {
+      idPrefix: 'print-mmd-',
       theme: dark ? 'dark' : 'default',
     });
-    for (const block of Array.from(blocks)) {
-      const pre = block.parentElement as HTMLElement | null;
-      if (!pre) continue;
-      const code = (block.textContent || '').trim();
-      const id = `print-mmd-${++printMermaidId}`;
-      try {
-        const { svg } = await mermaid.render(id, code);
-        const wrap = document.createElement('div');
-        wrap.className = 'mermaid-block';
-        wrap.innerHTML = svg;
-        pre.replaceWith(wrap);
-      } catch (e) {
-        // A broken diagram must not abort the print — show the reason where
-        // the diagram would have been, exactly like the Preview pane does.
-        const err = document.createElement('pre');
-        err.className = 'mermaid-error';
-        err.textContent = `Mermaid error: ${(e as Error).message}`;
-        pre.replaceWith(err);
-      }
-    }
   }
 
   /**
@@ -665,7 +665,18 @@ export function useExport() {
   async function copyAsHtml() {
     const src = copySource();
     if (!src) return;
-    const html = renderMarkdown(src.source);
+    // Diagrams are rasterized for the clipboard: Word, Google Docs and most
+    // mail clients drop inline `<svg>` when pasting, so the alternative is a
+    // blank hole in the pasted document. Theme and background follow the app,
+    // which is what "copy image" on a diagram in the preview already does —
+    // the reader is pasting the diagram as they just saw it.
+    const html = await inlineMermaidInHtml(renderMarkdown(src.source), {
+      idPrefix: 'clip-mmd-',
+      theme: isDarkTheme() ? 'dark' : 'default',
+      rasterize: true,
+      background: diagramBackground(),
+      onError: 'skip',
+    });
     const okMsg = src.isSelection ? 'Copied selection as HTML' : 'Copied as HTML';
     // Native Clipboard API first — supports rich HTML on all desktops and on
     // iOS 16+. Tauri's `writeHtml` is unimplemented on iOS so we'd otherwise
