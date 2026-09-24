@@ -15,6 +15,53 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.5] — 2026-09-24
+
+### Mermaid 图表的导出（HTML / 剪贴板）
+
+此前 mermaid 只在三个地方被渲染成图：预览面板、图片版 PDF、文字版 PDF（打印）。**导出 HTML** 与
+**复制为 HTML** 两条路径从来没做这件事，于是一个带 ```mermaid 的笔记导出后，图表会原样变成一段代码。
+本次改动只修这两条路径，不动预览与 PDF 的既有行为。
+
+- 新增 `app/src/lib/mermaid-inline.ts`，把原先散落三处的「把 ```mermaid 代码块换成图」收敛为
+  `inlineMermaidBlocks(container, opts)` 与 `inlineMermaidInHtml(html, opts)` 两个入口；`pdf-export.ts`、
+  `image-export.ts`、`useExport.ts` 里各自的渲染函数都变成它的薄封装，行为逐处保持：
+  PDF 出错写错误行、图片出错保留代码块、打印出错写错误行。
+- **导出 HTML**：内联 SVG。导出页始终是浅色纸张，因此图表固定 `default` 主题；mermaid 把主题样式写在
+  `<svg>` 内部，所以文件仍是单文件、不联网也能看。模板同步补上 `.mermaid-block`（居中 / 限宽）与
+  `.mermaid-error` 样式。
+- **复制为 HTML**：贴进 Word / Google Docs / 邮件时内联 `<svg>` 会被丢弃，这里改成 2× PNG
+  （复用 `svgToPngBlob`），背景与主题跟随应用，和预览里「复制图片」的做法一致。
+- 没有 ```mermaid 的文档完全不触碰渲染器（mermaid 仍是按需加载的 ~590 kB chunk），字符串原样返回。
+
+### 回车续写列表 + 图片预览按 ESC 退出
+
+**回车续写列表（自动继承上一行格式）**
+
+之前只有 Windows 的「实时编辑」模式会续写列表：`core` 逻辑写死在 `Editor.vue` 的 `computeSmartEnter()` 里，
+而「编辑 / 分栏」的普通 textarea 路径、以及 CodeMirror（macOS / Linux / Vim）路径根本没有这个处理；
+`1.1 AAA` 这类多级编号也不会续号（旧正则只认 `1. `）。现在：
+
+- 逻辑抽到 `app/src/lib/list-continue.ts`（纯函数 + 18 条单测），三条编辑路径共用：
+  普通 textarea（新增回车处理）、实时编辑的块编辑器（沿用原行为）、CodeMirror
+  （`app/src/lib/cm-list-continue.ts` 提供一个 keymap，排在 `defaultKeymap` 之前）。
+- **多级编号**：`1.1` ⏎ → `1.2`、`1.1.9` → `1.1.10`，只递增最后一级，并保留原分隔符风格
+  （`1)` → `2)`、缩进也保留）。
+- 工具栏新增两个 **Word 风格**的开关按钮（无下拉箭头，按下态即开关的值），默认都开：
+  - **项目符号**（`markdownListContinue`）：回车是否继承上一行的列表 / 引用格式。关掉 = 回车就是普通换行。
+  - **自动编号**（`markdownAutoNumber`）：有序列表是否自动算号。关掉 = 有序列表不再续行（无序列表 /
+    任务列表 / 引用不受影响）。
+- 已知取舍：多级编号要认 `1.1`，就无法区分「行首像 `1.5 is not a list` 的小数」——与
+  「编号章节自动转标题」同一个启发式取舍，单测里明确断言了这一点；关掉「自动编号」即可完全关闭。
+
+**图片预览按 ESC 退出**
+
+`image-overlay.ts` 一直把 keydown 监听挂在遮罩层上，但打开预览时焦点并不在遮罩层里（文件树行 / 预览
+面板仍然持有焦点），所以 Esc 从来没生效过（文件头部注释里写的 "close by Escape" 是假的）；`⌘/Ctrl +`
+`-` `0` 缩放快捷键同样失效。改为在 `document` 上捕获阶段监听：Esc 先于应用层的其它 Esc 处理执行
+（模态优先）。顺带修掉一个连带 bug：`removeAllListeners()` 之前不带 `capture` 移除监听，
+capture 监听器会永久残留并继续吞掉 Esc。
+
 ## [4.14.4] — 2026-09-24
 
 三条线：**前端产物体积 / 冷启动**、**文件树体验**、**文档**。
