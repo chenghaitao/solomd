@@ -169,6 +169,27 @@ defineProps<{ name: string; size?: number }>();
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </template>
+    <!-- Word-style list buttons: solid marker + text rule, three rows. Two
+         separate icons (not a dropdown) because each is an independent toggle:
+         "项目符号" = do lists/quotes continue on Enter, "自动编号" = are ordered
+         items counted. The same shape Word uses, so the affordance reads the
+         same to anyone coming from Word. -->
+    <template v-else-if="name === 'list-bullet'">
+      <rect x="3" y="5.2" width="3.2" height="3.2" rx="0.4" fill="currentColor" stroke="none" />
+      <rect x="3" y="10.4" width="3.2" height="3.2" rx="0.4" fill="currentColor" stroke="none" />
+      <rect x="3" y="15.6" width="3.2" height="3.2" rx="0.4" fill="currentColor" stroke="none" />
+      <line x1="9.4" y1="6.8" x2="21" y2="6.8" />
+      <line x1="9.4" y1="12" x2="21" y2="12" />
+      <line x1="9.4" y1="17.2" x2="21" y2="17.2" />
+    </template>
+    <template v-else-if="name === 'list-number'">
+      <text x="1.8" y="9.6" font-size="8" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">1</text>
+      <text x="1.8" y="14.8" font-size="8" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">2</text>
+      <text x="1.8" y="20" font-size="8" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">3</text>
+      <line x1="9.4" y1="6.8" x2="21" y2="6.8" />
+      <line x1="9.4" y1="12" x2="21" y2="12" />
+      <line x1="9.4" y1="17.2" x2="21" y2="17.2" />
+    </template>
     <template v-else-if="name === 'view-reading'">
       <!-- An open book — denotes "reading mode": full-bleed prose preview.
            Distinct from view-preview (an eye, which we use for the rendered-

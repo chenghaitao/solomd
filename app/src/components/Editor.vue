@@ -80,6 +80,8 @@ import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve
 import { SLASH_BLOCKS, filterBlocks, expandSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
+import { applyListContinue, type ListContinueOptions } from '../lib/list-continue';
+import { listContinueKeymap } from '../lib/cm-list-continue';
 
 // Incremental find. CoreMirror's search panel only scrolls to a match when you
 // press Enter / click Next — typing in the field just repaints the highlights
@@ -2070,37 +2072,23 @@ function plainAbsoluteSelection(): { from: number; to: number } | null {
 }
 
 /**
- * Markdown list / quote continuation on Enter (matches CodeMirror's behaviour):
- * Enter at the end of a list/quote item starts the next item (ordered numbers
- * increment); Enter on an empty item removes the marker and ends the list.
- * Returns the new {value, caret} or null to let the textarea handle Enter.
+ * Markdown list / quote continuation on Enter (see `lib/list-continue.ts` for
+ * the rules and the two toolbar toggles). Enter at the end of a list/quote item
+ * starts the next item; Enter on an empty item removes the marker and ends the
+ * list. Returns the new {value, caret} or null to let the textarea handle Enter.
  */
 function computeSmartEnter(el: HTMLTextAreaElement): { value: string; caret: number } | null {
   if (el.selectionStart !== el.selectionEnd) return null;
-  const v = el.value;
   const caret = el.selectionStart ?? 0;
-  const lineStart = v.lastIndexOf('\n', caret - 1) + 1;
-  const nl = v.indexOf('\n', caret);
-  const lineEnd = nl < 0 ? v.length : nl;
-  const line = v.slice(lineStart, lineEnd);
+  return applyListContinue(el.value, caret, listContinueOptions());
+}
 
-  const ul = line.match(/^(\s*)([-*+])\s+(\[[ xX]\]\s+)?(.*)$/);
-  const ol = line.match(/^(\s*)(\d+)([.)])\s+(.*)$/);
-  const bq = line.match(/^(\s*)(>)\s?(.*)$/);
-  let marker: string | null = null;
-  let content = '';
-  if (ul) { marker = `${ul[1]}${ul[2]} ${ul[3] ? '[ ] ' : ''}`; content = ul[4]; }
-  else if (ol) { marker = `${ol[1]}${Number(ol[2]) + 1}${ol[3]} `; content = ol[4]; }
-  else if (bq) { marker = `${bq[1]}> `; content = bq[3]; }
-  if (marker === null) return null;
-
-  // Empty item → remove the marker (end the list), leaving a blank line.
-  if (content.trim() === '') {
-    return { value: v.slice(0, lineStart) + v.slice(caret), caret: lineStart };
-  }
-  // Continue the list/quote with a fresh marker.
-  const insert = `\n${marker}`;
-  return { value: v.slice(0, caret) + insert + v.slice(caret), caret: caret + insert.length };
+/** The two toolbar toggles, read fresh so a click takes effect immediately. */
+function listContinueOptions(): ListContinueOptions {
+  return {
+    listContinuation: settings.markdownListContinue,
+    autoNumber: settings.markdownAutoNumber,
+  };
 }
 
 // Mirror-based visual-row probes with logical-line fallbacks, so a DOM
@@ -2280,6 +2268,26 @@ function handlePlainEditorKeydown(event: KeyboardEvent) {
     recordPlainHistory();
     el.value = edit.value;
     el.setSelectionRange(edit.selStart, edit.selEnd);
+    plainText.value = edit.value;
+    tabs.setContent(props.tab.id, edit.value);
+    emitPlainCursorAndSelection();
+    return;
+  }
+  // Enter continues a list / quote (same rules as the block live editor).
+  // `isComposing` keeps the IME's own Enter — the one that commits a candidate
+  // — out of it, which CJK input hits on every line.
+  if (
+    event.key === 'Enter' && !event.isComposing &&
+    !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+  ) {
+    const el = event.target as HTMLTextAreaElement;
+    if (!el) return;
+    const edit = applyListContinue(el.value, el.selectionStart ?? el.value.length, listContinueOptions());
+    if (!edit) return;
+    event.preventDefault();
+    recordPlainHistory();
+    el.value = edit.value;
+    el.setSelectionRange(edit.caret, edit.caret);
     plainText.value = edit.value;
     tabs.setContent(props.tab.id, edit.value);
     emitPlainCursorAndSelection();
@@ -2845,6 +2853,9 @@ function buildExtensions() {
     // #296 — Mod-i is CodeMirror's selectParentSyntax. The app-level Italic
     // shortcut listens on window, so CodeMirror would run first and widen the
     // selection to the whole paragraph before it got italicised.
+    // Enter continues a list / quote before CodeMirror's own newline binding
+    // (see lib/cm-list-continue.ts).
+    listContinueKeymap(() => listContinueOptions()),
     keymap.of([...defaultKeymap.filter((b) => b.key !== 'Mod-i'), ...historyKeymap, ...searchKeymap, indentWithTab]),
     lineNumCompartment.of(settings.showLineNumbers ? lineNumbers() : []),
     wrapCompartment.of(settings.wordWrap ? EditorView.lineWrapping : []),

@@ -307,6 +307,14 @@ interface Settings {
   // paragraphs render identically either way. OFF = strict CommonMark
   // soft-break (newline collapses to a space).
   markdownHardBreaks: boolean;
+  // Toolbar "项目符号" — Enter at the end of a list / quote line inherits that
+  // line's format (next bullet, next quote). Default ON. OFF = Enter is always
+  // a plain newline, whatever the line above looked like.
+  markdownListContinue: boolean;
+  // Toolbar "自动编号" — ordered items are counted, including multi-level
+  // outlines (`1.1` ⏎ → `1.2`). Default ON. OFF = ordered lists are no longer
+  // continued at all (bullets / tasks / quotes are unaffected).
+  markdownAutoNumber: boolean;
   // #216: rewrite straight quotes to curly ones in preview/exports
   // (markdown-it `smartquotes`). Default OFF — CJK font fallbacks draw
   // U+2019 fullwidth ("test'　s"), and the preview should match the typed
@@ -628,6 +636,8 @@ function defaults(): Settings {
     explorerExtFilter: [] as string[],
     distinctSplitPanes: false,
     markdownHardBreaks: true,
+    markdownListContinue: true,
+    markdownAutoNumber: true,
     spellcheckLang: 'en_US',
     smartQuotes: false,
     keybindings: {},
@@ -1342,6 +1352,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleMarkdownHardBreaks() {
       this.markdownHardBreaks = !this.markdownHardBreaks;
+      this.persist();
+    },
+    toggleMarkdownListContinue() {
+      this.markdownListContinue = !this.markdownListContinue;
+      this.persist();
+    },
+    toggleMarkdownAutoNumber() {
+      this.markdownAutoNumber = !this.markdownAutoNumber;
       this.persist();
     },
     setSpellcheckLang(code: string) {

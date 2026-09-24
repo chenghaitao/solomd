@@ -965,6 +965,25 @@ onBeforeUnmount(() => {
           </div>
         </Teleport>
       </div>
+      <!-- Two Word-style toggles for what Enter does at the end of a list line.
+           Deliberately flat buttons, no dropdown caret: each one is a simple
+           on/off, and the pressed state is the setting's value. -->
+      <button
+        class="icon-btn"
+        @click="settings.toggleMarkdownListContinue"
+        :class="{ active: settings.markdownListContinue }"
+        :title="settings.markdownListContinue ? t('toolbar.listContinueOn') : t('toolbar.listContinueOff')"
+      >
+        <Icon name="list-bullet" />
+      </button>
+      <button
+        class="icon-btn"
+        @click="settings.toggleMarkdownAutoNumber"
+        :class="{ active: settings.markdownAutoNumber }"
+        :title="settings.markdownAutoNumber ? t('toolbar.autoNumberOn') : t('toolbar.autoNumberOff')"
+      >
+        <Icon name="list-number" />
+      </button>
     </div>
 
     <div class="toolbar__group">

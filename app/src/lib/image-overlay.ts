@@ -48,7 +48,7 @@ interface ActiveOverlay {
   viewport: HTMLDivElement;
   contentEl: HTMLDivElement;
   zoomPct: HTMLSpanElement;
-  listeners: Array<{ el: EventTarget; type: string; fn: EventListener }>;
+  listeners: Array<{ el: EventTarget; type: string; fn: EventListener; opts?: AddEventListenerOptions }>;
   triggerEl: HTMLElement | null;
   didPan: boolean;
 }
@@ -201,13 +201,15 @@ function on(
   opts?: AddEventListenerOptions,
 ) {
   el.addEventListener(type, fn, opts);
-  active!.listeners.push({ el, type, fn });
+  active!.listeners.push({ el, type, fn, opts });
 }
 
 function removeAllListeners() {
   if (!active) return;
-  for (const { el, type, fn } of active.listeners) {
-    el.removeEventListener(type, fn);
+  // `opts` must be handed back: a capture listener is only removable by
+  // matching `capture`, and a leftover one keeps swallowing the key forever.
+  for (const { el, type, fn, opts } of active.listeners) {
+    el.removeEventListener(type, fn, opts);
   }
   active.listeners.length = 0;
 }
@@ -498,10 +500,17 @@ export function openImageOverlay(opts: OverlayOptions) {
     zoomAt(scale + delta, e.clientX, e.clientY);
   }) as EventListener, { passive: false });
 
-  // Keyboard
-  on(backdrop, 'keydown', ((e: KeyboardEvent) => {
+  // Keyboard. Bound on the document, not on the backdrop: opening the overlay
+  // never moves focus into it (the file-tree row / preview keeps it), so a
+  // listener on the backdrop saw no key at all — Escape, which the header above
+  // has always advertised as a way out, did nothing. Same for the ⌘/Ctrl zoom
+  // keys. Capture phase so the overlay closes *before* the app's own Escape
+  // handlers (palettes, side panels) can act on the same keypress; a modal owns
+  // the keyboard while it is up.
+  on(document, 'keydown', ((e: KeyboardEvent) => {
     const mod = e.metaKey || e.ctrlKey;
     if (e.key === 'Escape') {
+      e.preventDefault();
       e.stopPropagation();
       closeOverlay();
       return;
@@ -521,7 +530,7 @@ export function openImageOverlay(opts: OverlayOptions) {
       fitToScreen();
       return;
     }
-  }) as EventListener);
+  }) as EventListener, { capture: true });
 
   // Pointer pan + pinch-to-zoom (touch).
   // Tracks every active pointer so two simultaneous touches can drive
