@@ -80,6 +80,7 @@ import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve
 import { SLASH_BLOCKS, filterBlocks, expandSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
+import { computeListContinuation } from '../lib/list-continuation';
 
 // Incremental find. CoreMirror's search panel only scrolls to a match when you
 // press Enter / click Next — typing in the field just repaints the highlights
@@ -2070,37 +2071,21 @@ function plainAbsoluteSelection(): { from: number; to: number } | null {
 }
 
 /**
- * Markdown list / quote continuation on Enter (matches CodeMirror's behaviour):
- * Enter at the end of a list/quote item starts the next item (ordered numbers
- * increment); Enter on an empty item removes the marker and ends the list.
- * Returns the new {value, caret} or null to let the textarea handle Enter.
+ * Markdown list / quote continuation on Enter (#341) — same rule for both
+ * plain editors, see lib/list-continuation.ts. Returns null to let the
+ * textarea insert a plain newline.
  */
 function computeSmartEnter(el: HTMLTextAreaElement): { value: string; caret: number } | null {
-  if (el.selectionStart !== el.selectionEnd) return null;
-  const v = el.value;
-  const caret = el.selectionStart ?? 0;
-  const lineStart = v.lastIndexOf('\n', caret - 1) + 1;
-  const nl = v.indexOf('\n', caret);
-  const lineEnd = nl < 0 ? v.length : nl;
-  const line = v.slice(lineStart, lineEnd);
+  return computeListContinuation(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
+}
 
-  const ul = line.match(/^(\s*)([-*+])\s+(\[[ xX]\]\s+)?(.*)$/);
-  const ol = line.match(/^(\s*)(\d+)([.)])\s+(.*)$/);
-  const bq = line.match(/^(\s*)(>)\s?(.*)$/);
-  let marker: string | null = null;
-  let content = '';
-  if (ul) { marker = `${ul[1]}${ul[2]} ${ul[3] ? '[ ] ' : ''}`; content = ul[4]; }
-  else if (ol) { marker = `${ol[1]}${Number(ol[2]) + 1}${ol[3]} `; content = ol[4]; }
-  else if (bq) { marker = `${bq[1]}> `; content = bq[3]; }
-  if (marker === null) return null;
-
-  // Empty item → remove the marker (end the list), leaving a blank line.
-  if (content.trim() === '') {
-    return { value: v.slice(0, lineStart) + v.slice(caret), caret: lineStart };
-  }
-  // Continue the list/quote with a fresh marker.
-  const insert = `\n${marker}`;
-  return { value: v.slice(0, caret) + insert + v.slice(caret), caret: caret + insert.length };
+/** A bare Enter that is not part of an IME composition. */
+function isPlainEnter(event: KeyboardEvent): boolean {
+  return (
+    event.key === 'Enter' &&
+    !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
+    !event.isComposing && event.keyCode !== 229
+  );
 }
 
 // Mirror-based visual-row probes with logical-line fallbacks, so a DOM
@@ -2249,7 +2234,7 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
     });
     return;
   }
-  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+  if (isPlainEnter(event)) {
     const el = event.target as HTMLTextAreaElement;
     const smart = computeSmartEnter(el);
     if (smart) {
@@ -2282,6 +2267,21 @@ function handlePlainEditorKeydown(event: KeyboardEvent) {
     el.setSelectionRange(edit.selStart, edit.selEnd);
     plainText.value = edit.value;
     tabs.setContent(props.tab.id, edit.value);
+    emitPlainCursorAndSelection();
+    return;
+  }
+  // #341 — the flat textarea (edit-only / split) never had list continuation;
+  // only the live-edit blocks did.
+  if (isPlainEnter(event)) {
+    const el = event.target as HTMLTextAreaElement;
+    const smart = computeSmartEnter(el);
+    if (!smart) return;
+    event.preventDefault();
+    recordPlainHistory();
+    el.value = smart.value;
+    el.setSelectionRange(smart.caret, smart.caret);
+    plainText.value = smart.value;
+    tabs.setContent(props.tab.id, smart.value);
     emitPlainCursorAndSelection();
   }
 }
