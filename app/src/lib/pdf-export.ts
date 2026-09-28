@@ -35,7 +35,7 @@ const PDF_CSS = `
     width: 100%;
     max-width: 760px;
     padding: 7.5% 8.5% 10%;
-    color: #1f1d1a;
+    color: #1f2328;
     background: #ffffff;
     font: 15px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto,
       "Helvetica Neue", Arial,
@@ -54,7 +54,7 @@ const PDF_CSS = `
   .pdf-page h4, .pdf-page h5, .pdf-page h6 {
     line-height: 1.25;
     font-weight: 700;
-    color: #1f1d1a;
+    color: #1f2328;
     margin: 1.8em 0 0.55em;
     page-break-after: avoid;
     break-after: avoid-page;
@@ -64,34 +64,34 @@ const PDF_CSS = `
   .pdf-page h3:first-child { margin-top: 0; }
   .pdf-page h1 {
     font-size: 2em;
-    border-bottom: 2px solid #ff9f40;
+    border-bottom: 2px solid #3d444d;
     padding-bottom: .32em;
     letter-spacing: -0.01em;
   }
   .pdf-page h2 {
     font-size: 1.5em;
-    border-bottom: 1px solid #e6e2d8;
+    border-bottom: 1px solid #e4e6e9;
     padding-bottom: .25em;
   }
   .pdf-page h3 { font-size: 1.2em; }
   .pdf-page h4 { font-size: 1.05em; }
-  .pdf-page h5, .pdf-page h6 { font-size: 1em; color: #6a6560; }
+  .pdf-page h5, .pdf-page h6 { font-size: 1em; color: #59636e; }
   .pdf-page p { margin: .85em 0; }
   .pdf-page a {
-    color: #ff9f40;
+    color: #0b5cad;
     text-decoration: none;
-    border-bottom: 1px solid #ffe7cc;
+    border-bottom: 1px solid #c9dcf0;
   }
   .pdf-page code {
     font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
     font-size: .88em;
-    background: #f3efe7;
+    background: #f6f8fa;
     padding: .15em .45em;
     border-radius: 4px;
-    color: #8a4a00;
+    color: #1f2328;
   }
   .pdf-page pre {
-    background: #f3efe7;
+    background: #f6f8fa;
     padding: 14px 18px;
     border-radius: 8px;
     /* #211 — paper can't scroll, so long code lines MUST wrap or they get
@@ -102,7 +102,7 @@ const PDF_CSS = `
     word-break: break-word;
     margin: 1.1em 0;
     line-height: 1.55;
-    border: 1px solid #e6e2d8;
+    border: 1px solid #e4e6e9;
     page-break-inside: avoid;
     break-inside: avoid;
   }
@@ -110,18 +110,18 @@ const PDF_CSS = `
     background: transparent;
     padding: 0;
     font-size: .86em;
-    color: #1f1d1a;
+    color: #1f2328;
   }
   .pdf-page pre code .hljs-keyword,
   .pdf-page pre code .hljs-built_in,
-  .pdf-page pre code .hljs-tag { color: #ff9f40; }
+  .pdf-page pre code .hljs-tag { color: #116329; }
   .pdf-page blockquote {
-    border-left: 4px solid #ff9f40;
+    border-left: 4px solid #3d444d;
     margin: 1.3em 0;
     padding: .5em 1.1em;
-    color: #6a6560;
+    color: #59636e;
     font-style: italic;
-    background: #fff7ec;
+    background: #f9fafb;
     border-radius: 0 4px 4px 0;
     page-break-inside: avoid;
     break-inside: avoid;
@@ -138,22 +138,22 @@ const PDF_CSS = `
     break-inside: avoid;
   }
   .pdf-page th, .pdf-page td {
-    border: 1px solid #e6e2d8;
+    border: 1px solid #e4e6e9;
     padding: 7px 13px;
     text-align: left;
   }
   /* #271 — short cells stay on one line (see markdown.ts table_short_cells). */
   .pdf-page .cell-nowrap { white-space: nowrap; }
   .pdf-page thead th {
-    background: #ffe7cc;
-    color: #1f1d1a;
+    background: #f3f4f6;
+    color: #1f2328;
     font-weight: 700;
-    border-bottom: 2px solid #ff9f40;
+    border-bottom: 2px solid #3d444d;
   }
-  .pdf-page tbody tr:nth-child(even) { background: #f7f4ec; }
+  .pdf-page tbody tr:nth-child(even) { background: #f9fafb; }
   .pdf-page hr {
     border: none;
-    border-top: 1px solid #e6e2d8;
+    border-top: 1px solid #e4e6e9;
     margin: 2.2em 0;
   }
   .pdf-page img {
@@ -383,9 +383,9 @@ export async function capturePdfRaster(
       : '';
     const codeOverride =
       pdfOpts.codeTheme === 'light'
-        ? `.pdf-page pre, .pdf-page code { background: #f3efe7 !important; color: #1f1d1a !important; }`
+        ? `.pdf-page pre, .pdf-page code { background: #f6f8fa !important; color: #1f2328 !important; }`
         : pdfOpts.codeTheme === 'dark'
-        ? `.pdf-page pre, .pdf-page code { background: #1f1d1a !important; color: #eee !important; }`
+        ? `.pdf-page pre, .pdf-page code { background: #1f2328 !important; color: #eee !important; }`
         : '';
     extraStyle.textContent = `
       .pdf-page {

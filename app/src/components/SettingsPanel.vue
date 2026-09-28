@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { shortcutLabel } from '../lib/keybindings';
 import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../stores/settings';
@@ -42,10 +42,12 @@ import GithubSyncSettings from './GithubSyncSettings.vue';
 import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
 import ThemeMarketplace from './ThemeMarketplace.vue';
-import { isIOS, isMobile, hasGitBackend } from '../lib/platform';
+import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime } from '../lib/platform';
 import { loadCustomTheme } from '../lib/custom-theme';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { DsModal } from '../ui';
+import { getDict } from '../i18n';
+import { flatten, englishFallbackNeedles, blockMatches, normalize, queryMatcher } from '../lib/settings-search';
 import type { Theme } from '../types';
 
 const isMobilePlatform = isIOS();
@@ -263,6 +265,182 @@ watch(
 );
 
 const settings = useSettingsStore();
+// #328/#344 — the editor-engine choice only exists where there are two
+// editors, i.e. Windows (and the ?forcePlain dev hook).
+const windowsEditorRuntime = isWindowsEditorRuntime();
+
+// ---------------------------------------------------------------------------
+// #352 — search across every category.
+//
+// Filtering works on what is rendered: each top-level `[data-cat]` block of
+// the body is matched against its own text, so nothing has to be listed a
+// second time. English keywords also work in a translated UI (see
+// lib/settings-search.ts). While a query is active the category pages are
+// switched off (no data-active-cat) and the matches are shown grouped under
+// their category headings, in category order (CSS `order`).
+// ---------------------------------------------------------------------------
+const searchQuery = ref('');
+const searchInput = ref<HTMLInputElement | null>(null);
+const searching = computed(() => normalize(searchQuery.value).length > 0);
+const searchHitCount = ref(0);
+const catsWithHits = ref<Set<string>>(new Set());
+const catOrder = new Map(categories.map((c, i) => [c.id as string, i]));
+let flatCache: { lang: string; en: Map<string, string>; cur: Map<string, string> } | null = null;
+
+function dictsFor(lang: string) {
+  if (!flatCache || flatCache.lang !== lang) {
+    const en = flatten(getDict('en'));
+    flatCache = { lang, en, cur: lang === 'en' ? en : flatten(getDict(lang)) };
+  }
+  return flatCache;
+}
+
+const HIGHLIGHT = 'settings-search';
+function clearHighlight() {
+  (globalThis as any).CSS?.highlights?.delete?.(HIGHLIGHT);
+}
+/** Mark the matched words with the CSS Custom Highlight API — no DOM edits,
+ *  so Vue's text nodes are left alone. Skipped where unsupported.
+ *  A block that contains the typed query gets only the query marked; the
+ *  English-fallback needles (whole translated sentences) are marked only in
+ *  blocks that matched through them alone, or the page turns into a wall of
+ *  orange. */
+function highlight(blocks: HTMLElement[], query: string, fallback: string[]) {
+  const registry = (globalThis as any).CSS?.highlights;
+  const HighlightCtor = (globalThis as any).Highlight;
+  if (!registry || !HighlightCtor) return;
+  const ranges: Range[] = [];
+  const hasQuery = queryMatcher(query);
+  for (const b of blocks) {
+    const needles = hasQuery(b.textContent || '') ? [query] : fallback;
+    const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode()) && ranges.length < 500) {
+      const parent = (node as Text).parentElement;
+      if (parent?.closest('select, option, textarea')) continue;
+      const text = (node.nodeValue || '').toLowerCase();
+      for (const n of needles) {
+        // Same rule as the matcher: Latin needles only at the start of a word.
+        const latin = /^[a-z0-9 ._+#-]+$/.test(n);
+        let i = n ? text.indexOf(n) : -1;
+        while (i >= 0 && ranges.length < 500) {
+          if (!latin || i === 0 || !/[a-z0-9]/.test(text[i - 1])) {
+            const r = document.createRange();
+            r.setStart(node, i);
+            r.setEnd(node, i + n.length);
+            ranges.push(r);
+          }
+          i = text.indexOf(n, i + n.length);
+        }
+      }
+    }
+  }
+  registry.set(HIGHLIGHT, new HighlightCtor(...ranges));
+}
+
+function applySearch() {
+  const body = bodyEl.value;
+  if (!body) return;
+  const blocks = Array.from(body.children).filter(
+    (el): el is HTMLElement => el instanceof HTMLElement && !!el.dataset.cat,
+  );
+  if (!searching.value) {
+    for (const b of blocks) {
+      delete b.dataset.match;
+      b.style.order = '';
+    }
+    searchHitCount.value = 0;
+    catsWithHits.value = new Set();
+    clearHighlight();
+    return;
+  }
+  const q = searchQuery.value;
+  const { en, cur } = dictsFor(settings.language);
+  const needles = englishFallbackNeedles(q, en, cur);
+  const cats = new Set<string>();
+  const hits: HTMLElement[] = [];
+  for (const b of blocks) {
+    const cat = b.dataset.cat!;
+    const match = blockMatches(b.textContent || '', q, needles);
+    b.dataset.match = match ? '1' : '0';
+    b.style.order = String((catOrder.get(cat) ?? 99) * 2 + 1);
+    if (match) {
+      cats.add(cat);
+      hits.push(b);
+    }
+  }
+  searchHitCount.value = hits.length;
+  catsWithHits.value = cats;
+  highlight(hits, normalize(q), needles);
+}
+
+// Blocks appear and disappear with settings (v-if), so re-filter on changes.
+let bodyObserver: MutationObserver | null = null;
+watch(
+  [searchQuery, () => props.open, () => settings.language],
+  async () => {
+    await nextTick();
+    applySearch();
+    bodyObserver?.disconnect();
+    bodyObserver = null;
+    if (props.open && searching.value && bodyEl.value) {
+      bodyObserver = new MutationObserver(() => applySearch());
+      bodyObserver.observe(bodyEl.value, { childList: true });
+    }
+    if (searching.value) bodyEl.value?.scrollTo({ top: 0 });
+  },
+);
+
+function pickCategory(id: SettingsCategory) {
+  searchQuery.value = '';
+  activeCategory.value = id;
+}
+
+/** Esc clears a query before it closes the dialog, and ⌘F / Ctrl+F jumps to
+ *  the search box. Window capture runs before DsModal's document-capture
+ *  Escape handler (and the app's global shortcuts). */
+function onSearchKeys(e: KeyboardEvent) {
+  if (!props.open) return;
+  if (e.key === 'Escape' && searchQuery.value) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    searchQuery.value = '';
+    searchInput.value?.focus();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    searchInput.value?.focus();
+    searchInput.value?.select();
+  }
+}
+watch(
+  () => props.open,
+  async (open) => {
+    if (open) {
+      window.addEventListener('keydown', onSearchKeys, true);
+      // DsModal focuses the first control, which is now the search box. On a
+      // phone that would raise the keyboard over a dialog the user opened to
+      // browse, so give the focus back there.
+      await nextTick();
+      setTimeout(() => {
+        if (document.documentElement.classList.contains('narrow-viewport')) searchInput.value?.blur();
+      }, 0);
+    } else {
+      window.removeEventListener('keydown', onSearchKeys, true);
+      searchQuery.value = '';
+      clearHighlight();
+    }
+  },
+  { immediate: true },
+);
+onUnmounted(() => {
+  window.removeEventListener('keydown', onSearchKeys, true);
+  bodyObserver?.disconnect();
+  clearHighlight();
+});
+
 
 // #246 — dictionaries actually present, so the picker can't offer a language
 // that would fail to load. `spellcheck_list_dicts` scans
@@ -481,6 +659,19 @@ function onSelectPdfFont(v: string) {
     class="settings-modal"
     @update:model-value="emit('close')"
   >
+      <div class="settings__search">
+        <input
+          ref="searchInput"
+          v-model="searchQuery"
+          type="search"
+          class="settings__search-input"
+          :placeholder="t('settings.searchPlaceholder')"
+          :aria-label="t('settings.searchPlaceholder')"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <span v-if="searching" class="settings__search-count">{{ t('settings.searchCount', { n: searchHitCount }) }}</span>
+      </div>
       <div class="settings__layout">
         <!-- v3.0 — left-side category nav. Click switches the right-side
              content panel; only one category visible at a time. -->
@@ -489,19 +680,36 @@ function onSelectPdfFont(v: string) {
             v-for="c in categories"
             :key="c.id"
             class="settings__nav-item"
-            :class="{ 'settings__nav-item--active': activeCategory === c.id }"
-            @click="activeCategory = c.id"
+            :class="{ 'settings__nav-item--active': !searching && activeCategory === c.id }"
+            @click="pickCategory(c.id)"
           >
             <span class="settings__nav-icon">{{ c.icon }}</span>
             <span class="settings__nav-label">{{ t(c.labelKey) }}</span>
           </button>
         </nav>
-      <div ref="bodyEl" class="settings__body" :data-active-cat="activeCategory">
+      <div
+        ref="bodyEl"
+        class="settings__body"
+        :data-active-cat="searching ? undefined : activeCategory"
+        :data-searching="searching ? '' : undefined"
+      >
+        <template v-if="searching">
+          <h2
+            v-for="(c, i) in categories"
+            v-show="catsWithHits.has(c.id)"
+            :key="'sg-' + c.id"
+            class="settings__search-group"
+            :style="{ order: i * 2 }"
+          >{{ c.icon }} {{ t(c.labelKey) }}</h2>
+          <p v-if="searchHitCount === 0" class="settings__search-empty">
+            {{ t('settings.searchEmpty', { q: searchQuery.trim() }) }}
+          </p>
+        </template>
         <section data-cat="basics">
           <label>{{ t('settings.language') }}</label>
           <select
             :value="settings.language"
-            @change="settings.setLanguage(($event.target as HTMLSelectElement).value as 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk')"
+            @change="settings.setLanguage(($event.target as HTMLSelectElement).value as 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru')"
           >
             <option value="en">English</option>
             <option value="zh">中文</option>
@@ -517,6 +725,7 @@ function onSelectPdfFont(v: string) {
             <option value="tr">Türkçe</option>
             <option value="sv">Svenska</option>
             <option value="uk">Українська</option>
+            <option value="ru">Русский</option>
           </select>
         </section>
 
@@ -662,6 +871,22 @@ function onSelectPdfFont(v: string) {
 
         <section data-cat="basics">
           <label>
+            <input type="checkbox" :checked="settings.alwaysShowMarkers" @change="settings.toggleAlwaysShowMarkers()" />
+            {{ t('settings.alwaysShowMarkers') }}
+          </label>
+          <div class="hint">{{ t('settings.alwaysShowMarkersHint') }}</div>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input type="checkbox" :checked="settings.highlightCurrentLine" @change="settings.toggleHighlightCurrentLine()" />
+            {{ t('settings.highlightCurrentLine') }}
+          </label>
+          <div class="hint">{{ t('settings.highlightCurrentLineHint') }}</div>
+        </section>
+
+        <section data-cat="basics">
+          <label>
             <input type="checkbox" :checked="settings.showOutline" @change="onToggleOutlineGlobal()" />
             {{ t('settings.showOutline') }}
           </label>
@@ -776,6 +1001,18 @@ function onSelectPdfFont(v: string) {
             {{ t('settings.explorerDoubleClickFolders') }}
           </label>
           <p class="setting-hint">{{ t('settings.explorerDoubleClickFoldersHint') }}</p>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input
+              type="checkbox"
+              :checked="settings.explorerFollowActive"
+              @change="settings.toggleExplorerFollowActive()"
+            />
+            {{ t('settings.explorerFollowActive') }}
+          </label>
+          <p class="setting-hint">{{ t('settings.explorerFollowActiveHint') }}</p>
         </section>
 
         <section data-cat="basics">
@@ -1221,6 +1458,17 @@ function onSelectPdfFont(v: string) {
         </section>
 
         <section data-cat="export">
+          <label>
+            <input
+              type="checkbox"
+              :checked="settings.pdfDefaults.toc"
+              @change="settings.setPdfDefaults({ toc: ($event.target as HTMLInputElement).checked })"
+            />
+            {{ t('settings.pdfDefaults.toc') }}
+          </label>
+        </section>
+
+        <section data-cat="export">
           <label>{{ t('settings.pdfDefaults.codeTheme') }}</label>
           <select
             :value="settings.pdfDefaults.codeTheme"
@@ -1573,6 +1821,11 @@ function onSelectPdfFont(v: string) {
             <input type="checkbox" :checked="settings.focusMode" @change="settings.toggleFocusMode()" />
             {{ t('settings.focusMode') }}
           </label>
+          <label>
+            <input type="checkbox" :checked="settings.toolbarHidden" @change="settings.toggleToolbarHidden()" />
+            {{ t('settings.toolbarHidden') }}
+          </label>
+          <p class="setting-hint">{{ withChord('settings.toolbarHiddenHint', 'view.toggleToolbar') }}</p>
         </section>
 
         <section data-cat="writing">
@@ -1638,6 +1891,21 @@ function onSelectPdfFont(v: string) {
             <input type="checkbox" :checked="settings.vimMode" @change="settings.toggleVimMode()" />
             {{ t('settings.vimMode') }}
           </label>
+        </section>
+
+        <section v-if="windowsEditorRuntime" data-cat="writing">
+          <label>{{ t('settings.windowsEditorEngine') }}</label>
+          <select
+            :value="settings.vimMode ? 'codemirror' : settings.windowsEditorEngine"
+            :disabled="settings.vimMode"
+            @change="settings.setWindowsEditorEngine(($event.target as HTMLSelectElement).value as 'native' | 'codemirror')"
+          >
+            <option value="native">{{ t('settings.windowsEditorEngineNative') }}</option>
+            <option value="codemirror">{{ t('settings.windowsEditorEngineCodeMirror') }}</option>
+          </select>
+          <p class="setting-hint">
+            {{ settings.vimMode ? t('settings.windowsEditorEngineVimHint') : t('settings.windowsEditorEngineHint') }}
+          </p>
         </section>
 
         <section data-cat="writing">
@@ -1999,6 +2267,52 @@ function onSelectPdfFont(v: string) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.settings__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.settings__search-input {
+  flex: 0 1 340px;
+  min-width: 0;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+.settings__search-input:focus {
+  border-color: var(--accent);
+}
+.settings__search-count {
+  font-size: 12px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+/* Search mode: every category's blocks are candidates; only matches show. */
+.settings__body[data-searching] > [data-cat]:not([data-match="1"]) {
+  display: none;
+}
+.settings__search-group {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 6px 0 -8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.settings__search-empty {
+  order: -1;
+  color: var(--text-faint);
+  font-size: 13px;
+  margin: 24px 0;
+  text-align: center;
 }
 .settings__body {
   flex: 1;

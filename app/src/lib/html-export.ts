@@ -18,16 +18,26 @@ export const HTML_TEMPLATE = (title: string, body: string, headCss = '') => `<!d
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
+  /* White paper (#332 follow-up): the warm off-white page, beige code blocks
+     and orange table headers read as "yellow" on screen and looked
+     unprofessional in a file people hand to others. Backgrounds are neutral,
+     and so are the accents: the orange h1 rule and quote bar still read as
+     unserious on paper (second #332 follow-up), so rules and bars are dark
+     gray and links a sober blue. Deliberately no dark-mode variant: the file
+     is a document, and mermaid diagrams are rendered for a light page. */
   :root {
-    --brand: #ff9f40;
-    --brand-soft: #ffe7cc;
-    --ink: #1f1d1a;
-    --ink-muted: #6a6560;
-    --rule: #e6e2d8;
-    --paper: #fbfaf6;
-    --code-bg: #f3efe7;
-    --code-key: #ff9f40;
-    --row-alt: #f7f4ec;
+    --accent-rule: #3d444d;
+    --link: #0b5cad;
+    --link-soft: #c9dcf0;
+    --ink: #1f2328;
+    --ink-muted: #59636e;
+    --rule: #e4e6e9;
+    --paper: #ffffff;
+    --code-bg: #f6f8fa;
+    --code-key: #cf222e;
+    --row-alt: #f9fafb;
+    --thead-bg: #f3f4f6;
+    --quote-bg: #f9fafb;
   }
   html, body { background: var(--paper); }
   body {
@@ -56,7 +66,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   h1:first-child, h2:first-child, h3:first-child { margin-top: 0; }
   h1 {
     font-size: 2.15em;
-    border-bottom: 2px solid var(--brand);
+    border-bottom: 2px solid var(--accent-rule);
     padding-bottom: .35em;
     letter-spacing: -0.01em;
   }
@@ -70,11 +80,11 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   h5, h6 { font-size: 1em; color: var(--ink-muted); }
   p { margin: .9em 0; }
   a {
-    color: var(--brand);
+    color: var(--link);
     text-decoration: none;
-    border-bottom: 1px solid var(--brand-soft);
+    border-bottom: 1px solid var(--link-soft);
   }
-  a:hover { border-bottom-color: var(--brand); }
+  a:hover { border-bottom-color: var(--link); }
   strong { color: var(--ink); }
   em { color: var(--ink); }
   code {
@@ -84,7 +94,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
     background: var(--code-bg);
     padding: .15em .45em;
     border-radius: 4px;
-    color: #8a4a00;
+    color: var(--ink);
   }
   pre {
     background: var(--code-bg);
@@ -105,8 +115,8 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   pre code .hljs-built_in,
   pre code .hljs-tag { color: var(--code-key); }
   blockquote {
-    border-left: 4px solid var(--brand);
-    background: linear-gradient(to right, var(--brand-soft) 0%, transparent 40%);
+    border-left: 4px solid var(--accent-rule);
+    background: var(--quote-bg);
     margin: 1.4em 0;
     padding: .5em 1.2em;
     color: var(--ink-muted);
@@ -131,10 +141,10 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   /* #271 — short cells stay on one line (see markdown.ts table_short_cells). */
   .cell-nowrap { white-space: nowrap; }
   thead th {
-    background: var(--brand-soft);
+    background: var(--thead-bg);
     color: var(--ink);
     font-weight: 700;
-    border-bottom: 2px solid var(--brand);
+    border-bottom: 2px solid var(--rule);
   }
   tbody tr:nth-child(even) { background: var(--row-alt); }
   hr {

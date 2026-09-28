@@ -15,7 +15,7 @@ import { codeLanguages } from '../lib/code-languages';
 import { fenceLanguageComplete, fenceLanguageExtension } from '../lib/cm-fence-completion';
 import { filterFenceLanguages, isInsideFenceBefore, matchFenceOpener } from '../lib/fence-languages';
 import { vim, Vim } from '@replit/codemirror-vim';
-import { cmThemeFor } from '../lib/themes';
+import { cmThemeFor, mermaidThemeFor } from '../lib/themes';
 import { registerPlainSelectionGetter } from '../lib/plain-selection';
 import {
   headingFoldExtension,
@@ -49,7 +49,8 @@ import { liveEditExtension, setLiveEditCopyLabel } from '../lib/cm-live-render';
 import { liveBlocksExtension, liveBlocksTheme, extractImageRoot } from '../lib/cm-live-blocks';
 import { findTldrawFences, replaceBoardSnapshot } from '../lib/tldraw-board';
 import { dragAwareExtension } from '../lib/cm-drag-aware';
-import { imagePasteExtension, insertImageFromPath as cmInsertImageFromPath, handleTextareaImagePaste, type ImagePasteOptions } from '../lib/cm-image-paste';
+import { imagePasteExtension, insertImageFromPath as cmInsertImageFromPath, imageTextFromPath, handleTextareaImagePaste, type ImagePasteOptions } from '../lib/cm-image-paste';
+import { markdownImage, encodeImageDestination } from '../lib/md-image-url';
 import { resolveUploader, uploadImage, type ImageUploadSettings } from '../lib/image-upload';
 import { focusModeExtension, typewriterModeExtension } from '../lib/cm-focus-mode';
 import { wikilinkExtension, wikilinkComplete } from '../lib/cm-wikilink';
@@ -79,9 +80,11 @@ import { stableClickSelection } from '../lib/cm-stable-click';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
 import { SLASH_BLOCKS, filterBlocks, expandSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
-import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
+import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor, isAndroid, isIOS } from '../lib/platform';
 import { computeListContinuation, type ListContinuationOptions } from '../lib/list-continuation';
 import { listContinuationKeymap } from '../lib/cm-list-continuation';
+import EditorContextMenu, { type EditorMenuAction } from './EditorContextMenu.vue';
+import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
 
 // Incremental find. CoreMirror's search panel only scrolls to a match when you
 // press Enter / click Next — typing in the field just repaints the highlights
@@ -191,6 +194,8 @@ const langCompartment = new Compartment();
 const wrapCompartment = new Compartment();
 const lineNumCompartment = new Compartment();
 const cursorCompartment = new Compartment();
+// #344 — optional caret-line tint (the base theme paints .cm-activeLine clear).
+const activeLineCompartment = new Compartment();
 const fontSizeCompartment = new Compartment();
 // #180 — the AI-rewrite chord is user-bindable; keep it reconfigurable.
 const aiKeyCompartment = new Compartment();
@@ -251,7 +256,13 @@ const isWindows = isWindowsEditorRuntime();
 // textarea fallback. Opting into Vim therefore explicitly opts into CodeMirror
 // on Windows; PaneContent keys the editor by this setting so the switch happens
 // immediately instead of requiring an app restart (#194).
-const usePlainWindowsEditor = shouldUsePlainWindowsEditor(isWindows, settings.vimMode);
+// The user can also choose CodeMirror outright on Windows (Settings → Editor
+// engine, #328/#344) — same remount path, without the Vim keymap.
+const usePlainWindowsEditor = shouldUsePlainWindowsEditor(
+  isWindows,
+  settings.vimMode,
+  settings.windowsEditorEngine,
+);
 
 // One-time "there is a key for that" tips. Fed from all three input paths
 // below — the same rule as every other editing feature in this file.
@@ -597,7 +608,7 @@ async function processPlainLiveRenderedBlocks() {
     ? await initMermaid({
         startOnLoad: false,
         securityLevel: 'strict',
-        theme: settings.theme === 'dark' ? 'dark' : 'default',
+        theme: mermaidThemeFor(settings.theme),
       })
     : null;
   for (const block of Array.from(mermaidBlocks)) {
@@ -2601,6 +2612,131 @@ function enterPlainSelectAll() {
   });
 }
 
+// ── Editor right-click menu (#210) ─────────────────────────────────────────
+// The webview's own menu came up on Windows without Cut/Copy for a selection
+// the user had just made, so mouse-only users could select but not act. On
+// Windows we show a menu of our own, the same on every editor path (macOS and
+// Linux keep the system menu, see onEditorContextMenu). On phones a long-press
+// fires `contextmenu` too; the system selection menu is better there, so we
+// leave it alone.
+const editorCtx = ref<{ x: number; y: number; hasSelection: boolean } | null>(null);
+let ctxTextarea: HTMLTextAreaElement | null = null;
+let ctxSavedRange: { el: HTMLTextAreaElement; start: number; end: number } | null = null;
+
+/** Right mousedown: remember the textarea selection before anything can
+ *  collapse it (on WebView2 a textarea selection is mirrored into the page
+ *  selection, and page-selection cleanup used to wipe it on right-click). */
+function onEditorMouseDownCapture(event: MouseEvent) {
+  if (event.button !== 2) return;
+  const el = event.target;
+  if (el instanceof HTMLTextAreaElement) {
+    ctxSavedRange = { el, start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+  } else {
+    ctxSavedRange = null;
+  }
+}
+
+function onEditorContextMenu(event: MouseEvent) {
+  const pointer = (event as PointerEvent).pointerType;
+  if (pointer === 'touch' || pointer === 'pen' || isAndroid() || isIOS()) return;
+  // Windows only. There the WebView2 menu lost the selection (#210). The
+  // macOS and Linux menus handle selections fine, and they carry things ours
+  // can't: spelling suggestions, Look Up, Services, writing tools.
+  if (!isWindowsEditorRuntime()) return;
+  event.preventDefault();
+  let hasSelection = false;
+  if (!usePlainWindowsEditor) {
+    hasSelection = !!view && !view.state.selection.main.empty;
+    ctxTextarea = null;
+  } else {
+    const el = event.target instanceof HTMLTextAreaElement ? event.target : plainActiveTextarea();
+    ctxTextarea = el;
+    if (el && ctxSavedRange && ctxSavedRange.el === el
+      && ctxSavedRange.start !== ctxSavedRange.end
+      && el.selectionStart === el.selectionEnd) {
+      // Something collapsed the selection between mousedown and here; the
+      // user right-clicked a selection, so put it back.
+      el.setSelectionRange(ctxSavedRange.start, ctxSavedRange.end);
+    }
+    hasSelection = !!el && el.selectionStart !== el.selectionEnd;
+  }
+  ctxSavedRange = null;
+  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection };
+}
+
+async function writeClipboard(text: string) {
+  try {
+    await writeClipboardTextPlugin(text);
+  } catch {
+    await navigator.clipboard?.writeText(text);
+  }
+}
+async function readClipboard(): Promise<string> {
+  try {
+    return (await readClipboardTextPlugin()) ?? '';
+  } catch {
+    try {
+      return (await navigator.clipboard?.readText()) ?? '';
+    } catch {
+      return '';
+    }
+  }
+}
+
+async function onEditorMenuAction(id: EditorMenuAction) {
+  editorCtx.value = null;
+  if (!usePlainWindowsEditor) {
+    const v = view;
+    if (!v) return;
+    const sel = v.state.selection.main;
+    if (id === 'selectAll') {
+      v.dispatch({ selection: { anchor: 0, head: v.state.doc.length }, userEvent: 'select' });
+    } else if (id === 'copy' || id === 'cut') {
+      if (sel.empty) return;
+      await writeClipboard(v.state.sliceDoc(sel.from, sel.to));
+      if (id === 'cut') {
+        v.dispatch({ changes: { from: sel.from, to: sel.to, insert: '' }, userEvent: 'delete.cut' });
+      }
+    } else if (id === 'paste') {
+      const text = await readClipboard();
+      if (text) v.dispatch({ ...v.state.replaceSelection(text), userEvent: 'input.paste', scrollIntoView: true });
+    }
+    v.focus();
+    return;
+  }
+  const el = ctxTextarea ?? plainActiveTextarea();
+  ctxTextarea = null;
+  if (id === 'selectAll') {
+    if (plainLiveEnabled.value) {
+      enterPlainSelectAll();
+    } else if (el) {
+      el.focus();
+      el.select();
+      clearStrayDocumentSelection(el);
+      emitPlainCursorAndSelection();
+    }
+    return;
+  }
+  if (!el) return;
+  el.focus();
+  if (id === 'copy' || id === 'cut') {
+    const text = el.value.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0);
+    if (!text) return;
+    await writeClipboard(text);
+    if (id === 'cut') {
+      el.focus();
+      // execCommand keeps the edit on the textarea's own undo stack and fires
+      // the input event our block/flat handlers listen to.
+      document.execCommand('delete');
+    }
+  } else if (id === 'paste') {
+    const text = await readClipboard();
+    if (!text) return;
+    el.focus();
+    document.execCommand('insertText', false, text);
+  }
+}
+
 /**
  * Leave select-all mode once the selection collapses (click / arrow key / Esc):
  * re-split into blocks and land the caret in the block that now contains it.
@@ -2781,10 +2917,14 @@ function richExtensionsFor(tab: Tab) {
           locale: settings.language || 'en',
         }),
         getTabId: () => tab.id,
+        // #354 — diagrams follow the app's light/dark family, like preview.
+        getMermaidTheme: () => mermaidThemeFor(settings.theme),
         getPlantuml: () => ({
           enabled: settings.plantumlEnabled,
           server: settings.plantumlServer,
         }),
+        // #353 — "Always show Markdown markers": keep every block's source.
+        keepSource: () => settings.alwaysShowMarkers,
         getBoardStrings: () => ({
           loading: t('whiteboard.loading'),
           openFull: t('whiteboard.openFull'),
@@ -2798,9 +2938,22 @@ function richExtensionsFor(tab: Tab) {
         },
       }),
       liveBlocksTheme,
-    ]);
+    ], { showMarkers: settings.alwaysShowMarkers });
   }
-  return settings.livePreview ? livePreviewExtension() : richHighlightOnly();
+  return settings.livePreview
+    ? livePreviewExtension({ showMarkers: settings.alwaysShowMarkers })
+    : richHighlightOnly();
+}
+
+// #344 — caret-line tint. Selector is one step more specific than the base
+// theme's transparent `.cm-activeLine` so it wins regardless of order.
+function activeLineExtension(on: boolean) {
+  if (!on) return [];
+  return EditorView.theme({
+    '.cm-content .cm-line.cm-activeLine': {
+      backgroundColor: 'color-mix(in srgb, var(--accent) 9%, transparent)',
+    },
+  });
 }
 
 const fontSizeTheme = (px: number, family: string) =>
@@ -2846,6 +2999,7 @@ function buildExtensions() {
           cursorCompartment.of(
             drawSelection({ cursorBlinkRate: settings.solidCursor ? 0 : 1200 }),
           ),
+          activeLineCompartment.of(activeLineExtension(settings.highlightCurrentLine)),
           // #90 — column/rectangular selection: hold Alt (Option on macOS) and
           // drag to select a vertical block. `crosshairCursor` swaps the I-beam
           // for a crosshair while Alt is held so the user knows the mode is
@@ -2880,7 +3034,7 @@ function buildExtensions() {
     richCompartment.of(
       windowsImeSafeMode ? [] : richExtensionsFor(props.tab),
     ),
-    themeCompartment.of(cmThemeFor(settings.theme)),
+    themeCompartment.of(cmThemeFor(settings.theme, !!settings.customCssPath)),
     vimCompartment.of(settings.vimMode ? vim() : []),
     fontSizeCompartment.of(fontSizeTheme(settings.fontSize, settings.fontFamily)),
     spellCheckCompartment.of(spellCheckExt(props.spellCheck)),
@@ -3603,9 +3757,12 @@ watch(
 );
 
 watch(
-  () => settings.theme,
-  (t) => {
-    view?.dispatch({ effects: themeCompartment.reconfigure(cmThemeFor(t)) });
+  () => [settings.theme, !!settings.customCssPath] as const,
+  ([t, custom]) => {
+    view?.dispatch({ effects: themeCompartment.reconfigure(cmThemeFor(t, custom)) });
+    // Live-edit Mermaid widgets carry their theme; rebuild the block field so
+    // diagrams on screen re-render for the new light/dark family (#354).
+    window.dispatchEvent(new CustomEvent('solomd:cm-relayout'));
   }
 );
 
@@ -3621,6 +3778,21 @@ watch(
   (w) => {
     view?.dispatch({ effects: wrapCompartment.reconfigure(w ? EditorView.lineWrapping : []) });
   }
+);
+
+watch(
+  () => settings.highlightCurrentLine,
+  (on) => {
+    view?.dispatch({ effects: activeLineCompartment.reconfigure(activeLineExtension(on)) });
+  },
+);
+
+// #353 — markers shown/hidden is baked into the live bundles; swap them.
+watch(
+  () => settings.alwaysShowMarkers,
+  () => {
+    view?.dispatch({ effects: richCompartment.reconfigure(richExtensionsFor(props.tab)) });
+  },
 );
 
 watch(
@@ -3754,7 +3926,10 @@ function gotoLine(line: number) {
 
 async function insertImageFromPath(srcPath: string): Promise<void> {
   if (usePlainWindowsEditor) {
-    plainInsertText(srcPath);
+    // Was `plainInsertText(srcPath)`: a dropped image file landed as a bare
+    // path instead of an image link.
+    const text = await imageTextFromPath(srcPath, imagePasteOpts());
+    if (text) plainInsertText(text);
     return;
   }
   if (!view) return;
@@ -3767,11 +3942,11 @@ function insertImageUrl(url: string, alt = ''): void {
   const clean = (url || '').trim();
   if (!clean) return;
   if (usePlainWindowsEditor) {
-    plainInsertText(`![${alt}](${clean})`);
+    plainInsertText(markdownImage(clean, alt));
     return;
   }
   if (!view) return;
-  insertMarkdown(`![${alt}](${clean})`);
+  insertMarkdown(markdownImage(clean, alt));
 }
 
 /**
@@ -3832,7 +4007,9 @@ async function uploadLocalImages(): Promise<void> {
 async function resolveLocalImageAbsPath(src: string): Promise<string | null> {
   const { resolveImagePath } = await import('../lib/image-resolve');
   const imageRoot = parseFrontMatterImageRoot(props.tab.content) ?? null;
-  const abs = resolveImagePath(decodeURIComponent(src), imageRoot, props.tab.filePath);
+  // resolveImagePath decodes the src exactly once itself; decoding here too
+  // turned a file named `100%.png` (written as `100%25.png`) into garbage.
+  const abs = resolveImagePath(src, imageRoot, props.tab.filePath);
   return abs || null;
 }
 
@@ -3846,7 +4023,7 @@ function replaceAllImageSrc(oldSrc: string, newUrl: string): void {
   while (idx >= 0) {
     const from = idx + 2; // after `](`
     const to = idx + 2 + oldSrc.length;
-    changes.push({ from, to, insert: newUrl });
+    changes.push({ from, to, insert: encodeImageDestination(newUrl) });
     idx = doc.indexOf(needle, idx + needle.length);
   }
   if (changes.length) view.dispatch({ changes });
@@ -3990,8 +4167,18 @@ const cls = computed(() => ({
 </script>
 
 <template>
-  <div v-if="!usePlainWindowsEditor" :class="cls" ref="host"></div>
-  <div v-else class="plain-host">
+  <div
+    v-if="!usePlainWindowsEditor"
+    :class="cls"
+    ref="host"
+    @contextmenu="onEditorContextMenu"
+  ></div>
+  <div
+    v-else
+    class="plain-host"
+    @mousedown.capture="onEditorMouseDownCapture"
+    @contextmenu="onEditorContextMenu"
+  >
     <div
       v-if="plainLiveEnabled"
       ref="plainLiveHost"
@@ -4113,7 +4300,7 @@ const cls = computed(() => ({
         @paste="handlePlainPaste"
         @input="handlePlainInput"
         @scroll="onPlainScroll"
-        @mousedown="clearStrayDocumentSelection($event.currentTarget as HTMLElement)"
+        @mousedown="$event.button === 0 && clearStrayDocumentSelection($event.currentTarget as HTMLElement)"
         @blur="schedulePlainOverlays"
         @keyup="emitPlainCursorAndSelection"
         @mouseup="emitPlainCursorAndSelection"
@@ -4221,6 +4408,16 @@ const cls = computed(() => ({
       </li>
     </ul>
   </div>
+  <Teleport to="body">
+    <EditorContextMenu
+      v-if="editorCtx"
+      :x="editorCtx.x"
+      :y="editorCtx.y"
+      :has-selection="editorCtx.hasSelection"
+      @action="onEditorMenuAction"
+      @close="editorCtx = null"
+    />
+  </Teleport>
 </template>
 
 <style scoped>

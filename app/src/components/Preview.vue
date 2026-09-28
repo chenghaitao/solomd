@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { initMermaid } from '../lib/mermaid-lazy';
+import { mermaidThemeFor } from '../lib/themes';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { renderMarkdown, extractImageRoot } from '../lib/markdown';
 import { plantumlSvgUrl } from '../lib/plantuml';
@@ -38,6 +39,9 @@ const props = withDefaults(
   }>(),
   { skin: 'default' },
 );
+// #350 — source line of the block at the top of the preview, so the outline
+// can follow the reading position in preview mode.
+const emit = defineEmits<{ (e: 'topline', line: number): void }>();
 const settings = useSettingsStore();
 const tabs = useTabsStore();
 const files = useFiles();
@@ -188,7 +192,7 @@ async function processMermaid() {
   const mermaid = await initMermaid({
     startOnLoad: false,
     securityLevel: 'strict',
-    theme: settings.theme === 'dark' ? 'dark' : 'default',
+    theme: mermaidThemeFor(settings.theme),
   });
   for (const block of Array.from(blocks)) {
     const pre = block.parentElement as HTMLElement | null;
@@ -199,6 +203,8 @@ async function processMermaid() {
       const { svg } = await mermaid.render(id, code);
       const wrap = document.createElement('div');
       wrap.className = 'mermaid-block';
+      // Keep the source so a theme switch can re-render this diagram.
+      wrap.dataset.mermaidSource = code;
       wrap.innerHTML = svg;
       pre.replaceWith(wrap);
     } catch (e) {
@@ -281,10 +287,23 @@ async function processWhiteboards() {
   }
 }
 
-// The theme is applied by processMermaid on each render pass, so there is
-// nothing to re-initialise here — and initialising eagerly would load the
-// renderer for a note that has no diagrams.
-watch(() => settings.theme, () => { void processMermaid(); });
+// The theme is applied by processMermaid on each render pass. Diagrams already
+// on screen were drawn for the old theme and processMermaid skips them, so put
+// their source back as a fence first and let it render them again (#354).
+// A note with no diagrams still never loads the renderer.
+watch(() => settings.theme, () => {
+  if (host.value) {
+    for (const wrap of Array.from(host.value.querySelectorAll<HTMLElement>('.mermaid-block[data-mermaid-source]'))) {
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      code.className = 'language-mermaid';
+      code.textContent = wrap.dataset.mermaidSource ?? '';
+      pre.appendChild(code);
+      wrap.replaceWith(pre);
+    }
+  }
+  void processMermaid();
+});
 
 function overlayStrings(): OverlayStrings {
   return {
@@ -559,8 +578,48 @@ function scrollToLine(line: number) {
     }
   }
   const target = nodes[best];
-  const offset = target.offsetTop - 8;
-  container.scrollTo({ top: offset, behavior: 'smooth' });
+  // #350 — measure against the scroll container itself. `offsetTop` is
+  // relative to the offsetParent, and .preview-host is not positioned, so it
+  // also counted the pane chrome above the preview: every jump overshot by
+  // that much and the heading ended up hidden above the top edge.
+  const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  container.scrollTo({ top: Math.max(0, container.scrollTop + delta - TOP_GAP), behavior: 'smooth' });
+  flashTarget(target);
+  emit('topline', Number(target.getAttribute('data-source-line') || line));
+}
+
+/** Breathing room kept above a jumped-to block. */
+const TOP_GAP = 8;
+
+/** Briefly mark the block an outline jump landed on (#350). */
+function flashTarget(el: HTMLElement) {
+  el.classList.remove('preview-flash');
+  // Force a reflow so re-triggering on the same element restarts the animation.
+  void el.offsetWidth;
+  el.classList.add('preview-flash');
+  window.setTimeout(() => el.classList.remove('preview-flash'), 1300);
+}
+
+// #350 — in preview mode the outline highlights the heading at the top of the
+// preview, not the editor cursor (which does not move while reading). Emits
+// the source line of the last block whose top is at/above the viewport top
+// (plus the jump gap), at most once per frame.
+let toplineRaf = 0;
+function onHostScroll() {
+  if (toplineRaf) return;
+  toplineRaf = requestAnimationFrame(() => {
+    toplineRaf = 0;
+    const article = host.value;
+    const container = article?.parentElement as HTMLElement | null;
+    if (!article || !container) return;
+    const limit = container.getBoundingClientRect().top + TOP_GAP + 2;
+    let line = 0;
+    for (const el of Array.from(article.querySelectorAll<HTMLElement>('[data-source-line]'))) {
+      if (el.getBoundingClientRect().top > limit) break;
+      line = Number(el.getAttribute('data-source-line') || 0) || line;
+    }
+    emit('topline', line || 1);
+  });
 }
 
 // #189 — copying rendered content into mail clients / rich editors dropped
@@ -600,7 +659,7 @@ defineExpose({ scrollToLine, openSearch });
 </script>
 
 <template>
-  <div class="preview-host" :class="{ 'preview-host--reading': skin === 'reading' }" @copy="onPreviewCopy">
+  <div class="preview-host" :class="{ 'preview-host--reading': skin === 'reading' }" @copy="onPreviewCopy" @scroll.passive="onHostScroll">
     <PreviewSearch
       v-if="searchOpen && host"
       ref="searchRef"
@@ -656,6 +715,14 @@ defineExpose({ scrollToLine, openSearch });
   on equal-or-higher specificity.
 -->
 <style>
+.preview-content .preview-flash {
+  animation: preview-flash 1.2s ease-out;
+  border-radius: 4px;
+}
+@keyframes preview-flash {
+  0%, 25% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background: transparent; }
+}
 .preview-host {
   height: 100%;
   overflow: auto;

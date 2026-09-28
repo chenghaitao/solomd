@@ -208,6 +208,12 @@ The MCP server is a separate crate at `mcp-server/`; the dev MCP harness used fo
 
 Issues and PRs welcome — [open one](https://github.com/chenghaitao/solomd/issues). For a sense of direction, see [`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md), which lists what this fork changes relative to upstream.
 
+<!-- sponsors:start -->
+## Sponsors
+
+Thank you to everyone who sponsors SoloMD: **tyysoft(太阳雨)**
+<!-- sponsors:end -->
+
 ## License & credits
 
 [MIT](LICENSE) © 2026 xiangdong li. SoloMD stands on Tauri 2, Vue 3, CodeMirror 6, markdown-it, KaTeX, Mermaid, libgit2, Pandoc, Hunspell, `keyring-rs`, and `rmcp`. Upstream development is sponsored via [GitHub Sponsors](https://github.com/sponsors/zhitongblog).

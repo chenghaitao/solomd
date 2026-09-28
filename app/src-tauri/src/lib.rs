@@ -98,9 +98,13 @@ pub mod cookbook;
 // v2.3 dev WebDriver bridge — debug builds only.
 #[cfg(debug_assertions)]
 pub mod dev_bridge;
+pub mod portable;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before any webview exists: moves WebView2 data next to the exe when a
+    // portable `data` folder is present (#295). No-op everywhere else.
+    portable::init();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

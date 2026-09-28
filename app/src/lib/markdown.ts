@@ -151,6 +151,35 @@ md.inline.ruler.before('link', 'wikilink', (state, silent) => {
   return false;
 });
 
+// ---- Image with a space in its path (#345) -----------------------------------
+// CommonMark doesn't allow a space in a bare link destination, so
+// `![](D:/Program Files/a.png)` renders as literal text. SoloMD used to write
+// exactly that when pasting into an image folder whose path had a space (it
+// now percent-encodes, see md-image-url.ts), so notes in the wild still carry
+// such links. Accept them as images — but only when the destination is a
+// single line, has no quotes, parentheses or angle brackets, and ends in an
+// image extension. Under the standard grammar that text can only ever render
+// as the raw characters, so nothing that works today changes meaning.
+const SPACED_IMAGE_RE =
+  /^!\[([^\]\n]*)\]\(\s*([^()<>"'\n]*?\s[^()<>"'\n]*?\.(?:png|jpe?g|gif|webp|svg|bmp|avif|ico|tiff?))\s*\)/i;
+md.inline.ruler.before('image', 'image_spaced_path', (state, silent) => {
+  if (state.src.charCodeAt(state.pos) !== 0x21 /* ! */) return false;
+  const m = SPACED_IMAGE_RE.exec(state.src.slice(state.pos, state.posMax));
+  if (!m) return false;
+  const href = state.md.normalizeLink(m[2]);
+  if (!state.md.validateLink(href)) return false;
+  if (!silent) {
+    const children: typeof state.tokens = [];
+    state.md.inline.parse(m[1], state.md, state.env, children);
+    const token = state.push('image', 'img', 0);
+    token.attrs = [['src', href], ['alt', '']];
+    token.children = children;
+    token.content = m[1];
+  }
+  state.pos += m[0].length;
+  return true;
+});
+
 // ---- Source line mapping for split-pane scroll sync ----
 // Annotate every block-level opening token with `data-source-line` set to
 // the 1-indexed source line. App.vue's split-scroll uses these attributes

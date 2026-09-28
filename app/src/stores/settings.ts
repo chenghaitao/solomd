@@ -1,3 +1,4 @@
+import { isTreeSortMode, type TreeSortMode } from '../lib/tree-sort';
 import { defineStore } from 'pinia';
 import type { Theme, ViewMode } from '../types';
 import { isIOS, isMobile } from '../lib/platform';
@@ -34,6 +35,12 @@ interface Settings {
   showLineNumbers: boolean;
   // #193 — non-blinking (solid) caret in the editor.
   solidCursor: boolean;
+  // #353 — keep Markdown markers (`#`, `**`, …) visible in the CodeMirror
+  // live views instead of hiding them off the caret line, so clicking a line
+  // doesn't reflow it. Styling (heading size, bold) still applies.
+  alwaysShowMarkers: boolean;
+  // #344 — tint the caret line's background in the CodeMirror editor.
+  highlightCurrentLine: boolean;
   // #190 — dedicated code font (code blocks / inline code / mono UI).
   // Empty = built-in monospace stack.
   codeFontFamily: string;
@@ -76,14 +83,23 @@ interface Settings {
   // Editor super features
   spellCheck: boolean;
   focusMode: boolean;
+  /** #346: hide the toolbar's buttons for a distraction-free, keyboard-only
+   *  setup. The window strip (drag area, file name, window controls and the
+   *  Windows menubar) stays. Where the OS draws the title bar, the whole
+   *  toolbar goes. */
+  toolbarHidden: boolean;
   typewriterMode: boolean;
   /** One-time tips when Markdown formatting is typed by hand (useFormatHints). */
   formatHints: boolean;
   /** Hint keys already shown — `bold`, `heading`, … Never shown twice. */
   formatHintsSeen: string[];
   vimMode: boolean;
+  /** Windows only: 'native' textarea (IME-safe, default) or 'codemirror'
+   *  (syntax highlighting, non-jumping live edit) — #328, #344. Vim mode
+   *  forces CodeMirror regardless. Ignored on other platforms. */
+  windowsEditorEngine: 'native' | 'codemirror';
   uiFontSize: number;
-  language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk';
+  language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru';
   autoCheckUpdate: boolean;
   // Preview layout
   previewFitWidth: boolean;
@@ -292,6 +308,11 @@ interface Settings {
   // one (a single click then only selects the folder, e.g. as the target of
   // "new file"). Files always open on a single click. Default off.
   explorerDoubleClickFolders: boolean;
+  // #333 — the Explorer follows the active document: switching tabs (or
+  // opening a file) expands the file's folders and scrolls its row into view,
+  // like an IDE's "always select opened file". Default on. It never re-roots
+  // the workspace: a file outside it is simply not followed.
+  explorerFollowActive: boolean;
   // Show dot-files / dot-folders in the Explorer tree. Off by default: a
   // vault's `.git`, `.obsidian` and friends are noise for most people. On,
   // they're reachable from inside the app instead of only from Finder.
@@ -305,6 +326,9 @@ interface Settings {
   // persists, so the tree carries a permanent banner whenever it is set —
   // a filter you can't see is indistinguishable from missing files.
   explorerExtFilter: string[];
+  // #342: file-tree order, per workspace folder (key = absolute folder path).
+  // A folder without an entry sorts by name, as it always did.
+  explorerSortByFolder: Record<string, TreeSortMode>;
   // #141 (4.8.10): render a single newline as a real line break (Typora-like)
   // in preview / live editor / every export. Default ON — CJK users write
   // one-sentence-per-line and expect it to hold; standard blank-line
@@ -456,6 +480,8 @@ export interface PdfDefaults {
   footer: boolean;
   /** Code-block syntax highlighting in PDF: match preview / always light / always dark. */
   codeTheme: 'preview' | 'light' | 'dark';
+  /** #347 — start the text PDF with a table-of-contents page. */
+  toc: boolean;
 }
 
 export function defaultPdfDefaults(): PdfDefaults {
@@ -472,6 +498,7 @@ export function defaultPdfDefaults(): PdfDefaults {
     fontSize: 11,
     footer: true,
     codeTheme: 'preview',
+    toc: false,
   };
 }
 
@@ -517,6 +544,8 @@ function defaults(): Settings {
     wordWrap: true,
     showLineNumbers: true,
     solidCursor: false,
+    alwaysShowMarkers: false,
+    highlightCurrentLine: false,
     codeFontFamily: '',
     showOutline: false,
     outlineSide: 'right',
@@ -536,15 +565,17 @@ function defaults(): Settings {
     livePreview: true,
     spellCheck: true,
     focusMode: false,
+    toolbarHidden: false,
     typewriterMode: false,
     formatHints: true,
     formatHintsSeen: [],
     vimMode: false,
+    windowsEditorEngine: 'native',
     uiFontSize: 13,
     autoCheckUpdate: true,
     language: (() => {
       // Detect browser language on first run. Maps navigator BCP-47 tag
-      // to one of the 14 shipped UI locales; everything else → 'en'.
+      // to one of the 15 shipped UI locales; everything else → 'en'.
       try {
         const nav = typeof navigator !== 'undefined' ? navigator.language || '' : '';
         if (/^zh/i.test(nav)) return 'zh';
@@ -560,9 +591,10 @@ function defaults(): Settings {
         if (/^tr/i.test(nav)) return 'tr';
         if (/^sv/i.test(nav)) return 'sv';
         if (/^uk/i.test(nav)) return 'uk';
+        if (/^ru/i.test(nav)) return 'ru';
         return 'en';
       } catch { return 'en'; }
-    })() as 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk',
+    })() as 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru',
     previewFitWidth: false,
     previewMaxWidth: 760,
     plantumlEnabled: false,
@@ -637,8 +669,10 @@ function defaults(): Settings {
     codeBlockWrap: false,
     explorerFullNames: false,
     explorerDoubleClickFolders: false,
+    explorerFollowActive: true,
     explorerShowHidden: false,
     explorerExtFilter: [] as string[],
+    explorerSortByFolder: {} as Record<string, TreeSortMode>,
     distinctSplitPanes: false,
     markdownHardBreaks: true,
     markdownListContinue: true,
@@ -708,6 +742,7 @@ function mergePdfDefaults(saved: unknown): PdfDefaults {
     fontSize: clamp(s.fontSize, 9, 16, base.fontSize),
     footer: typeof s.footer === 'boolean' ? s.footer : base.footer,
     codeTheme: okCodeTheme.includes(s.codeTheme as never) ? (s.codeTheme as PdfDefaults['codeTheme']) : base.codeTheme,
+    toc: typeof s.toc === 'boolean' ? s.toc : base.toc,
   };
 }
 
@@ -723,6 +758,13 @@ function load(): Settings {
       merged.pdfDefaults = mergePdfDefaults(parsed.pdfDefaults);
       // #180 — keybindings is a free-form map, so a tampered or older blob
       // could put anything here; keep only string/null values.
+      if (merged.windowsEditorEngine !== 'codemirror') merged.windowsEditorEngine = 'native';
+      merged.explorerSortByFolder = {};
+      if (parsed.explorerSortByFolder && typeof parsed.explorerSortByFolder === 'object') {
+        for (const [k, v] of Object.entries(parsed.explorerSortByFolder)) {
+          if (isTreeSortMode(v)) merged.explorerSortByFolder[k] = v;
+        }
+      }
       merged.keybindings = {};
       if (parsed.keybindings && typeof parsed.keybindings === 'object') {
         for (const [k, v] of Object.entries(parsed.keybindings)) {
@@ -829,6 +871,11 @@ export const useSettingsStore = defineStore('settings', {
       const i = order.indexOf(this.viewMode);
       this.setViewMode(order[(i + 1) % order.length]);
     },
+    /** #180 - flip between live edit (WYSIWYG) and edit only (source).
+     *  From any other view (split, preview, reading) it lands in live edit. */
+    toggleLiveEditSource() {
+      this.setViewMode(this.viewMode === 'liveEdit' ? 'edit' : 'liveEdit');
+    },
     /**
      * Toggle reading mode on/off. If the user is currently in reading mode
      * we restore whatever they were in before; otherwise we save the
@@ -891,6 +938,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleSolidCursor() {
       this.solidCursor = !this.solidCursor;
+      this.persist();
+    },
+    toggleAlwaysShowMarkers() {
+      this.alwaysShowMarkers = !this.alwaysShowMarkers;
+      this.persist();
+    },
+    toggleHighlightCurrentLine() {
+      this.highlightCurrentLine = !this.highlightCurrentLine;
       this.persist();
     },
     setCodeFontFamily(f: string) {
@@ -1023,6 +1078,10 @@ export const useSettingsStore = defineStore('settings', {
       this.focusMode = !this.focusMode;
       this.persist();
     },
+    toggleToolbarHidden() {
+      this.toolbarHidden = !this.toolbarHidden;
+      this.persist();
+    },
     toggleFormatHints() {
       this.formatHints = !this.formatHints;
       this.persist();
@@ -1037,6 +1096,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleVimMode() {
       this.vimMode = !this.vimMode;
+      this.persist();
+    },
+    setWindowsEditorEngine(engine: 'native' | 'codemirror') {
+      this.windowsEditorEngine = engine === 'codemirror' ? 'codemirror' : 'native';
       this.persist();
     },
     toggleAutoCheckUpdate() {
@@ -1220,7 +1283,7 @@ export const useSettingsStore = defineStore('settings', {
       this.uiFontSize = Math.max(10, Math.min(20, n));
       this.persist();
     },
-    setLanguage(lang: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk') {
+    setLanguage(lang: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru') {
       this.language = lang;
       this.persist();
     },
@@ -1340,6 +1403,10 @@ export const useSettingsStore = defineStore('settings', {
       this.explorerDoubleClickFolders = !this.explorerDoubleClickFolders;
       this.persist();
     },
+    toggleExplorerFollowActive() {
+      this.explorerFollowActive = !this.explorerFollowActive;
+      this.persist();
+    },
     toggleExplorerShowHidden() {
       this.explorerShowHidden = !this.explorerShowHidden;
       this.persist();
@@ -1353,6 +1420,13 @@ export const useSettingsStore = defineStore('settings', {
     },
     clearExplorerExtFilter() {
       this.explorerExtFilter = [];
+      this.persist();
+    },
+    setExplorerSort(folder: string, mode: TreeSortMode) {
+      const next = { ...this.explorerSortByFolder };
+      if (mode === 'name-asc') delete next[folder];
+      else next[folder] = mode;
+      this.explorerSortByFolder = next;
       this.persist();
     },
     toggleDistinctSplitPanes() {

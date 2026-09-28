@@ -77,16 +77,16 @@ function onPillClick() {
 
 <template>
   <div class="statusbar">
-    <span class="seg seg--wide">Ln {{ props.line }}, Col {{ props.col }}</span>
+    <span class="seg seg--wide">{{ t('statusbar.ln') }} {{ props.line }}, {{ t('statusbar.col') }} {{ props.col }}</span>
     <span class="sep sep--wide">·</span>
-    <span class="seg seg--wide">{{ lineCount }} lines</span>
+    <span class="seg seg--wide">{{ lineCount }} {{ t('statusbar.lines') }}</span>
     <span class="sep sep--wide">·</span>
-    <span class="seg">{{ wordCount }} words</span>
+    <span class="seg">{{ wordCount }} {{ t('statusbar.words') }}</span>
     <span v-if="cjkCount > 0" class="seg seg--cjk" :title="`${cjkCount} CJK characters`">
       ({{ cjkCount }} 字)
     </span>
     <span class="sep sep--wide">·</span>
-    <span class="seg seg--wide">{{ charCount }} chars</span>
+    <span class="seg seg--wide">{{ charCount }} {{ t('statusbar.chars') }}</span>
     <span v-if="selStats" class="seg seg--selection" :title="t('statusBar.selectionTooltip')">
       ·
       {{ t('statusBar.selection', { words: String(selStats.total), chars: String(selStats.chars) }) }}

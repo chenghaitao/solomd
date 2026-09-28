@@ -27,6 +27,7 @@ export const LANGS = [
   'tr',
   'sv',
   'uk',
+  'ru',
 ] as const;
 export type Lang = (typeof LANGS)[number];
 
@@ -50,6 +51,7 @@ const loaders: Record<Lang, () => Promise<I18n>> = {
   tr: () => import('./tr').then((m) => m.tr),
   sv: () => import('./sv').then((m) => m.sv),
   uk: () => import('./uk').then((m) => m.uk),
+  ru: () => import('./ru').then((m) => m.ru),
 };
 
 const loaded = new Map<Lang, I18n>([['en', en]]);
@@ -81,6 +83,20 @@ export async function loadLocale(lang: Lang): Promise<void> {
 }
 
 let watcherInstalled = false;
+
+/**
+ * The dictionary of `lang`, for features that search translations (#352
+ * settings search looks an English keyword up in `en` and matches the
+ * translation).
+ *
+ * Locales are lazy here, so this can only hand back a dictionary that has been
+ * loaded — which is the case that matters: the caller asks for the language the
+ * user is looking at, and that chunk is the one `loadLocale` fetched. English is
+ * always available, so the fallback is real rather than a guess.
+ */
+export function getDict(lang: string): unknown {
+  return loaded.get(lang as Lang) ?? en;
+}
 
 export function useI18n() {
   const settings = useSettingsStore();

@@ -28,6 +28,7 @@ const PDF_OPTS: ResolvedPdfOptions = {
   fontSizePt: 11,
   footer: false,
   codeTheme: 'preview',
+  toc: false,
 };
 
 /** Height of the strip drawn around each page break, in raster pixels. */
@@ -232,6 +233,7 @@ function preset(
       fontSizePt: 11,
       footer: false,
       codeTheme: 'preview',
+      toc: false,
     },
   };
 }

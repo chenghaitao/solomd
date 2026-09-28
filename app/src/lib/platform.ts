@@ -95,15 +95,21 @@ export function isWindowsEditorRuntime(): boolean {
   );
 }
 
+/** Which editor Windows uses: the native textarea or CodeMirror (#328, #344). */
+export type WindowsEditorEngine = 'native' | 'codemirror';
+
 /**
  * Windows falls back to the native textarea for reliable CJK IME input, but
  * Vim is a CodeMirror extension and therefore requires the CodeMirror editor.
- * Keep this decision pure so the Windows/Vim hand-off can be regression tested
+ * The user can also pick CodeMirror outright (Settings → Editor engine) for
+ * syntax highlighting and the non-jumping live edit, without Vim keys.
+ * Keep this decision pure so the Windows hand-off can be regression tested
  * without booting a platform WebView.
  */
 export function shouldUsePlainWindowsEditor(
   windowsRuntime: boolean,
   vimMode: boolean,
+  engine: WindowsEditorEngine = 'native',
 ): boolean {
-  return windowsRuntime && !vimMode;
+  return windowsRuntime && !vimMode && engine !== 'codemirror';
 }

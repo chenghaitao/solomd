@@ -1329,7 +1329,7 @@ fn handle_event(app: &AppHandle, event: Event) {
 // ---------------------------------------------------------------------------
 
 fn cache_path(app: &AppHandle, root: &Path) -> Option<PathBuf> {
-    let app_data = app.path().app_data_dir().ok()?;
+    let app_data = super::portable::app_data_dir(app.path()).ok()?;
     let mut hasher = Sha256::new();
     hasher.update(root.to_string_lossy().as_bytes());
     let hash = format!("{:x}", hasher.finalize());

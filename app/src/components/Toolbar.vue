@@ -668,6 +668,10 @@ onBeforeUnmount(() => {
       'toolbar--win': winTitleBar,
       'toolbar--phone-open': isNarrow && sheetOpen,
       'toolbar--sheet': sheetOpen,
+      // #346 — keyboard users can drop the buttons. Ignored on a phone:
+      // with no keyboard, the ⋯ sheet is the only way back to Settings.
+      'toolbar--minimal': settings.toolbarHidden && !isNarrow,
+      'toolbar--gone': settings.toolbarHidden && !isNarrow && !macTitleBar && !winTitleBar,
     }"
     @mousedown.capture="onTitleBarMouseDown"
     @dblclick="onTitleBarDblClick"
@@ -994,8 +998,11 @@ onBeforeUnmount(() => {
         <span class="clean-ai-broom">🧹</span>
         <span class="clean-ai-label">AI</span>
       </button>
+      <!-- #346: hidden until AI is switched on in Settings. With AI off, the
+           button only ever answered "enable AI first". The command palette
+           entry stays, and so does the setting. -->
       <button
-        v-if="!IS_APP_STORE_BUILD"
+        v-if="!IS_APP_STORE_BUILD && settings.aiEnabled"
         class="icon-btn ai-rewrite-btn"
         @mousedown.prevent
         @click="onAIRewrite"
@@ -1093,7 +1100,7 @@ onBeforeUnmount(() => {
           v-if="settings.pomodoroShowControls"
           class="icon-btn pomo-chevron"
           @click="togglePomo"
-          :title="t('pomodoro.openMenu')"
+          :title="t('pomodoro.openMenu', { key: chord('pomodoro.startLast') || '—' })"
           aria-haspopup="dialog"
           :aria-expanded="pomoOpen"
         >
@@ -1229,6 +1236,21 @@ onBeforeUnmount(() => {
    caption buttons render flush against the top-right corner (no padding). */
 .toolbar--win {
   padding-right: 0;
+}
+/* #346 — "hide toolbar buttons". On macOS and Windows this row is also the
+   window's title bar (traffic lights / caption buttons, drag area, menubar), so
+   only the buttons go. Elsewhere the OS draws the title bar and the row can
+   go entirely. */
+.toolbar--minimal > .toolbar__group,
+.toolbar--minimal > .toolbar__divider,
+.toolbar--minimal > .toolbar__more {
+  display: none;
+}
+.toolbar--minimal .toolbar__title {
+  margin: 0 auto;
+}
+.toolbar--gone {
+  display: none;
 }
 .menubar {
   display: flex;

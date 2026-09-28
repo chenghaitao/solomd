@@ -125,6 +125,9 @@ const fencedLine = lineClass('cm-md-fenced-line');
 const headingLine = (level: number) => lineClass(`cm-md-heading-line cm-md-heading-line-${level}`);
 
 const hideDeco = Decoration.replace({});
+// #353 "Always show Markdown markers": the markers stay in the text, dimmed,
+// instead of being replaced. Styling (heading size, bold, …) is unchanged.
+const markerMark = Decoration.mark({ class: 'cm-md-marker' });
 
 // ---------------------------------------------------------------------------
 // List + horizontal-rule rendering (v4.7.1). Off the caret line we render
@@ -301,7 +304,7 @@ const HEADING_LEVELS: Record<string, number> = {
   SetextHeading1: 1, SetextHeading2: 2,
 };
 
-function buildDecorations(view: EditorView): DecorationSet {
+function buildDecorations(view: EditorView, showMarkers = false): DecorationSet {
   const sel = view.state.selection.main;
   const fromLine = view.state.doc.lineAt(sel.from).number;
   const toLine = view.state.doc.lineAt(sel.to).number;
@@ -336,6 +339,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // ---- Marker hiding (off-line only) ----
         if (HIDDEN_MARK_NODES.has(name)) {
+          if (showMarkers) {
+            // Dimmed, never removed — so the line looks the same whether or
+            // not the caret is on it (#353).
+            if (nTo > nFrom) ranges.push(markerMark.range(nFrom, nTo));
+            return;
+          }
           if (!caretTouches && nTo > nFrom) {
             // v4.3.5 #83 — for ATX heading marks (`#`, `##`, …) also hide
             // the single trailing space that separates the marker from
@@ -364,7 +373,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (name === 'URL') {
           const parent = node.node.parent;
           const inLabeledLink = parent && parent.name === 'Link';
-          if (inLabeledLink && !caretTouches && nTo > nFrom) {
+          if (inLabeledLink && !showMarkers && !caretTouches && nTo > nFrom) {
             ranges.push(hideDeco.range(nFrom, nTo));
           }
           return;
@@ -476,7 +485,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         // task item's dash is hidden so the checkbox widget leads. Revealed
         // (raw) on the caret line so the marker stays editable.
         if (name === 'ListMark') {
-          if (caretTouches || nTo <= nFrom) return;
+          if (showMarkers || caretTouches || nTo <= nFrom) return;
           const mark = view.state.doc.sliceString(nFrom, nTo);
           const isBullet = mark === '-' || mark === '*' || mark === '+';
           if (!isBullet) return; // ordered list ("1.", "2)") keeps its number
@@ -495,7 +504,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // ---- Horizontal rule (v4.7.1): `---` / `***` / `___` → <hr> ----
         if (name === 'HorizontalRule') {
-          if (caretTouches || nTo <= nFrom) return;
+          if (showMarkers || caretTouches || nTo <= nFrom) return;
           ranges.push(hrDeco.range(nFrom, nTo));
           return;
         }
@@ -516,13 +525,14 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (let lineNo = firstVisibleLine; lineNo <= lastVisibleLine; lineNo += 1) {
       if (seenInlineHtmlLines.has(lineNo)) continue;
       seenInlineHtmlLines.add(lineNo);
-      if (lineNo >= fromLine && lineNo <= toLine) continue;
+      if (!showMarkers && lineNo >= fromLine && lineNo <= toLine) continue;
       const line = view.state.doc.line(lineNo);
       if (seenFencedLines.has(line.from)) continue;
       const base = line.from;
       const scanText = maskInlineCode(line.text);
+      const tagDeco = showMarkers ? markerMark : hideDeco;
       for (const span of findInlineHtmlSpans(scanText)) {
-        ranges.push(hideDeco.range(base + span.openFrom, base + span.openTo));
+        ranges.push(tagDeco.range(base + span.openFrom, base + span.openTo));
         if (span.contentTo > span.contentFrom) {
           ranges.push(
             inlineHtmlMark(span.kind).range(
@@ -531,14 +541,14 @@ function buildDecorations(view: EditorView): DecorationSet {
             ),
           );
         }
-        ranges.push(hideDeco.range(base + span.closeFrom, base + span.closeTo));
+        ranges.push(tagDeco.range(base + span.closeFrom, base + span.closeTo));
       }
       for (const span of findMarkSpans(scanText)) {
-        ranges.push(hideDeco.range(base + span.openFrom, base + span.openTo));
+        ranges.push(tagDeco.range(base + span.openFrom, base + span.openTo));
         ranges.push(
           htmlMarkMark.range(base + span.contentFrom, base + span.contentTo),
         );
-        ranges.push(hideDeco.range(base + span.closeFrom, base + span.closeTo));
+        ranges.push(tagDeco.range(base + span.closeFrom, base + span.closeTo));
       }
     }
   }
@@ -548,12 +558,12 @@ function buildDecorations(view: EditorView): DecorationSet {
   return Decoration.set(ranges, true);
 }
 
-const liveRenderPlugin = ViewPlugin.fromClass(
+const makeLiveRenderPlugin = (showMarkers: boolean) => ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
 
     constructor(view: EditorView) {
-      this.decorations = buildDecorations(view);
+      this.decorations = buildDecorations(view, showMarkers);
     }
 
     update(u: ViewUpdate) {
@@ -570,10 +580,12 @@ const liveRenderPlugin = ViewPlugin.fromClass(
       const dragEnded = u.transactions.some(isDragEndTransaction);
       const imeFlush = u.transactions.some(isImeSafeFlushTransaction);
       if (u.docChanged || u.viewportChanged || dragEnded || imeFlush) {
-        this.decorations = buildDecorations(u.view);
+        this.decorations = buildDecorations(u.view, showMarkers);
         return;
       }
-      if (u.selectionSet && !isDragging(u.state)) {
+      // With markers always shown nothing depends on the caret, so a
+      // selection move keeps the exact same decorations — no rebuild, no jump.
+      if (!showMarkers && u.selectionSet && !isDragging(u.state)) {
         this.decorations = buildDecorations(u.view);
       }
     }
@@ -625,6 +637,13 @@ const liveEditHighlightStyle = HighlightStyle.define([
 const liveEditTheme = EditorView.theme({
   '.cm-line': {
     fontVariantLigatures: 'none',
+  },
+  // #353 — markers left visible by "Always show Markdown markers": keep the
+  // line's size/weight (so nothing reflows) but mute the colour.
+  '.cm-md-marker': {
+    color: 'var(--text-faint)',
+    fontWeight: 'normal',
+    fontStyle: 'normal',
   },
   // Heading lines — use line-decoration to size whole line so layout
   // doesn't jump when markers are revealed/hidden.
@@ -783,10 +802,13 @@ const liveEditTheme = EditorView.theme({
  * we just splice them into the bundle so they live in the same
  * compartment as the rest of the live-edit machinery.
  */
-export function liveEditExtension(blocks: any[] = []) {
+const liveRenderPlugin = makeLiveRenderPlugin(false);
+const liveRenderPluginShowMarkers = makeLiveRenderPlugin(true);
+
+export function liveEditExtension(blocks: any[] = [], opts: { showMarkers?: boolean } = {}) {
   return [
     syntaxHighlighting(liveEditHighlightStyle),
-    liveRenderPlugin,
+    opts.showMarkers ? liveRenderPluginShowMarkers : liveRenderPlugin,
     liveEditTheme,
     ...blocks,
   ];
@@ -830,4 +852,5 @@ export const LIVE_EDIT_CLASSES = [
   'cm-md-code-copy',
   'cm-md-bullet',
   'cm-md-hr',
+  'cm-md-marker',
 ] as const;

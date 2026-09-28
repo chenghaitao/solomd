@@ -339,7 +339,14 @@ jobs:
           SoloMD ${version} — portable build (${arch})
 
           Just run SoloMD.exe. No installation required.
-          Settings + recents are stored in %APPDATA%\app.solomd as usual.
+
+          Settings are stored in your Windows profile by default. To keep them
+          next to SoloMD.exe instead (so copying this folder to another PC
+          carries them along), create an empty folder named "data" here, next
+          to SoloMD.exe, before starting it. On the first start with "data",
+          SoloMD copies your existing settings into it. API keys stay in
+          Windows Credential Manager and must be entered again on a new PC.
+          (Scoop users: don't create "data" — Scoop manages this folder.)
 
           Requires Microsoft Edge WebView2 (preinstalled on Windows 10/11).
           If launch fails with a WebView2 missing error, install from

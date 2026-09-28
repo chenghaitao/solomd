@@ -128,11 +128,16 @@ export const KEY_ACTIONS: KeyActionDef[] = [
 
   // ---- View ----
   { id: 'view.cycleView', label: 'Cycle Edit / Split / Preview', category: 'view', defaults: ['Mod+Shift+P'] },
+  // #180: Typora users flip source <-> WYSIWYG with Ctrl+/. That chord is
+  // Markdown Help here, so the default is Mod+Alt+/; rebind it to Mod+/ in
+  // Settings -> Shortcuts to get Typora's muscle memory back.
+  { id: 'view.toggleLiveEdit', label: 'Toggle Live Edit / Edit Only', category: 'view', defaults: ['Mod+Alt+Slash'] },
   { id: 'view.toggleReading', label: 'Toggle Reading Mode', category: 'view', defaults: ['Mod+Shift+R'] },
   { id: 'view.toggleFileTree', label: 'Toggle File Tree', category: 'view', defaults: ['Mod+B'] },
   { id: 'view.toggleRightSidebar', label: 'Toggle Right Sidebar', category: 'view', defaults: ['Mod+Alt+B'] },
   { id: 'view.toggleOutline', label: 'Toggle Outline', category: 'view', defaults: ['Mod+Shift+O'] },
   { id: 'view.toggleInspector', label: 'Toggle Properties Inspector', category: 'view', defaults: ['Mod+Shift+I'] },
+  { id: 'view.toggleToolbar', label: 'Show / Hide Toolbar Buttons', category: 'view', defaults: ['Mod+Alt+Shift+T'] },
   { id: 'view.slideshow', label: 'Slideshow', category: 'view', defaults: ['Mod+Alt+P'] },
   // Folding. The chords mirror CodeMirror's own fold keymap so the muscle
   // memory carries over — but they are handled at app level, which is what

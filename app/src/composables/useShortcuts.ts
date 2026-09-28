@@ -110,6 +110,7 @@ export function useShortcuts(hooks: Hooks = {}) {
     'export.pdfPrint': () => runById('export.pdfPrint'),
 
     'view.cycleView': () => settings.cycleViewMode(),
+    'view.toggleLiveEdit': () => settings.toggleLiveEditSource(),
     // Pressing the same combo while already in reading mode restores the
     // previous mode.
     'view.toggleReading': () => settings.toggleReadingMode(),
@@ -119,6 +120,7 @@ export function useShortcuts(hooks: Hooks = {}) {
     'view.toggleRightSidebar': () => settings.toggleRightSidebar(),
     'view.toggleOutline': () => runById('view.toggleOutline'),
     'view.toggleInspector': () => settings.toggleInspector(),
+    'view.toggleToolbar': () => settings.toggleToolbarHidden(),
     'view.slideshow': () => runById('view.slideshow'),
     'fold.toggle': () => runById('fold.toggle'),
     'fold.all': () => runById('fold.all'),

@@ -135,6 +135,9 @@ mod rag;
 // so the About panel's build details fell back silently on desktop.
 #[path = "app_build.rs"]
 mod app_build;
+// #295 — Windows portable mode (`data` folder next to the exe).
+#[path = "portable.rs"]
+mod portable;
 
 // Windows frameless chrome: WM_NCHITTEST → HTMAXBUTTON for Snap Layouts.
 #[cfg(target_os = "windows")]
@@ -720,6 +723,10 @@ pub fn run_with(initial_file: Option<String>) {
     // for all system panels.
     let saved_lang = read_saved_language();
     apply_macos_language(&saved_lang);
+
+    // #295 — before any webview exists: with a `data` folder next to
+    // SoloMD.exe, WebView2 and our config files live there. No-op elsewhere.
+    portable::init();
 
     let builder = tauri::Builder::default();
 

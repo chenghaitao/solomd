@@ -828,6 +828,41 @@ button:disabled {
   color: var(--accent);
   text-decoration: underline;
 }
+/* #347 — the text PDF's table-of-contents page: a titled page rather than the
+   on-screen card, with a dotted leader to each entry's page number
+   (lib/print-pages.ts fills the numbers; an entry without one drops the
+   leader). */
+.solomd-print-content > .md-toc:first-child {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+.solomd-print-content .md-toc__title {
+  font-size: 1.6em;
+  font-weight: 700;
+  margin: 0 0 0.8em;
+  color: var(--md-h1, inherit);
+}
+.solomd-print-content .md-toc .md-toc__link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  color: inherit;
+}
+.solomd-print-content .md-toc__leader {
+  flex: 1 1 auto;
+  min-width: 1em;
+  border-bottom: 1px dotted currentColor;
+  opacity: 0.45;
+}
+.solomd-print-content .md-toc__page {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.solomd-print-content .md-toc__link:not(.md-toc__link--paged) .md-toc__leader {
+  display: none;
+}
 
 mark {
   background: rgba(255, 159, 64, 0.28);
@@ -904,6 +939,12 @@ mark {
     break-inside: avoid-page;
     background: transparent;
   }
+  /* #347 — a TOC at the top of the document (Settings → PDF "table of
+   * contents", or a leading [TOC]) is a page of its own. */
+  body.solomd-printing .solomd-print-content > .md-toc:first-child {
+    break-after: page;
+    page-break-after: always;
+  }
 }
 /* On-screen the overlay must be invisible — @media print flips it. */
 #solomd-print-overlay {
@@ -921,18 +962,22 @@ body.solomd-printing {
    itself never flashes a different palette on screen.
 
    `follow` adds no class at all — that is the pre-#print-theme behaviour,
-   kept for anyone who deliberately prints in their theme. */
+   kept for anyone who deliberately prints in their theme.
+
+   The light palette has neutral accents (#332 follow-up): bars and rules
+   dark gray, links blue, no beige code blocks. It matches the HTML export and
+   the image PDF, so every export looks like the same document. */
 #solomd-print-overlay.print-theme-light {
   --bg: #ffffff;
-  --bg-elev: #f7f6f3;
-  --bg-elevated: #f7f6f3;
+  --bg-elev: #f6f8fa;
+  --bg-elevated: #f6f8fa;
   --bg-hover: #f0eee8;
   --bg-active: #ebe9e2;
   --border: #e9e9e7;
   --text: #37352f;
   --text-muted: #787774;
   --text-faint: #b4b4b4;
-  --accent: #ff9f40;
+  --accent: #3d444d;
   --accent-fg: #1a1a1a;
   --danger: #d64545;
   --md-h1: #1a1a1a;
@@ -943,12 +988,12 @@ body.solomd-printing {
   --md-h6: #6a6a6a;
   --md-strong: #1a1a1a;
   --md-em: #444444;
-  --md-link: #b45f06;
-  --md-url: #c97a20;
-  --md-code: #c0392b;
-  --md-code-bg: #f3efe7;
+  --md-link: #0b5cad;
+  --md-url: #0b5cad;
+  --md-code: #1f2328;
+  --md-code-bg: #f6f8fa;
   --md-quote: #6a6a6a;
-  --md-list: #c97a20;
+  --md-list: #59636e;
   --md-hr: #c0bdb3;
   --syn-keyword: #a626a4;
   --syn-string: #50a14f;
@@ -1091,4 +1136,10 @@ body.solomd-printing--dark {
    editor). The export stylesheets carry their own copy. */
 .cell-nowrap {
   white-space: nowrap;
+}
+
+/* #352 — words matched by the settings search (CSS Custom Highlight API). */
+::highlight(settings-search) {
+  background-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: inherit;
 }
