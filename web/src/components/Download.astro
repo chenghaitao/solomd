@@ -233,7 +233,11 @@ const platforms = [
     <div class="download__notes">
       <div class="note"><strong>macOS</strong>: {tr.download.notes.macos}</div>
       <div class="note"><strong>Windows</strong>: {tr.download.notes.windows}</div>
-      <div class="note"><strong>Linux</strong>: {tr.download.notes.linux}</div>
+      <div class="note">
+        <strong>Linux</strong>: {tr.download.notes.linux}
+        {' '}
+        <a href={lang === 'zh' ? '/zh/docs/linux/' : '/docs/linux/'}>{lang === 'zh' ? '需要 Ubuntu 22.04 / Debian 12 或更新，不确定能不能装？→' : 'Needs Ubuntu 22.04 / Debian 12 or newer — will yours work? →'}</a>
+      </div>
       <div class="note">
         <strong>Chrome</strong>: {tr.download.notes.verify}
         {' '}
