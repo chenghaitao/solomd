@@ -337,6 +337,8 @@ export const pt: I18n = {
     explorerShowHiddenHint: 'Lista arquivos e pastas que começam com ponto (.git, .obsidian, .gitignore) e as pastas de imagens anexadas (_assets, *.assets) na árvore do explorador.',
     distinctSplitPanes: 'Distinguir o editor da pré-visualização',
     distinctSplitPanesHint: 'Na vista dividida, dá à pré-visualização um fundo ligeiramente diferente para os dois painéis não parecerem uma única coluna larga.',
+    splitLiveSync: 'Manter a vista dividida sincronizada',
+    splitLiveSyncHint: 'Ativado: a pré-visualização é atualizada enquanto escreve e rola com o editor. Desativado: os dois painéis rolam de forma independente e a pré-visualização só é atualizada ao guardar.',
     markdownHardBreaks: 'Renderizar quebras de linha simples como quebras',
     markdownHardBreaksHint: 'Como o Typora: um único Enter cria uma quebra de linha na pré-visualização e em todas as exportações. Desligado = Markdown estrito (quebras simples se fundem no parágrafo; use uma linha em branco para separar).',
     smartQuotes: 'Aspas tipográficas',

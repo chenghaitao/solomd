@@ -335,6 +335,8 @@ export const pl: I18n = {
     explorerShowHiddenHint: 'Wyświetla pliki i foldery zaczynające się od kropki (.git, .obsidian, .gitignore) oraz foldery z załącznikami graficznymi (_assets, *.assets) w drzewie plików.',
     distinctSplitPanes: 'Odróżnij edytor od podglądu',
     distinctSplitPanesHint: 'W widoku podzielonym nadaje podglądowi nieco inne tło, żeby oba panele nie wyglądały jak jedna szeroka kolumna.',
+    splitLiveSync: 'Synchronizuj widok podzielony',
+    splitLiveSyncHint: 'Włączone: podgląd odświeża się podczas pisania i przewija razem z edytorem. Wyłączone: panele przewijają się niezależnie, a podgląd odświeża się dopiero po zapisaniu.',
     markdownHardBreaks: 'Renderuj pojedyncze nowe linie jako łamanie wiersza',
     markdownHardBreaksHint: 'Jak w Typorze: jedno naciśnięcie Enter tworzy łamanie wiersza w podglądzie i wszystkich eksportach. Wyłączone = ścisły Markdown (pojedyncze nowe linie łączą się w akapit; pusty wiersz rozdziela).',
     smartQuotes: 'Cudzysłowy typograficzne',

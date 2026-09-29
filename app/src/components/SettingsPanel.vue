@@ -1031,6 +1031,18 @@ function onSelectPdfFont(v: string) {
           <label>
             <input
               type="checkbox"
+              :checked="settings.splitLiveSync"
+              @change="settings.toggleSplitLiveSync()"
+            />
+            {{ t('settings.splitLiveSync') }}
+          </label>
+          <p class="setting-hint">{{ t('settings.splitLiveSyncHint') }}</p>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input
+              type="checkbox"
               :checked="settings.distinctSplitPanes"
               @change="settings.toggleDistinctSplitPanes()"
             />

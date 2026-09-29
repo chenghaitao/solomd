@@ -325,6 +325,10 @@ interface Settings {
   // so the two panels aren't identical surfaces. Off by default — it changes
   // how the app looks, which is not something to do to everyone in a patch.
   distinctSplitPanes: boolean;
+  // Split view: keep the preview following the editor as you type and scroll
+  // (the default). Off, the two panes are independent — no scroll sync, and
+  // the preview only re-renders from what was last saved to disk.
+  splitLiveSync: boolean;
   // #282: show only these file extensions in the Explorer tree (lower-case,
   // no dot; '' is the no-extension bucket). Empty = show everything. It
   // persists, so the tree carries a permanent banner whenever it is set —
@@ -672,6 +676,7 @@ function defaults(): Settings {
     explorerExtFilter: [] as string[],
     explorerSortByFolder: {} as Record<string, TreeSortMode>,
     distinctSplitPanes: false,
+    splitLiveSync: true,
     markdownHardBreaks: true,
     spellcheckLang: 'en_US',
     smartQuotes: false,
@@ -1425,6 +1430,10 @@ export const useSettingsStore = defineStore('settings', {
       if (mode === 'name-asc') delete next[folder];
       else next[folder] = mode;
       this.explorerSortByFolder = next;
+      this.persist();
+    },
+    toggleSplitLiveSync() {
+      this.splitLiveSync = !this.splitLiveSync;
       this.persist();
     },
     toggleDistinctSplitPanes() {

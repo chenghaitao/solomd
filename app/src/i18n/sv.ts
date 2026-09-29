@@ -335,6 +335,8 @@ export const sv: I18n = {
     explorerShowHiddenHint: 'Visar filer och mappar som börjar med punkt (.git, .obsidian, .gitignore) samt mappar med bildbilagor (_assets, *.assets) i filträdet.',
     distinctSplitPanes: 'Skilj redigeraren från förhandsvisningen',
     distinctSplitPanesHint: 'I delad vy får förhandsvisningen en något annan bakgrund, så att de två rutorna inte läses som en enda bred kolumn.',
+    splitLiveSync: 'Håll delad vy synkroniserad',
+    splitLiveSyncHint: 'På: förhandsvisningen uppdateras medan du skriver och rullar med redigeraren. Av: rutorna rullar var för sig och förhandsvisningen uppdateras bara när du sparar.',
     markdownHardBreaks: 'Rendera enkla radbrytningar som radbrytningar',
     markdownHardBreaksHint: 'Som Typora: ett Enter-tryck ger en radbrytning i förhandsvisningen och alla exporter. Av = strikt Markdown (enkla radbrytningar slås ihop till ett stycke; tom rad avgränsar).',
     smartQuotes: 'Typografiska citattecken',

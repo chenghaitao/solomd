@@ -335,6 +335,8 @@ export const tr: I18n = {
     explorerShowHiddenHint: 'Nokta ile başlayan dosya ve klasörleri (.git, .obsidian, .gitignore) ve görsel eki klasörlerini (_assets, *.assets) dosya ağacında listeler.',
     distinctSplitPanes: 'Düzenleyici ile önizlemeyi ayırt et',
     distinctSplitPanesHint: 'Bölünmüş görünümde önizlemeye biraz farklı bir arka plan verir, böylece iki bölme tek bir geniş sütun gibi görünmez.',
+    splitLiveSync: 'Bölünmüş görünümü eşitle',
+    splitLiveSyncHint: 'Açık: önizleme siz yazdıkça güncellenir ve düzenleyiciyle birlikte kayar. Kapalı: iki bölme bağımsız kayar ve önizleme yalnızca kaydettiğinizde yenilenir.',
     markdownHardBreaks: 'Tek satır sonlarını satır sonu olarak göster',
     markdownHardBreaksHint: 'Typora gibi: bir kez Enter, önizlemede ve tüm dışa aktarmalarda satır sonu oluşturur. Kapalı = katı Markdown (tek satır sonları aynı paragrafta birleşir; boş satır ayırır).',
     smartQuotes: 'Akıllı tırnak işaretleri',

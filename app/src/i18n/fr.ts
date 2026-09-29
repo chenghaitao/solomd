@@ -335,6 +335,8 @@ export const fr: I18n = {
     explorerShowHiddenHint: 'Affiche les fichiers et dossiers commençant par un point (.git, .obsidian, .gitignore) ainsi que les dossiers de pièces jointes images (_assets, *.assets) dans l’arborescence.',
     distinctSplitPanes: 'Distinguer l’éditeur de l’aperçu',
     distinctSplitPanesHint: 'En vue divisée, donne à l’aperçu un fond légèrement différent pour que les deux volets ne se lisent pas comme une seule colonne.',
+    splitLiveSync: 'Synchroniser la vue divisée',
+    splitLiveSyncHint: 'Activé : l’aperçu se met à jour pendant la frappe et défile avec l’éditeur. Désactivé : les deux volets défilent indépendamment et l’aperçu ne se rafraîchit qu’à l’enregistrement.',
     markdownHardBreaks: 'Rendre les sauts de ligne simples comme des retours',
     markdownHardBreaksHint: 'Comme Typora : une seule pression sur Entrée crée un retour à la ligne dans l\'aperçu et tous les exports. Désactivé = Markdown strict (les sauts simples fusionnent dans le paragraphe ; une ligne vide sépare).',
     smartQuotes: 'Guillemets typographiques',

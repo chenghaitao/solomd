@@ -336,6 +336,8 @@ export const en = {
     explorerShowHiddenHint: 'Lists dot-files and dot-folders (.git, .obsidian, .gitignore) and image attachment folders (_assets, *.assets) in the Explorer tree.',
     distinctSplitPanes: 'Distinguish the editor and preview panes',
     distinctSplitPanesHint: 'In split view, gives the preview a slightly different background so the two panes don’t read as one wide column.',
+    splitLiveSync: 'Keep split view in sync',
+    splitLiveSyncHint: 'On: the preview updates as you type and scrolls with the editor. Off: the two panes scroll independently, and the preview refreshes only when you save.',
     markdownHardBreaks: 'Render single newlines as line breaks',
     markdownHardBreaksHint: 'Typora-like: pressing Enter once starts a new line in the preview and all exports. Off = strict Markdown (single newlines collapse into one paragraph; use a blank line to separate).',
     smartQuotes: 'Smart quotes',

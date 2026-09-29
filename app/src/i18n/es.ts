@@ -335,6 +335,8 @@ export const es: I18n = {
     explorerShowHiddenHint: 'Muestra archivos y carpetas que empiezan por punto (.git, .obsidian, .gitignore) y las carpetas de imágenes adjuntas (_assets, *.assets) en el árbol del explorador.',
     distinctSplitPanes: 'Distinguir el editor de la vista previa',
     distinctSplitPanesHint: 'En vista dividida, da a la vista previa un fondo algo distinto para que los dos paneles no parezcan una sola columna ancha.',
+    splitLiveSync: 'Mantener sincronizada la vista dividida',
+    splitLiveSyncHint: 'Activado: la vista previa se actualiza mientras escribes y se desplaza con el editor. Desactivado: los dos paneles se desplazan por separado y la vista previa solo se actualiza al guardar.',
     markdownHardBreaks: 'Renderizar saltos de línea simples como saltos',
     markdownHardBreaksHint: 'Como Typora: una sola pulsación de Enter crea un salto de línea en la vista previa y todas las exportaciones. Desactivado = Markdown estricto (los saltos simples se funden en un párrafo; usa una línea en blanco para separar).',
     smartQuotes: 'Comillas tipográficas',

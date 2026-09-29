@@ -335,6 +335,8 @@ export const it: I18n = {
     explorerShowHiddenHint: 'Elenca file e cartelle che iniziano con un punto (.git, .obsidian, .gitignore) e le cartelle degli allegati immagine (_assets, *.assets) nell’albero laterale.',
     distinctSplitPanes: 'Distingui editor e anteprima',
     distinctSplitPanesHint: 'Nella vista divisa dà all’anteprima uno sfondo leggermente diverso, così i due riquadri non sembrano un’unica colonna.',
+    splitLiveSync: 'Mantieni sincronizzata la vista divisa',
+    splitLiveSyncHint: 'Attivo: l’anteprima si aggiorna mentre scrivi e scorre con l’editor. Disattivo: i due riquadri scorrono in modo indipendente e l’anteprima si aggiorna solo al salvataggio.',
     markdownHardBreaks: 'Renderizza i singoli a capo come interruzioni di riga',
     markdownHardBreaksHint: 'Come Typora: un solo Invio crea un a capo nell\'anteprima e in tutte le esportazioni. Disattivato = Markdown rigoroso (gli a capo singoli si fondono nel paragrafo; una riga vuota separa).',
     smartQuotes: 'Virgolette tipografiche',

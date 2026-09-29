@@ -35,6 +35,19 @@ const showPreview = computed(
     settings.viewMode !== 'liveEdit'
 );
 
+// Split view with live sync off: the preview renders what's on disk, so it
+// only moves when the file is saved (manually or by autosave). A tab that
+// has never been saved has nothing on disk yet — keep it live so the preview
+// isn't blank. Other view modes always follow the buffer.
+const previewSource = computed(() => {
+  const tab = props.tab;
+  if (!tab) return '';
+  if (settings.viewMode !== 'split' || settings.splitLiveSync || !tab.filePath) {
+    return tab.content;
+  }
+  return tab.savedContent;
+});
+
 const isFocused = computed(() => tiles.focusedPaneId === props.paneId);
 const windowsEditorRuntime = isWindowsEditorRuntime();
 // Preserve CodeMirror history/caret on macOS and Linux. Only Windows needs a
@@ -115,7 +128,7 @@ function bindScrollSync() {
   syncEditorScroll = null;
   syncPreviewScroll = null;
 
-  if (settings.viewMode !== 'split') return;
+  if (settings.viewMode !== 'split' || !settings.splitLiveSync) return;
 
   const paneEl = document.querySelector(`[data-pane-id="${props.paneId}"]`);
   if (!paneEl) return;
@@ -307,6 +320,8 @@ watch(() => settings.viewMode, async (newMode, oldMode) => {
   bindScrollSync();
 });
 
+watch(() => settings.splitLiveSync, bindScrollSync);
+
 watch(() => props.tab?.id, async () => {
   await new Promise((r) => setTimeout(r, 100));
   bindScrollSync();
@@ -457,7 +472,7 @@ function onPreviewSearchEvent(e: Event) {
     <div class="pane pane--preview" v-if="showPreview && tab">
       <Preview
         ref="previewRef"
-        :source="tab.content"
+        :source="previewSource"
         :file-path="tab.filePath"
         :tab-id="tab.id"
         @topline="onPreviewTopline"

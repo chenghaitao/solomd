@@ -335,6 +335,8 @@ export const ja: I18n = {
     explorerShowHiddenHint: 'ドットで始まるファイルとフォルダー（.git、.obsidian、.gitignore など）と、画像の添付フォルダー（_assets、*.assets）をファイルツリーに表示します。',
     distinctSplitPanes: '編集エリアとプレビューを見分けやすくする',
     distinctSplitPanesHint: '分割表示のとき、プレビューの背景をわずかに変えて、2 つのペインが 1 つの広い列に見えないようにします。',
+    splitLiveSync: '分割表示を同期する',
+    splitLiveSyncHint: 'オン：入力に合わせてプレビューが更新され、エディタと一緒にスクロールします。オフ：左右は別々にスクロールし、プレビューは保存時にのみ更新されます。',
     markdownHardBreaks: '単一の改行を改行として表示',
     markdownHardBreaksHint: 'Typora と同様:Enter 一回でプレビューと全エクスポートで改行されます。オフ = 厳密な Markdown(単一改行は同じ段落に結合され、空行で段落を分けます)。',
     smartQuotes: 'スマート引用符',

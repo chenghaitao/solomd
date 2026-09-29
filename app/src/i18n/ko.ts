@@ -335,6 +335,8 @@ export const ko: I18n = {
     explorerShowHiddenHint: '점으로 시작하는 파일과 폴더(.git, .obsidian, .gitignore)와 이미지 첨부 폴더(_assets, *.assets)를 파일 트리에 표시합니다.',
     distinctSplitPanes: '편집 영역과 미리보기 구분',
     distinctSplitPanesHint: '분할 보기에서 미리보기 배경을 약간 다르게 하여 두 창이 하나의 넓은 열처럼 보이지 않게 합니다.',
+    splitLiveSync: '분할 보기 동기화',
+    splitLiveSyncHint: '켜기: 입력할 때마다 미리보기가 갱신되고 편집기와 함께 스크롤됩니다. 끄기: 두 창이 따로 스크롤되며 미리보기는 저장할 때만 새로 고쳐집니다.',
     markdownHardBreaks: '단일 줄바꿈을 줄바꿈으로 렌더링',
     markdownHardBreaksHint: 'Typora와 동일: Enter 한 번으로 미리보기와 모든 내보내기에서 줄이 바뀝니다. 끄면 = 엄격한 Markdown(단일 줄바꿈은 같은 문단으로 합쳐지며 빈 줄로 문단을 구분).',
     smartQuotes: '스마트 따옴표',
