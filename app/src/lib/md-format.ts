@@ -119,7 +119,11 @@ function makeLink(doc: string, from: number, to: number): FormatEdit {
 
 /** The whole lines the selection touches. */
 function lineSpan(doc: string, from: number, to: number): [number, number] {
-  const s = doc.lastIndexOf('\n', from - 1) + 1;
+  // #360 — `lastIndexOf('\n', -1)` searches from index 0, not "nowhere": with
+  // the caret at offset 0 of a document that starts with an empty line it
+  // found that newline, so the span became [1, 0] and the edit was rejected —
+  // Ctrl+1 on an empty first line did nothing.
+  const s = from > 0 ? doc.lastIndexOf('\n', from - 1) + 1 : 0;
   // A selection ending right after a newline does not include the next line.
   const endAnchor = to > from && doc[to - 1] === '\n' ? to - 1 : to;
   let e = doc.indexOf('\n', endAnchor);
