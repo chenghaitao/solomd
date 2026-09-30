@@ -1193,6 +1193,96 @@ function onNodePress(e: PointerEvent, node: Node) {
   window.addEventListener('pointermove', onDragMove);
   window.addEventListener('pointerup', onDragUp);
   window.addEventListener('pointercancel', onDragCancel);
+  window.addEventListener('keydown', onDragKey, true);
+  window.addEventListener('blur', onDragCancel);
+}
+
+// #361 — the drag ghost. A label that follows the pointer and says, in
+// words, what letting go will do: "Move to <folder>", "Place before/after
+// <file>", "Already in <folder>" or "Can't move here". The insertion line and
+// the folder ring stay; the ghost is what makes them readable. It never takes
+// pointer events (hit-testing above uses elementFromPoint, which would
+// otherwise find the ghost instead of the row under it) and it is moved with
+// a transform, not top/left, so following the pointer never triggers layout.
+
+const GHOST_OFFSET_X = 14;
+const GHOST_OFFSET_Y = 18;
+const GHOST_MARGIN = 8; // px the ghost keeps from every viewport edge
+
+const dragGhost = ref<{ name: string; isDir: boolean; action: string; invalid: boolean } | null>(
+  null,
+);
+const ghostPos = ref({ x: 0, y: 0 });
+const ghostEl = ref<HTMLElement | null>(null);
+
+/** What a release at this point would do, in the words the ghost shows.
+ *  Mirrors onDragUp exactly: reorder wins, then a legal destination; every
+ *  other spot is a release that does nothing, and says so. */
+function describeDrop(
+  from: string,
+  reorder: { path: string; pos: 'before' | 'after' } | null,
+  dest: string | null,
+): { action: string; invalid: boolean } {
+  if (reorder) {
+    const name = baseName(reorder.path);
+    return {
+      action: reorder.pos === 'before'
+        ? t('explorer.dragPlaceBefore', { name })
+        : t('explorer.dragPlaceAfter', { name }),
+      invalid: false,
+    };
+  }
+  const folderLabel = (p: string) => (p === root.value?.path ? rootLabel() : baseName(p));
+  if (dest && canDropInto(from, dest)) {
+    return { action: t('explorer.dragMoveInto', { name: folderLabel(dest) }), invalid: false };
+  }
+  // A folder hovered over the folder it already lives in (or a file over the
+  // blank space of its own folder) is a no-op, not an error — say where it is.
+  if (dest && dest !== from && parentDir(from) === dest) {
+    return { action: t('explorer.dragAlreadyIn', { name: folderLabel(dest) }), invalid: true };
+  }
+  return { action: t('explorer.dragCannotMove'), invalid: true };
+}
+
+/** Top-left of the ghost for a pointer at (x, y): below-right of the cursor,
+ *  flipped to the other side when that would run off the viewport, and then
+ *  clamped so it is always fully on screen. Size is read from the rendered
+ *  ghost (the previous frame's, which is the same text or one line off). */
+function placeGhost(x: number, y: number) {
+  const w = ghostEl.value?.offsetWidth ?? 180;
+  const h = ghostEl.value?.offsetHeight ?? 40;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let gx = x + GHOST_OFFSET_X;
+  let gy = y + GHOST_OFFSET_Y;
+  if (gx + w > vw - GHOST_MARGIN) gx = x - GHOST_OFFSET_X - w;
+  if (gy + h > vh - GHOST_MARGIN) gy = y - GHOST_OFFSET_Y - h;
+  gx = Math.min(Math.max(GHOST_MARGIN, gx), Math.max(GHOST_MARGIN, vw - GHOST_MARGIN - w));
+  gy = Math.min(Math.max(GHOST_MARGIN, gy), Math.max(GHOST_MARGIN, vh - GHOST_MARGIN - h));
+  ghostPos.value = { x: Math.round(gx), y: Math.round(gy) };
+}
+
+/** The rows set `cursor: pointer`, which beats anything inherited from
+ *  <body> — that is why the reporter only ever saw the hand. A class on
+ *  <html> plus an !important rule in the unscoped style block below wins
+ *  over every row, button and scrollbar for the length of the drag. */
+function setDragCursor(state: 'grab' | 'invalid' | null) {
+  const cl = document.documentElement.classList;
+  cl.toggle('solomd-tree-dragging', state !== null);
+  cl.toggle('solomd-tree-drag-invalid', state === 'invalid');
+}
+
+function onDragKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  const wasDrag = dragActive;
+  teardownDrag();
+  if (!wasDrag) return;
+  // Esc is the drag's, not the editor's or a dialog's.
+  e.preventDefault();
+  e.stopPropagation();
+  // The pointer is still down; its eventual click must not open the row it
+  // happens to be released over.
+  suppressClick.value = true;
 }
 
 function onDragMove(e: PointerEvent) {
@@ -1205,20 +1295,37 @@ function onDragMove(e: PointerEvent) {
     dragIsDir.value = !!pointerStart.node.is_dir;
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
+    dragGhost.value = {
+      name: pointerStart.node.name || baseName(pointerStart.node.path),
+      isDir: !!pointerStart.node.is_dir,
+      action: '',
+      invalid: false,
+    };
   }
-  const reorder = reorderAt(e.clientX, e.clientY, dragPath.value ?? '', dragIsDir.value);
+  const from = dragPath.value ?? '';
+  const reorder = reorderAt(e.clientX, e.clientY, from, dragIsDir.value);
   reorderTarget.value = reorder;
   const dest = reorder ? null : destinationAt(e.clientX, e.clientY);
-  const legal = dest && canDropInto(dragPath.value ?? '', dest) ? dest : null;
+  const legal = dest && canDropInto(from, dest) ? dest : null;
   dropTarget.value = legal;
   armAutoExpand(legal);
   autoScroll(e.clientY);
+
+  const { action, invalid } = describeDrop(from, reorder, dest);
+  if (dragGhost.value) {
+    dragGhost.value.action = action;
+    dragGhost.value.invalid = invalid;
+  }
+  setDragCursor(invalid ? 'invalid' : 'grab');
+  placeGhost(e.clientX, e.clientY);
 }
 
 function teardownDrag() {
   window.removeEventListener('pointermove', onDragMove);
   window.removeEventListener('pointerup', onDragUp);
   window.removeEventListener('pointercancel', onDragCancel);
+  window.removeEventListener('keydown', onDragKey, true);
+  window.removeEventListener('blur', onDragCancel);
   if (expandTimer) clearTimeout(expandTimer);
   expandTimer = null;
   expandArmedFor = '';
@@ -1226,6 +1333,8 @@ function teardownDrag() {
   dragActive = false;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
+  setDragCursor(null);
+  dragGhost.value = null;
   endDrag();
 }
 
@@ -1572,6 +1681,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('click', onWindowClick);
   window.removeEventListener('keydown', onWindowKey);
+  // A tree unmounted mid-drag (workspace switch, sidebar hidden) must not
+  // leave the ghost, the cursor override or the window listeners behind.
+  if (pointerStart || dragActive) teardownDrag();
 });
 </script>
 
@@ -1924,6 +2036,27 @@ onBeforeUnmount(() => {
         <DsButton variant="danger" @click="confirmDelete">{{ t('explorer.delete') }}</DsButton>
       </template>
     </DsModal>
+
+    <!-- #361 — drag ghost: what releasing here will do. Teleported so no
+         sidebar overflow/transform can clip or offset it. -->
+    <Teleport to="body">
+      <div
+        v-if="dragGhost"
+        ref="ghostEl"
+        class="ftree-ghost"
+        :class="{ 'ftree-ghost--invalid': dragGhost.invalid }"
+        :style="{ transform: `translate3d(${ghostPos.x}px, ${ghostPos.y}px, 0)` }"
+        role="status"
+        aria-live="polite"
+        data-testid="ftree-drag-ghost"
+      >
+        <div class="ftree-ghost__name">
+          <span class="ftree-ghost__icon" aria-hidden="true">{{ dragGhost.isDir ? '📁' : '📄' }}</span>
+          <span class="ftree-ghost__label">{{ dragGhost.name }}</span>
+        </div>
+        <div class="ftree-ghost__action">{{ dragGhost.action }}</div>
+      </div>
+    </Teleport>
   </aside>
 </template>
 
@@ -2895,5 +3028,64 @@ export const FileTreeNode = defineComponent({
 :deep(.ftree__name-ext) {
   flex-shrink: 0;
   white-space: nowrap;
+}
+</style>
+
+<style>
+/* #361 — drag feedback that must live outside the scoped block: the ghost is
+   teleported to <body>, and the cursor override has to beat the rows' own
+   `cursor: pointer` on every element for the length of the drag. */
+html.solomd-tree-dragging,
+html.solomd-tree-dragging * {
+  cursor: grabbing !important;
+}
+html.solomd-tree-drag-invalid,
+html.solomd-tree-drag-invalid * {
+  cursor: not-allowed !important;
+}
+.ftree-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-toast, 3000);
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 6px 10px;
+  border-radius: var(--r-md, 8px);
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  box-shadow: var(--sh-pop, 0 8px 28px rgba(0, 0, 0, 0.12));
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ftree-ghost--invalid {
+  border-color: var(--danger);
+}
+.ftree-ghost__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+}
+.ftree-ghost__icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.ftree-ghost__label,
+.ftree-ghost__action {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ftree-ghost__action {
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+.ftree-ghost--invalid .ftree-ghost__action {
+  color: var(--danger);
 }
 </style>
