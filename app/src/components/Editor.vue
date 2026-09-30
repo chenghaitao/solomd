@@ -1133,7 +1133,18 @@ watch([plainFocusMode, plainSolidCursor, plainLineHeights, plainLiveEnabled], ()
 function plainSetCaret(pos: number) {
   if (plainLiveEnabled.value) {
     const blocks = plainBlocks.value;
-    const found = blocks.findIndex((block) => pos >= block.start && pos <= block.end);
+    // #343 — a block's `end` is the next block's `start` (it includes the
+    // separating newline), so `pos <= end` matched the PREVIOUS block first for
+    // any offset that begins a block. Every outline jump put the caret on the
+    // line above the heading, and the outline highlighted the previous section.
+    // Half-open ranges; only the document end (the trailing zero-width block,
+    // or a last block with no newline) needs the closed comparison.
+    let found = blocks.findIndex((block) => pos >= block.start && pos < block.end);
+    if (found < 0) {
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        if (pos >= blocks[i].start && pos <= blocks[i].end) { found = i; break; }
+      }
+    }
     const index = found < 0 ? 0 : found;
     activatePlainBlock(index, Math.max(0, pos - (blocks[index]?.start ?? 0)));
     return;
