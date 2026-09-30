@@ -1,0 +1,257 @@
+---
+// /admin — minimal dashboard for /api/admin/downloads.
+//
+// The page is fully static (Astro pre-render). The bearer token lives
+// in sessionStorage in the browser, never in the URL or in a cookie.
+// Token is prompted for on first load and persists for the tab.
+//
+// Why no SSR auth: the static Pages output is fronted by the same
+// project, so the token never leaves the user's browser. The /api/
+// route does the real auth check.
+//
+// Fork note: this fork removed anonymous app-usage telemetry (there is
+// no /api/track and no /api/admin/stats), so only the all-channel
+// download dashboard is kept here.
+
+const noindex = 'noindex,nofollow,noarchive,nosnippet';
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content={noindex} />
+    <title>SoloMD admin · downloads</title>
+    <style is:global>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1d2230;
+        --fg: #e7ecf3;
+        --muted: #8a93a4;
+        --accent: #ff9f40;
+        --border: #262c3a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      h1 { font-size: 18px; font-weight: 600; margin: 0; }
+      h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+      select, button, input[type=password] {
+        background: var(--panel); color: var(--fg);
+        border: 1px solid var(--border); border-radius: 6px;
+        padding: 6px 10px; font: inherit;
+      }
+      button { cursor: pointer; }
+      button:hover { border-color: var(--accent); }
+      .controls { display: flex; gap: 8px; align-items: center; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+      .kpi {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px 16px;
+      }
+      .kpi .label { color: var(--muted); font-size: 12px; }
+      .kpi .value { font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+      .panel {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 10px; padding: 16px; margin-bottom: 16px;
+      }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+      th { color: var(--muted); font-weight: 500; font-size: 12px; }
+      td.num, th.num { text-align: right; }
+      .empty { color: var(--muted); padding: 12px; text-align: center; }
+      .err { color: #ff6b6b; padding: 8px 12px; background: rgba(255, 107, 107, .08); border-radius: 6px; }
+      .bar {
+        height: 6px; background: var(--accent); border-radius: 3px; opacity: .7;
+        display: inline-block; vertical-align: middle; margin-left: 6px;
+      }
+      footer { color: var(--muted); font-size: 12px; margin-top: 30px; text-align: center; }
+      .grid--5 { grid-template-columns: repeat(5, 1fr); }
+      .kpi .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+      .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+      @media (max-width: 720px) {
+        .grid, .grid--5 { grid-template-columns: repeat(2, 1fr); }
+        .row { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>SoloMD downloads</h1>
+        <div class="controls">
+          <button id="reload">Reload</button>
+          <button id="logout" title="Forget the admin token">Logout</button>
+        </div>
+      </header>
+
+      <div id="dl-status"></div>
+
+      <!-- All-channel downloads (GET /api/admin/downloads; collected daily by
+           .github/workflows/download-stats.yml). The first KPI is exactly
+           the number the homepage shows. -->
+      <h2>Downloads · all channels</h2>
+      <div class="grid grid--5" id="dl-kpis"></div>
+      <div class="row">
+        <div class="panel">
+          <h2>GitHub by platform</h2>
+          <div id="dl-platforms"></div>
+        </div>
+        <div class="panel">
+          <h2>Not in the total</h2>
+          <div id="dl-extra"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Downloads per day (last 30 days)</h2>
+        <div id="dl-daily"></div>
+      </div>
+
+      <footer>
+        Backed by Cloudflare D1 · token stored in sessionStorage · never logged
+      </footer>
+    </div>
+
+    <script is:inline>
+      (() => {
+        const TOKEN_KEY = 'solomd.adminToken';
+
+        const $ = (id) => document.getElementById(id);
+
+        function getToken() {
+          let t = sessionStorage.getItem(TOKEN_KEY);
+          if (!t) {
+            t = prompt('Admin token');
+            if (t) sessionStorage.setItem(TOKEN_KEY, t);
+          }
+          return t;
+        }
+
+        function fmt(n) {
+          if (n == null) return '–';
+          if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+          if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+          return String(n);
+        }
+
+        function table(rows, cols) {
+          if (!rows || rows.length === 0) return '<div class="empty">no data</div>';
+          const max = Math.max(...rows.map((r) => Number(r[cols[1].key]) || 0)) || 1;
+          const head = cols.map((c) => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join('');
+          const body = rows
+            .map((r) => {
+              return (
+                '<tr>' +
+                cols
+                  .map((c, i) => {
+                    const v = r[c.key];
+                    if (c.bar) {
+                      const w = Math.max(2, Math.round((Number(v) / max) * 80));
+                      return `<td class="num">${fmt(v)}<span class="bar" style="width:${w}px"></span></td>`;
+                    }
+                    if (c.num) return `<td class="num">${fmt(v)}</td>`;
+                    return `<td>${escapeHtml(String(v ?? ''))}</td>`;
+                  })
+                  .join('') +
+                '</tr>'
+              );
+            })
+            .join('');
+          return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+        }
+
+        function escapeHtml(s) {
+          return s.replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+          })[c]);
+        }
+
+        async function loadDownloads() {
+          const token = getToken();
+          if (!token) {
+            $('dl-status').innerHTML = '<div class="err">No token. Reload to enter.</div>';
+            return;
+          }
+          let res;
+          try {
+            res = await fetch('/api/admin/downloads', { headers: { Authorization: 'Bearer ' + token } });
+          } catch (e) {
+            $('dl-status').innerHTML = '<div class="err">Network error: ' + escapeHtml(String(e)) + '</div>';
+            return;
+          }
+          if (res.status === 401) {
+            sessionStorage.removeItem(TOKEN_KEY);
+            $('dl-status').innerHTML = '<div class="err">Unauthorized — reload to re-enter token.</div>';
+            return;
+          }
+          if (!res.ok) {
+            $('dl-status').innerHTML = '<div class="err">Downloads: HTTP ' + res.status + '</div>';
+            return;
+          }
+          const d = await res.json();
+          const ch = d.channels || {};
+          const full = (n) => (n == null ? '–' : Number(n).toLocaleString('en-US'));
+          const kpi = (label, n, sub) =>
+            `<div class="kpi"><div class="label">${label}</div><div class="value">${full(n)}</div>` +
+            (sub ? `<div class="sub">${escapeHtml(sub)}</div>` : '') + '</div>';
+          const since = (c) => (c && c.first_day ? 'since ' + c.first_day + ' · to ' + c.last_day : 'not collected yet');
+          $('dl-kpis').innerHTML =
+            kpi('Public total (homepage)', d.publicTotal, 'GitHub + App Store + MS Store + Play') +
+            kpi('GitHub installers', ch.github && ch.github.total, ch.github && ch.github.live ? 'live' : 'last snapshot') +
+            kpi('App Store (first-time)', ch.appstore && ch.appstore.total, since(ch.appstore)) +
+            kpi('Microsoft Store', ch.msstore && ch.msstore.total, since(ch.msstore)) +
+            kpi('Google Play', ch.play && ch.play.total, since(ch.play));
+          const bp = (ch.github && ch.github.byPlatform) || {};
+          $('dl-platforms').innerHTML = table(
+            Object.keys(bp).map((k) => ({ platform: k, count: bp[k] })).sort((a, b) => b.count - a.count),
+            [{ key: 'platform', label: 'Platform' }, { key: 'count', label: 'Downloads', num: true, bar: true }],
+          ) + '<div class="note">GitHub counts include in-app updates (the updater downloads the same files).</div>';
+          $('dl-extra').innerHTML = table(
+            [
+              { what: 'MCP CLI · web clipper · skills (GitHub)', count: ch.github && ch.github.tools },
+              { what: 'Chocolatey package (installs the GitHub MSI)', count: ch.chocolatey && ch.chocolatey.total },
+            ],
+            [{ key: 'what', label: 'What' }, { key: 'count', label: 'Downloads', num: true }],
+          ) + '<div class="note">Homebrew, winget, Scoop, Chocolatey and AUR all download from GitHub, so they are already inside the GitHub number.</div>';
+          const rows = (d.daily || []).slice(-30).reverse().map((r) => ({
+            day: r.day,
+            total: (r.github || 0) + (r.appstore || 0) + (r.msstore || 0) + (r.play || 0),
+            github: r.github, appstore: r.appstore, msstore: r.msstore, play: r.play,
+          }));
+          $('dl-daily').innerHTML = table(rows, [
+            { key: 'day', label: 'Day' },
+            { key: 'total', label: 'Total', num: true, bar: true },
+            { key: 'github', label: 'GitHub', num: true },
+            { key: 'appstore', label: 'App Store', num: true },
+            { key: 'msstore', label: 'MS Store', num: true },
+            { key: 'play', label: 'Play', num: true },
+          ]) + '<div class="note">GitHub per day = difference between daily snapshots, so it starts the day after collection begins. App Store data trails by about two days.</div>';
+          $('dl-status').innerHTML = '';
+        }
+
+        $('reload').addEventListener('click', () => { loadDownloads(); });
+        $('logout').addEventListener('click', () => {
+          sessionStorage.removeItem(TOKEN_KEY);
+          location.reload();
+        });
+
+        loadDownloads();
+      })();
+    </script>
+  </body>
+</html>

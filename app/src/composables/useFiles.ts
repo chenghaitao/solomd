@@ -39,6 +39,11 @@ const SAVE_FILTERS = [
   { name: 'Plain Text', extensions: ['txt'] },
 ];
 
+// Source path → the unsaved tab its conversion opened (#356). Module-level:
+// every component calls useFiles() for its own instance, and the FileTree's
+// instance must see conversions started from anywhere.
+const convertedTabs = new Map<string, string>();
+
 export function useFiles() {
   const tabs = useTabsStore();
   const workspace = useWorkspaceStore();
@@ -209,7 +214,10 @@ export function useFiles() {
     return dest;
   }
 
-  async function openPath(path: string, opts: { bypassNewWindow?: boolean } = {}) {
+  async function openPath(
+    path: string,
+    opts: { bypassNewWindow?: boolean; fromTree?: boolean } = {},
+  ) {
     // #148 — see importContentUri; must run before any path parsing below.
     if (isAndroid() && path.startsWith('content://')) {
       try {
@@ -284,7 +292,12 @@ export function useFiles() {
     const ext = (path.split('.').pop() || '').toLowerCase();
 
     // If it's a convertible format, convert to Markdown first.
-    if (CONVERT_BUILTIN.has(ext) || CONVERT_CLI.has(ext)) {
+    // #356 — except an HTML file clicked in the file tree: that is a text
+    // file in the user's own folder (often one we just exported), and a click
+    // there means "open it", not "import it". Converting made a new unsaved
+    // .md tab on every click. File → Import still converts HTML.
+    const openHtmlAsText = opts.fromTree && (ext === 'html' || ext === 'htm');
+    if (!openHtmlAsText && (CONVERT_BUILTIN.has(ext) || CONVERT_CLI.has(ext))) {
       return openAndConvert(path, ext);
     }
 
@@ -379,6 +392,13 @@ export function useFiles() {
 
   async function openAndConvert(path: string, ext: string) {
     const fileName = path.split(/[\\/]/).pop() ?? path;
+    // #356 — opening the same document again goes back to the tab its first
+    // conversion produced, instead of converting into yet another tab.
+    const prevId = convertedTabs.get(path);
+    if (prevId && tabs.tabs.some((x) => x.id === prevId)) {
+      tabs.activate(prevId);
+      return;
+    }
     const tid = toasts.info(`Converting ${fileName} to Markdown…`, 0);
     try {
       const markdown = await invoke<string>('convert_file_to_markdown', { path });
@@ -391,6 +411,7 @@ export function useFiles() {
         tab.content = markdown;
         tab.fileName = `${baseName}.md`;
         tab.language = 'markdown';
+        convertedTabs.set(path, tab.id);
       }
       toasts.success(`Converted ${fileName} → Markdown`);
     } catch (e) {

@@ -16,9 +16,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from '../i18n';
 import { isMacOS } from '../lib/platform';
 
-export type EditorMenuAction = 'cut' | 'copy' | 'paste' | 'selectAll';
+export type EditorMenuAction = 'copyImage' | 'cut' | 'copy' | 'paste' | 'selectAll';
 
-const props = defineProps<{ x: number; y: number; hasSelection: boolean }>();
+// `hasImage`: the right-click landed on a rendered image (#362) — offer
+// "Copy image" on top of the text items.
+const props = defineProps<{ x: number; y: number; hasSelection: boolean; hasImage?: boolean }>();
 const emit = defineEmits<{
   (e: 'action', id: EditorMenuAction): void;
   (e: 'close'): void;
@@ -29,8 +31,12 @@ const root = ref<HTMLElement | null>(null);
 const pos = ref({ left: props.x, top: props.y });
 const mod = isMacOS() ? '⌘' : 'Ctrl+';
 
-const items = computed(() => [
-  { id: 'cut' as const, label: t('menubar.cut'), key: `${mod}X`, disabled: !props.hasSelection },
+type Item = { id: EditorMenuAction; label: string; key: string; disabled: boolean; sep?: boolean };
+const items = computed<Item[]>(() => [
+  ...(props.hasImage
+    ? [{ id: 'copyImage' as const, label: t('overlay.copyImage'), key: '', disabled: false }]
+    : []),
+  { id: 'cut' as const, label: t('menubar.cut'), key: `${mod}X`, disabled: !props.hasSelection, sep: !!props.hasImage },
   { id: 'copy' as const, label: t('menubar.copy'), key: `${mod}C`, disabled: !props.hasSelection },
   { id: 'paste' as const, label: t('menubar.paste'), key: `${mod}V`, disabled: false },
   { id: 'selectAll' as const, label: t('menubar.selectAll'), key: `${mod}A`, disabled: false, sep: true },

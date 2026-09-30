@@ -288,11 +288,11 @@ export function resolvePdfOptions(
     } else {
       // Unknown preset: fall back to settings.
       pageSizeMm = pageSizeFromSettings(settingsDefaults);
-      pageSizeLabel = settingsDefaults.pageSize;
+      pageSizeLabel = settingsDefaults.pageSize === 'Auto' ? 'A4' : settingsDefaults.pageSize;
     }
   } else {
     pageSizeMm = pageSizeFromSettings(settingsDefaults);
-    pageSizeLabel = settingsDefaults.pageSize;
+    pageSizeLabel = settingsDefaults.pageSize === 'Auto' ? 'A4' : settingsDefaults.pageSize;
   }
 
   // ---- Margins ----------------------------------------------------------
@@ -360,6 +360,9 @@ function pageSizeFromSettings(s: PdfDefaults): { width: number; height: number }
       height: clampMm(s.customHeightMm, 50, 500, 297),
     };
   }
+  // `Auto` only reaches here when some other PDF setting (margins, font…) or
+  // the document's front matter asked for page setup; A4 is what the old
+  // default did in that case.
   return PAGE_SIZES_MM[s.pageSize] ?? PAGE_SIZES_MM.A4;
 }
 

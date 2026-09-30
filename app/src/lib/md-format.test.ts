@@ -92,3 +92,17 @@ test('code block wraps whole lines and unwraps', () => {
   assert.equal(run('x\n|let a = 1;|\ny', 'codeblock'), 'x\n```|\nlet a = 1;\n```\ny');
   assert.equal(run('|```\nlet a = 1;\n```|', 'codeblock'), '|let a = 1;|');
 });
+
+test('#360: a heading on an empty first line of a multi-line document', () => {
+  assert.equal(run('|\nsecond line', 'h1'), '# |\nsecond line');
+  assert.equal(run('|\n\nthird', 'h2'), '## |\n\nthird');
+  // the other lines the reporter checked keep working
+  assert.equal(run('|', 'h1'), '# |');
+  assert.equal(run('first\n|\nthird', 'h1'), 'first\n# |\nthird');
+  assert.equal(run('|first\nsecond', 'h1'), '# first|\nsecond');
+});
+
+test('#360: list and quote prefixes on an empty first line too', () => {
+  assert.equal(run('|\nsecond', 'ul'), '- |\nsecond');
+  assert.equal(run('|\nsecond', 'quote'), '> |\nsecond');
+});

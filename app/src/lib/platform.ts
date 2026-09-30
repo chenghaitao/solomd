@@ -113,3 +113,24 @@ export function shouldUsePlainWindowsEditor(
 ): boolean {
   return windowsRuntime && !vimMode && engine !== 'codemirror';
 }
+
+/**
+ * Which keyboard convention modal dialogs follow (#357).
+ *
+ * macOS: Return = default button, Esc / ⌘. = Cancel, ⌘D = Don’t Save, ⌘S =
+ * Save, and no access-key decoration on the labels. Everywhere else (Windows /
+ * Linux): underlined access keys, Alt+letter or the bare letter while the
+ * dialog has focus, Enter activates the focused button.
+ *
+ * `?forceDialogKeys=win` / `?forceDialogKeys=mac` is a dev-only QA hook (same
+ * idea as `?forcePlain` / `?forceWinChrome`) so both conventions can be driven
+ * from one dev build. `?forceWinChrome` implies the Windows convention too.
+ */
+export function usesMacDialogKeys(): boolean {
+  if (typeof location !== 'undefined') {
+    const q = location.search;
+    if (q.includes('forceDialogKeys=mac')) return true;
+    if (q.includes('forceDialogKeys=win') || q.includes('forceWinChrome')) return false;
+  }
+  return isMacOS() || isIOS();
+}

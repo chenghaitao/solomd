@@ -1,5 +1,6 @@
 ---
 import { getT, type Lang } from '../i18n/translations';
+import { fetchGithubDownloads } from '../lib/download-channels';
 interface Props { lang: Lang }
 const { lang } = Astro.props;
 const tr = getT(lang);
@@ -64,34 +65,47 @@ const GH_HEADERS: Record<string, string> = {
   Accept: 'application/vnd.github+json',
 };
 if (GH_TOKEN) GH_HEADERS.Authorization = `Bearer ${GH_TOKEN}`;
+// The all-channel total (GitHub + App Store + Microsoft Store + Play) lives
+// behind the production /api/stats, which reads the store numbers from D1.
+// Fall back to GitHub alone if the live endpoint can't be reached at build.
 try {
-  const [repoRes, relRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${REPO}`, { headers: GH_HEADERS }),
-    fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, { headers: GH_HEADERS }),
-  ]);
-  if (repoRes.ok) {
-    const r = await repoRes.json();
-    initialStars = r.stargazers_count || 0;
-  }
-  if (relRes.ok) {
-    const rels = await relRes.json();
-    if (Array.isArray(rels)) {
-      for (const rel of rels) {
-        for (const a of rel.assets || []) {
-          initialDownloads += a.download_count || 0;
-        }
-      }
-    }
+  const live = await fetch('https://solomd.app/api/stats', { headers: { 'User-Agent': 'SoloMD-build-stats' } });
+  if (live.ok) {
+    const j = (await live.json()) as { stars?: number | null; downloads?: number | null };
+    if (typeof j.stars === 'number') initialStars = j.stars;
+    if (typeof j.downloads === 'number') initialDownloads = j.downloads;
   }
 } catch {
-  // Build will just render empty badges; JS will try to fill them.
+  /* fall through to GitHub */
 }
+if (!initialDownloads || !initialStars) {
+  try {
+    const gh = await fetchGithubDownloads(REPO, GH_HEADERS);
+    if (gh) {
+      if (!initialStars && gh.stars) initialStars = gh.stars;
+      if (!initialDownloads) initialDownloads = gh.installers;
+    }
+  } catch {
+    // Build will just render empty badges; JS will try to fill them.
+  }
+}
+
+// "74.8k downloads" used to be English on every locale; CJK readers count in 万.
+const DL_WORD: Record<string, string> = {
+  en: 'downloads', zh: '次下载', ja: 'ダウンロード', ko: '다운로드', de: 'Downloads', fr: 'téléchargements',
+  es: 'descargas', pt: 'downloads', it: 'download', pl: 'pobrań', nl: 'downloads', tr: 'indirme',
+  sv: 'nedladdningar', ru: 'загрузок', uk: 'завантажень',
+};
+const dlWord = DL_WORD[lang] ?? 'downloads';
+const dlWan = lang === 'zh' || lang === 'ja' ? '万' : lang === 'ko' ? '만' : '';
 
 function fmtStars(n: number): string {
   return n >= 1000 ? `⭐ ${(n / 1000).toFixed(1)}k` : `⭐ ${n}`;
 }
+/** Same rule as the inline script below: 7.5万次下载 / 7.5만 다운로드 / 74.8k downloads. */
 function fmtDownloads(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k downloads` : `${n} downloads`;
+  if (dlWan && n >= 10000) return `${(n / 10000).toFixed(1)}${dlWan}${dlWan === '만' ? ' ' : ''}${dlWord}`;
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k ${dlWord}` : `${n} ${dlWord}`;
 }
 const initialStarsText = initialStars > 0 ? fmtStars(initialStars) : '';
 const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownloads) : '';
@@ -109,7 +123,7 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
 
 <section class="hero">
   <div class="container hero__inner">
-    <div class="hero__badge">{tr.hero.badge} · <span id="hero-stars">{initialStarsText}</span> · <span id="hero-dl-count">{initialDownloadsText}</span></div>
+    <div class="hero__badge">{tr.hero.badge} · <span id="hero-stars">{initialStarsText}</span> · <span id="hero-dl-count" data-word={dlWord} data-wan={dlWan}>{initialDownloadsText}</span></div>
     <h1>
       {tr.hero.title1}<br />
       <span class="hero__accent">{tr.hero.title2}</span>
@@ -225,11 +239,18 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
           }
         }
         if (typeof stats.downloads === 'number' && stats.downloads > 0) {
-          var text = stats.downloads >= 1000
-            ? (stats.downloads / 1000).toFixed(1) + 'k downloads'
-            : stats.downloads + ' downloads';
+          // All channels: GitHub installers + App Store + Microsoft Store +
+          // Google Play (src/lib/download-channels.ts). Wording and 万 grouping
+          // come from the element, so this matches the build-time text.
           var el2 = document.getElementById('hero-dl-count');
-          if (el2) el2.textContent = text;
+          if (el2) {
+            var word = el2.getAttribute('data-word') || 'downloads';
+            var wan = el2.getAttribute('data-wan') || '';
+            var n = stats.downloads;
+            el2.textContent = wan && n >= 10000
+              ? (n / 10000).toFixed(1) + wan + (wan === '만' ? ' ' : '') + word
+              : n >= 1000 ? (n / 1000).toFixed(1) + 'k ' + word : n + ' ' + word;
+          }
           var el3 = document.getElementById('dl-section-count');
           if (el3) el3.textContent = stats.downloads.toLocaleString() + '+';
         }

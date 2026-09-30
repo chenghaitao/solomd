@@ -84,6 +84,7 @@ import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor, isAndroid, isIOS }
 import { computeListContinuation, type ListContinuationOptions } from '../lib/list-continuation';
 import { listContinuationKeymap } from '../lib/cm-list-continuation';
 import EditorContextMenu, { type EditorMenuAction } from './EditorContextMenu.vue';
+import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
 
 // Incremental find. CoreMirror's search panel only scrolls to a match when you
@@ -557,10 +558,17 @@ function renderPlainBlock(src: string): string {
   const html = rewriteImageUrls(
     // Drop `disabled` on task checkboxes so they can be clicked to toggle in the
     // preview (handled by activatePlainBlockFromClick → togglePlainTask).
-    renderMarkdown(src || '\n', { tocSource }).replace(
-      /(<input class="task-list-item-checkbox" type="checkbox"[^>]*?)\s+disabled=""/g,
-      '$1',
-    ),
+    renderMarkdown(src || '\n', { tocSource })
+      .replace(
+        /(<input class="task-list-item-checkbox" type="checkbox"[^>]*?)\s+disabled=""/g,
+        '$1',
+      )
+      // #366 — markdown-it emits a hard break as `<br>\n`. Rendered `<p>` here
+      // is `white-space: pre-wrap`, so that `\n` became a SECOND line break:
+      // every line of a multi-line paragraph rendered double-spaced, then
+      // snapped back to single spacing when clicked into (the textarea) — the
+      // block's height halved/doubled on each click and the page jumped.
+      .replace(/<br>\n/g, '<br>'),
     root,
     props.tab.filePath,
   );
@@ -1126,7 +1134,18 @@ watch([plainFocusMode, plainSolidCursor, plainLineHeights, plainLiveEnabled], ()
 function plainSetCaret(pos: number) {
   if (plainLiveEnabled.value) {
     const blocks = plainBlocks.value;
-    const found = blocks.findIndex((block) => pos >= block.start && pos <= block.end);
+    // #343 — a block's `end` is the next block's `start` (it includes the
+    // separating newline), so `pos <= end` matched the PREVIOUS block first for
+    // any offset that begins a block. Every outline jump put the caret on the
+    // line above the heading, and the outline highlighted the previous section.
+    // Half-open ranges; only the document end (the trailing zero-width block,
+    // or a last block with no newline) needs the closed comparison.
+    let found = blocks.findIndex((block) => pos >= block.start && pos < block.end);
+    if (found < 0) {
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        if (pos >= blocks[i].start && pos <= blocks[i].end) { found = i; break; }
+      }
+    }
     const index = found < 0 ? 0 : found;
     activatePlainBlock(index, Math.max(0, pos - (blocks[index]?.start ?? 0)));
     return;
@@ -2619,8 +2638,11 @@ function enterPlainSelectAll() {
 // Linux keep the system menu, see onEditorContextMenu). On phones a long-press
 // fires `contextmenu` too; the system selection menu is better there, so we
 // leave it alone.
-const editorCtx = ref<{ x: number; y: number; hasSelection: boolean } | null>(null);
+const editorCtx = ref<{ x: number; y: number; hasSelection: boolean; hasImage: boolean } | null>(null);
 let ctxTextarea: HTMLTextAreaElement | null = null;
+// #362 — the rendered image the menu was opened on (CodeMirror live-edit
+// widgets and the Windows live blocks alike), for "Copy image".
+let ctxImage: HTMLImageElement | null = null;
 let ctxSavedRange: { el: HTMLTextAreaElement; start: number; end: number } | null = null;
 
 /** Right mousedown: remember the textarea selection before anything can
@@ -2661,7 +2683,20 @@ function onEditorContextMenu(event: MouseEvent) {
     hasSelection = !!el && el.selectionStart !== el.selectionEnd;
   }
   ctxSavedRange = null;
-  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection };
+  const target = event.target instanceof Element ? event.target : null;
+  const img = target?.closest('img');
+  ctxImage = img instanceof HTMLImageElement && img.src ? img : null;
+  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection, hasImage: !!ctxImage };
+}
+
+async function copyContextImage(img: HTMLImageElement) {
+  try {
+    await copyImageElement(img);
+    toasts.success(t('overlay.imageCopied'));
+  } catch (err) {
+    console.error('[copy image]', err);
+    toasts.error(t('overlay.copyImageFailed', { error: String((err as Error)?.message ?? err) }));
+  }
 }
 
 async function writeClipboard(text: string) {
@@ -2685,6 +2720,13 @@ async function readClipboard(): Promise<string> {
 
 async function onEditorMenuAction(id: EditorMenuAction) {
   editorCtx.value = null;
+  if (id === 'copyImage') {
+    const img = ctxImage;
+    ctxImage = null;
+    if (img) await copyContextImage(img);
+    return;
+  }
+  ctxImage = null;
   if (!usePlainWindowsEditor) {
     const v = view;
     if (!v) return;
@@ -4414,6 +4456,7 @@ const cls = computed(() => ({
       :x="editorCtx.x"
       :y="editorCtx.y"
       :has-selection="editorCtx.hasSelection"
+      :has-image="editorCtx.hasImage"
       @action="onEditorMenuAction"
       @close="editorCtx = null"
     />
@@ -4728,7 +4771,10 @@ const cls = computed(() => ({
   color: var(--text);
   caret-color: var(--accent);
   font: inherit;
-  line-height: inherit;
+  /* #366 — same line pitch as the rendered block (.plain-block__render), so a
+     paragraph keeps its height when clicked into. At the inherited 1.6 every
+     line shrank by 1.4px on activation: a 24-line block jumped ~34px. */
+  line-height: 1.7;
   tab-size: 2;
   white-space: pre;
 }

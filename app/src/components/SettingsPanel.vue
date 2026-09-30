@@ -349,6 +349,8 @@ function applySearch() {
       delete b.dataset.match;
       b.style.order = '';
     }
+    clearCurrentHit();
+    hitEls = [];
     searchHitCount.value = 0;
     catsWithHits.value = new Set();
     clearHighlight();
@@ -369,9 +371,99 @@ function applySearch() {
       hits.push(b);
     }
   }
+  // Display order is category order (CSS `order`), then document order —
+  // the stepper walks them in the order the user sees them. sort() is stable.
+  hits.sort((a, b) => (catOrder.get(a.dataset.cat!) ?? 99) - (catOrder.get(b.dataset.cat!) ?? 99));
+  // A re-filter caused by a setting appearing/disappearing (MutationObserver)
+  // keeps the current match if it is still one; a new query starts over.
+  const prev = currentHit.value >= 0 ? hitEls[currentHit.value] : null;
+  hitEls = hits;
+  const keep = prev ? hits.indexOf(prev) : -1;
+  if (keep < 0) prev?.removeAttribute('data-hit-current');
+  currentHit.value = keep;
   searchHitCount.value = hits.length;
   catsWithHits.value = cats;
   highlight(hits, normalize(q), needles);
+}
+
+// #352 follow-up — step through the matches one at a time (buttons, and
+// Enter / Shift+Enter in the search box). The current match gets a
+// `data-hit-current` ring and a short accent pulse (`data-hit-flash`); data
+// attributes rather than classes so Vue's class patching never drops them.
+let hitEls: HTMLElement[] = [];
+const currentHit = ref(-1);
+let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearCurrentHit() {
+  for (const el of bodyEl.value?.querySelectorAll('[data-hit-current]') ?? []) {
+    el.removeAttribute('data-hit-current');
+    el.removeAttribute('data-hit-flash');
+  }
+  currentHit.value = -1;
+}
+
+function stepHit(dir: 1 | -1) {
+  const n = hitEls.length;
+  const body = bodyEl.value;
+  if (!n || !body) return;
+  const from = currentHit.value;
+  const i = from < 0 ? (dir === 1 ? 0 : n - 1) : (from + dir + n) % n;
+  if (from >= 0) {
+    hitEls[from].removeAttribute('data-hit-current');
+    hitEls[from].removeAttribute('data-hit-flash');
+  }
+  const el = hitEls[i];
+  currentHit.value = i;
+  el.setAttribute('data-hit-current', '');
+  // Restart the pulse even when stepping onto the same element (n === 1).
+  el.removeAttribute('data-hit-flash');
+  void el.offsetWidth;
+  el.setAttribute('data-hit-flash', '');
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => el.removeAttribute('data-hit-flash'), 1200);
+  // Scroll only the one container that actually scrolls (scrollIntoView
+  // would also nudge the modal/page). Centre the match; a block taller than
+  // the viewport is aligned to its top instead, with room for the group
+  // heading above a category's first match.
+  const sc = scrollerOf(body);
+  const b = sc.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  // In the phone layout the search bar sits inside the scroller, pinned
+  // (sticky) to its top — the visible area starts below it.
+  const bar = searchInput.value?.parentElement;
+  const barH = bar && sc !== body && sc.contains(bar) ? bar.offsetHeight : 0;
+  const visH = b.height - barH;
+  const offset = r.top - b.top + sc.scrollTop - barH;
+  const top = r.height + 48 < visH ? offset - (visH - r.height) / 2 : offset - 28;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  sc.scrollTo({ top: Math.max(0, top), behavior: reduced ? 'auto' : 'smooth' });
+}
+
+/** The element that scrolls the settings. On desktop that is the body
+ *  itself; in the phone layout the body grows to its content and the
+ *  dialog's own body (`.ds-modal__body`) scrolls instead. */
+function scrollerOf(body: HTMLElement): HTMLElement {
+  for (let el: HTMLElement | null = body; el; el = el.parentElement) {
+    const oy = getComputedStyle(el).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
+    if (el.classList.contains('ds-modal__panel')) break;
+  }
+  return body;
+}
+
+/** Enter / Shift+Enter in the search box. Ignored mid-composition: with a
+ *  Chinese/Japanese IME, Enter commits the text and must not also jump. */
+function onSearchEnter(e: KeyboardEvent) {
+  if (e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  stepHit(e.shiftKey ? -1 : 1);
+}
+
+/** While searching, the category rail lists only categories with a match.
+ *  With no match at all the full list stays, so the rail (a chip row on a
+ *  phone) is never blank and the user can still jump to a category. */
+function navVisible(id: string) {
+  return !searching.value || searchHitCount.value === 0 || catsWithHits.value.has(id);
 }
 
 // Blocks appear and disappear with settings (v-if), so re-filter on changes.
@@ -380,6 +472,7 @@ watch(
   [searchQuery, () => props.open, () => settings.language],
   async () => {
     await nextTick();
+    clearCurrentHit(); // a new query (or language) starts stepping over
     applySearch();
     bodyObserver?.disconnect();
     bodyObserver = null;
@@ -387,7 +480,7 @@ watch(
       bodyObserver = new MutationObserver(() => applySearch());
       bodyObserver.observe(bodyEl.value, { childList: true });
     }
-    if (searching.value) bodyEl.value?.scrollTo({ top: 0 });
+    if (searching.value && bodyEl.value) scrollerOf(bodyEl.value).scrollTo({ top: 0 });
   },
 );
 
@@ -438,6 +531,7 @@ watch(
 onUnmounted(() => {
   window.removeEventListener('keydown', onSearchKeys, true);
   bodyObserver?.disconnect();
+  if (flashTimer) clearTimeout(flashTimer);
   clearHighlight();
 });
 
@@ -669,8 +763,43 @@ function onSelectPdfFont(v: string) {
           :aria-label="t('settings.searchPlaceholder')"
           spellcheck="false"
           autocomplete="off"
+          @keydown.enter="onSearchEnter"
         />
-        <span v-if="searching" class="settings__search-count">{{ t('settings.searchCount', { n: searchHitCount }) }}</span>
+        <template v-if="searching">
+          <span class="settings__search-steps">
+            <button
+              type="button"
+              class="settings__search-step"
+              :disabled="searchHitCount === 0"
+              :title="t('settings.searchPrev')"
+              :aria-label="t('settings.searchPrev')"
+              @click="stepHit(-1)"
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </button>
+            <button
+              type="button"
+              class="settings__search-step"
+              :disabled="searchHitCount === 0"
+              :title="t('settings.searchNext')"
+              :aria-label="t('settings.searchNext')"
+              @click="stepHit(1)"
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </button>
+          </span>
+          <span
+            class="settings__search-count"
+            aria-live="polite"
+            :title="currentHit >= 0 ? t('settings.searchPosition', { i: currentHit + 1, n: searchHitCount }) : undefined"
+          >
+            <template v-if="currentHit >= 0">
+              <span aria-hidden="true">{{ currentHit + 1 }}/{{ searchHitCount }}</span>
+              <span class="settings__sr-only">{{ t('settings.searchPosition', { i: currentHit + 1, n: searchHitCount }) }}</span>
+            </template>
+            <template v-else>{{ t('settings.searchCount', { n: searchHitCount }) }}</template>
+          </span>
+        </template>
       </div>
       <div class="settings__layout">
         <!-- v3.0 — left-side category nav. Click switches the right-side
@@ -678,6 +807,7 @@ function onSelectPdfFont(v: string) {
         <nav class="settings__nav">
           <button
             v-for="c in categories"
+            v-show="navVisible(c.id)"
             :key="c.id"
             class="settings__nav-item"
             :class="{ 'settings__nav-item--active': !searching && activeCategory === c.id }"
@@ -1031,6 +1161,18 @@ function onSelectPdfFont(v: string) {
           <label>
             <input
               type="checkbox"
+              :checked="settings.splitLiveSync"
+              @change="settings.toggleSplitLiveSync()"
+            />
+            {{ t('settings.splitLiveSync') }}
+          </label>
+          <p class="setting-hint">{{ t('settings.splitLiveSyncHint') }}</p>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input
+              type="checkbox"
               :checked="settings.distinctSplitPanes"
               @change="settings.toggleDistinctSplitPanes()"
             />
@@ -1262,14 +1404,6 @@ function onSelectPdfFont(v: string) {
           </div>
         </section>
 
-        <!-- v2.5 F3: PDF / print export defaults. -->
-        <section data-cat="export">
-          <h3 style="font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px;">
-            {{ t('settings.pdfDefaults.heading') }}
-          </h3>
-          <p class="setting-hint">{{ t('settings.pdfDefaults.headingHint') }}</p>
-        </section>
-
         <section v-if="!isPhoneOrTablet" data-cat="integrations">
           <label>
             <input
@@ -1320,18 +1454,30 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.printThemeHint') }}</p>
         </section>
 
+        <!-- v2.5 F3: PDF / print export defaults. #347 — the heading sits right
+             above its controls; it used to be separated from them by the
+             Word template and print theme, and read as an empty section. -->
+        <section data-cat="export">
+          <h3 style="font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px;">
+            {{ t('settings.pdfDefaults.heading') }}
+          </h3>
+          <p class="setting-hint">{{ t('settings.pdfDefaults.headingHint') }}</p>
+        </section>
+
         <section data-cat="export">
           <label>{{ t('settings.pdfDefaults.pageSize') }}</label>
           <select
             :value="settings.pdfDefaults.pageSize"
             @change="settings.setPdfDefaults({ pageSize: ($event.target as HTMLSelectElement).value as any })"
           >
+            <option value="Auto">{{ t('settings.pdfDefaults.pageSizeAuto') }}</option>
             <option value="A4">A4 (210 × 297 mm)</option>
             <option value="A5">A5 (148 × 210 mm)</option>
             <option value="Letter">{{ t('settings.pdfDefaults.letter') }} (8.5 × 11 in)</option>
             <option value="Legal">{{ t('settings.pdfDefaults.legal') }} (8.5 × 14 in)</option>
             <option value="Custom">{{ t('settings.pdfDefaults.custom') }}</option>
           </select>
+          <p class="setting-hint">{{ t('settings.pdfDefaults.pageSizeHint') }}</p>
           <div
             v-if="settings.pdfDefaults.pageSize === 'Custom'"
             class="row"
@@ -2294,6 +2440,88 @@ function onSelectPdfFont(v: string) {
   font-size: 12px;
   color: var(--text-faint);
   white-space: nowrap;
+}
+.settings__search-steps {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.settings__search-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.settings__search-step:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.settings__search-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+:root.narrow-viewport .settings__search-step {
+  width: 36px;
+  height: 36px;
+}
+/* Phone: the whole dialog body scrolls, so without this the search box and
+   its previous/next buttons scroll away the moment you step to a match.
+   Sticky offsets are measured inside the scroller's padding; the negative
+   top (DsModal's body padding) pins it to the visible edge instead of
+   leaving a strip of settings showing above it. */
+:root.narrow-viewport .settings__search {
+  position: sticky;
+  top: calc(-1 * var(--sp-5, 24px));
+  z-index: 2;
+  background: var(--bg-elev);
+}
+.settings__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* Stepping through matches: a quiet accent ring on the current match, and a
+   one-off pulse when it is reached. Reduced motion keeps the ring only. */
+.settings__body[data-searching] > [data-hit-current] {
+  /* A tinted halo 6px past the block's edge (so the ring never touches the
+     text) with a thin accent line around it. */
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--accent) 7%, transparent),
+    0 0 0 7px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.settings__body[data-searching] > [data-hit-flash] {
+  animation: settings-hit-pulse 1.1s ease-out;
+}
+@keyframes settings-hit-pulse {
+  0% {
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+    box-shadow:
+      0 0 0 6px color-mix(in srgb, var(--accent) 24%, transparent),
+      0 0 0 9px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  100% {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    box-shadow:
+      0 0 0 6px color-mix(in srgb, var(--accent) 7%, transparent),
+      0 0 0 7px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings__body[data-searching] > [data-hit-flash] {
+    animation: none;
+  }
 }
 /* Search mode: every category's blocks are candidates; only matches show. */
 .settings__body[data-searching] > [data-cat]:not([data-match="1"]) {
