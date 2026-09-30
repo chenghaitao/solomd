@@ -15,6 +15,64 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.8] — 2026-09-30
+
+一条线：**同步上游 14 个提交**（上游 4.14.4 之后的一批），本地功能与改动点全部保留。
+
+### 上游同步
+
+合并上游 14 个提交（`e8f014e..b799439`）：50 个文件有改动，其中 21 个本地也动过，冲突只有 1 个文件。
+
+**功能**
+
+| 上游提交 | 内容 |
+|---|---|
+| `112ca0e` | 文件树拖拽时提示落点：移动到 / 放在之前 / 放在之后 / 已在其中 / 不能放（#361） |
+| `3462ea3` `a282939` | 文件树支持 F2 重命名与 Del / ⌫ 删除，菜单里标出快捷键；双击或回车把焦点交给编辑器（#355） |
+| `cb9dfa2` | 设置搜索隐藏空分类，并可在匹配项之间前后跳转（#352） |
+| `06587b9` | 未保存对话框的按钮带键盘访问键（Windows/Linux 用 `Alt+键` 或直接按键）（#357） |
+| `3a644a9` | 分屏可以不再同步：两栏独立滚动，预览只在保存后刷新 |
+| `1176eb1` | 编辑器右键菜单新增「复制图片」（#362） |
+| `b799439` | 官网首页展示全渠道下载量，并新增按渠道的管理面板 |
+| `79c433b` | 官网新增「SoloMD 能在我的 Linux 上跑吗」文档页（流程图 + 发行版对照表） |
+
+**修复**
+
+| 上游提交 | 内容 |
+|---|---|
+| `c990101` | A4 可以被真正选中，PDF 目录页码因此能打开（#347） |
+| `4ea3475` | 文件树里点击 `.html` 文件直接打开，不再每次新导入一份 `.md`（#356） |
+| `a7a5a00` | 首行为空时，标题 / 列表 / 引用快捷键可用（#360） |
+| `14dccbb` | Windows 实时编辑里大纲跳转落在标题本身，而不是上一行（#343） |
+| `104e728` | Windows 实时编辑不再给多行段落加双倍行距，点击也不再跳动（#366） |
+
+### 合并取舍（本地特性怎么保下来的）
+
+- **站点保持无遥测，但把下载统计接回来**：上游把「全渠道下载量」写进了 `web/src/pages/admin/index.astro`，
+  而本 fork 早就删掉了这个文件——它的上一版整页都服务于 `/api/admin/stats` 遥测面板（连同 `/api/track`、
+  `admin/stats.ts`、`ANALYTICS.md` 一并移除）。处理方式是**取上游的下载部分、丢掉遥测部分**：新的 admin 页
+  保留 `GET /api/admin/downloads` 的 KPI、GitHub 分平台、逐日三块，删掉 App usage（Events / Devices /
+  OS / Locale）、`load()` 与时间范围选择器；配套的 `web/functions/api/admin/downloads.ts`、
+  `web/migrations/0003_downloads.sql`、`.github/workflows/download-stats.yml`、`scripts/collect-downloads.py`
+  按上游保留。
+- **i18n**：上游这轮 17 个新键**给 16 种语言都做了本地化**（不只是英文占位），中文文案直接沿用；
+  未见 `telemetry` 段回流。
+- 其余 20 个重叠文件（`Editor.vue`、`SettingsPanel.vue`、`settings.ts`、`main.css`、`pdf-options.ts` 与
+  16 个 i18n 文件）由 git 自动合并：本地删除遥测、上游新增功能，两边落在不同区域，无人工干预。
+
+### 验证
+
+- `vue-tsc --noEmit` 通过（`I18n` 类型由 `en` 推导，键不一致必报错）。
+- `vite build` 通过（3389 个模块，21 秒）。
+- fork 删除的 7 个文件（`lib/telemetry.ts`、`TelemetryBanner.vue`、`web/functions/api/track.ts`、
+  `admin/stats.ts`、`web/ANALYTICS.md`、`scripts/release-to-gitee.sh`、`mirror-gitee.yml`）合并后仍不存在；
+  fork 的 11 个文件（`build.bat`、`release.bat`、`scripts/bump-version.js`、
+  `scripts/package-portable-win.ps1`、`scripts/release-notes.js`、`CHANGELOG.md`、`app/vite.config.ts`、
+  `app/src/i18n/index.ts`、`lib/cm-list-continuation.ts`、`lib/list-continuation.ts`、
+  `app/pnpm-workspace.yaml`）都在，且 `vite.config.ts`（+148）、`i18n/index.ts`（+106/-25）等核心改动
+  相对上游仍有差异。
+- 无冲突标记残留。
+
 ## [4.14.7] — 2026-09-28
 
 一条线：**同步上游 48 个提交**（横跨上游 4.14.2 / 4.14.3 / 4.14.4 三个版本窗口），本地功能与
