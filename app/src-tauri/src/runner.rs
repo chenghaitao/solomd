@@ -798,6 +798,7 @@ pub fn run_with(initial_file: Option<String>) {
             commands::write_file,
             commands::write_binary_file,
             commands::print_webview,
+            commands::print_webview_to_pdf,
             commands::copy_file,
             image_upload::upload_image,
             commands::list_dir,

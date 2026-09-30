@@ -180,6 +180,7 @@ pub fn run() {
             commands::write_file,
             commands::write_binary_file,
             commands::print_webview,
+            commands::print_webview_to_pdf,
             commands::copy_file,
             storage_android::android_has_all_files_access,
             storage_android::android_request_all_files_access,

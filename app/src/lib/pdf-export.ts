@@ -16,6 +16,8 @@ import { initMermaid } from './mermaid-lazy';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import type { ResolvedPdfOptions } from './pdf-options';
 import { rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
+import { blobToPng, loadImageBlob } from './image-clipboard';
+import { renderPlantumlForExport } from './plantuml';
 import { buildPagedCanvas, searchWindowPx } from './pdf-paginate';
 
 const EXPORT_TIMEOUT_MS = 30_000;
@@ -352,11 +354,53 @@ const FALLBACK_LINE_HEIGHT_PX = 26;
  * before `finish()` lets jsPDF slice it. Exported for the pagination harness
  * (`app/pdf-harness.html`), which measures exactly what the export measures.
  */
+/** Swap every cross-origin <img> for a data: URL of the same bytes (fetched
+ *  by the page when CORS allows, by Rust otherwise) and wait for it to load.
+ *  SVGs — remote or local — are rasterized to PNG on the way: html2canvas
+ *  crops an SVG that has a viewBox but no width/height (most icons/logos)
+ *  instead of scaling it into its box. */
+async function inlineRemoteImages(container: HTMLElement): Promise<void> {
+  const imgs = Array.from(container.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map(async (img) => {
+      const src = img.getAttribute('src') || '';
+      const isSvg = /\.svg(?:[?#]|$)/i.test(src) || /^data:image\/svg/i.test(src);
+      let crossOrigin = false;
+      if (/^https?:/i.test(src)) {
+        try {
+          crossOrigin = new URL(src, location.href).origin !== location.origin;
+        } catch {
+          return;
+        }
+      }
+      if (!crossOrigin && !isSvg) return;
+      try {
+        let blob = await loadImageBlob(src);
+        if (isSvg || blob.type === 'image/svg+xml') blob = await blobToPng(blob);
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result));
+          fr.onerror = () => reject(fr.error);
+          fr.readAsDataURL(blob);
+        });
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          img.src = dataUrl;
+        });
+      } catch (e) {
+        console.warn('[pdf] remote image not inlined', src, e);
+      }
+    }),
+  );
+}
+
 export async function capturePdfRaster(
   source: string,
   title: string,
   pdfOpts?: ResolvedPdfOptions,
   filePath?: string,
+  plantumlServer?: string | null,
 ): Promise<PdfRasterCapture> {
   const rawHtml = renderMarkdown(source || '');
   // v4.3.0 issue #77 — also rewrite link hrefs so local-file links
@@ -421,6 +465,13 @@ export async function capturePdfRaster(
   try {
     // Render any Mermaid blocks before capture.
     await processMermaidBlocks(page);
+    // PlantUML diagrams (#163) — before inlining, so their server SVGs get
+    // the same treatment as any other remote image.
+    await renderPlantumlForExport(page, plantumlServer);
+    // Remote images come out blank otherwise: html2canvas can only draw a
+    // cross-origin image when the host sends CORS headers, and most image
+    // hosts don't — "导出为 pdf 图片，部分信息也丢失了".
+    await inlineRemoteImages(page);
     // Give the browser a tick to lay everything out (KaTeX fonts especially).
     await new Promise((r) => setTimeout(r, 60));
     // #115 — convert any modern CSS color functions (color()/oklch()/…) that
@@ -502,6 +553,7 @@ export async function markdownToPdfBlob(
   title: string,
   pdfOpts?: ResolvedPdfOptions,
   filePath?: string,
+  plantumlServer?: string | null,
 ): Promise<Blob> {
   // Timeout guard — prevents the export from hanging the UI indefinitely
   // if html2pdf.js or Mermaid gets stuck. It sweeps html2pdf's leftovers on
@@ -515,7 +567,7 @@ export async function markdownToPdfBlob(
   );
 
   const render = async (): Promise<Blob> => {
-    const capture = await capturePdfRaster(source, title, pdfOpts, filePath);
+    const capture = await capturePdfRaster(source, title, pdfOpts, filePath, plantumlServer);
     try {
       // jsPDF slices the raster at a fixed page height, which shears whatever
       // line of text sits on the boundary. Re-lay the raster as whole pages

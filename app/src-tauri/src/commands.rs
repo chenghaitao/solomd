@@ -333,6 +333,143 @@ pub fn print_webview(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|e| format!("print failed: {e}"))
 }
 
+/// macOS "Export PDF (text)": write the print layout straight to `path`.
+///
+/// `print_webview` opens the system print sheet, and on a Mac with no printer
+/// set up that sheet asks the user to add one before it shows "Save as PDF"
+/// — people read that as "exporting a PDF needs a printer". This runs the
+/// same WKWebView print operation (same @media print layout, real selectable
+/// text) as a save job: NSPrintSaveJob + NSPrintJobSavingURL, with the print
+/// and progress panels off, so no printer is ever involved.
+///
+/// `paper` / `margins` are in points (1/72 in) when the user chose a page
+/// size (Settings → PDF or `pdf:` front matter); otherwise the system default
+/// paper is used, as the print sheet would.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn print_webview_to_pdf(
+    window: tauri::WebviewWindow,
+    path: String,
+    paper: Option<(f64, f64)>,
+    margins: Option<(f64, f64, f64, f64)>,
+) -> Result<(), String> {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use objc2_foundation::{NSSize, NSString, NSURL};
+
+    #[link(name = "AppKit", kind = "framework")]
+    extern "C" {
+        static NSPrintSaveJob: &'static NSString;
+        static NSPrintJobSavingURL: &'static NSString;
+    }
+
+    let _ = std::fs::remove_file(&path);
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let target = path.clone();
+    window
+        .with_webview(move |wv| unsafe {
+            let webview = wv.inner() as *mut AnyObject;
+            if webview.is_null() {
+                let _ = tx.send(Err("no webview".into()));
+                return;
+            }
+            let shared: *mut AnyObject = msg_send![class!(NSPrintInfo), sharedPrintInfo];
+            let info: *mut AnyObject = msg_send![shared, copy];
+            let _: () = msg_send![info, setJobDisposition: NSPrintSaveJob];
+            let url = NSURL::fileURLWithPath(&NSString::from_str(&target));
+            let dict: *mut AnyObject = msg_send![info, dictionary];
+            let _: () = msg_send![dict, setObject: &*url, forKey: NSPrintJobSavingURL];
+            if let Some((w, h)) = paper {
+                let _: () = msg_send![info, setPaperSize: NSSize::new(w, h)];
+            }
+            // Same as Tauri's own print (wry's print_with_options): margins
+            // default to 0 and the @page / overlay CSS does the spacing, so
+            // the file matches what the print sheet produced.
+            let (top, right, bottom, left) = margins.unwrap_or((0.0, 0.0, 0.0, 0.0));
+            let _: () = msg_send![info, setTopMargin: top];
+            let _: () = msg_send![info, setRightMargin: right];
+            let _: () = msg_send![info, setBottomMargin: bottom];
+            let _: () = msg_send![info, setLeftMargin: left];
+            let op: *mut AnyObject = msg_send![webview, printOperationWithPrintInfo: info];
+            let _: () = msg_send![info, release];
+            if op.is_null() {
+                let _ = tx.send(Err("WKWebView returned no print operation".into()));
+                return;
+            }
+            let _: () = msg_send![op, setShowsPrintPanel: false];
+            let _: () = msg_send![op, setShowsProgressPanel: false];
+            let _: () = msg_send![op, setCanSpawnSeparateThread: true];
+            // Window-modal, like wry. (A synchronous `runOperation` on a
+            // WKWebView print operation never finishes paginating: it kept
+            // appending pages until the file passed 400 MB.) It returns at
+            // once; completion is detected from the file below.
+            let nswindow: *mut AnyObject = msg_send![webview, window];
+            let nil: *mut AnyObject = std::ptr::null_mut();
+            let _: () = msg_send![
+                op,
+                runOperationModalForWindow: nswindow,
+                delegate: nil,
+                didRunSelector: None::<objc2::runtime::Sel>,
+                contextInfo: std::ptr::null_mut::<std::ffi::c_void>()
+            ];
+            let _ = tx.send(Ok(()));
+        })
+        .map_err(|e| format!("with_webview: {e}"))?;
+    rx.recv_timeout(std::time::Duration::from_secs(10))
+        .map_err(|_| "could not start the print operation".to_string())??;
+    // Done when the file is a complete PDF (ends with %%EOF) and has stopped
+    // growing. Bounded in time and size so a runaway job can't fill the disk.
+    let path2 = path.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        use std::io::{Read, Seek, SeekFrom};
+        const MAX_BYTES: u64 = 200 * 1024 * 1024;
+        let start = std::time::Instant::now();
+        let mut last = 0u64;
+        let mut stable = 0u32;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            if start.elapsed() > std::time::Duration::from_secs(120) {
+                return Err("PDF export timed out".into());
+            }
+            let Ok(meta) = std::fs::metadata(&path2) else { continue };
+            let len = meta.len();
+            if len > MAX_BYTES {
+                return Err("PDF export stopped: the file grew past 200 MB".into());
+            }
+            if len == 0 || len != last {
+                last = len;
+                stable = 0;
+                continue;
+            }
+            stable += 1;
+            if stable < 2 {
+                continue;
+            }
+            let mut f = std::fs::File::open(&path2).map_err(|e| e.to_string())?;
+            let tail = len.min(1024);
+            f.seek(SeekFrom::End(-(tail as i64))).map_err(|e| e.to_string())?;
+            let mut buf = Vec::new();
+            f.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+            if buf.windows(5).any(|w| w == b"%%EOF") {
+                return Ok(());
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn print_webview_to_pdf(
+    _window: tauri::WebviewWindow,
+    _path: String,
+    _paper: Option<(f64, f64)>,
+    _margins: Option<(f64, f64, f64, f64)>,
+) -> Result<(), String> {
+    Err("direct PDF export is macOS-only; use print_webview".into())
+}
+
 #[cfg(mobile)]
 #[tauri::command]
 pub fn print_webview(_window: tauri::WebviewWindow) -> Result<(), String> {

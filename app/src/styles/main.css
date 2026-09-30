@@ -896,7 +896,11 @@ mark {
 
 /* Print: hide the app shell and show the #solomd-print-overlay instead. */
 @media print {
-  body.solomd-printing #app {
+  /* Everything under <body> except the print overlay: not just #app —
+   * dialogs, toasts and popovers are teleported to <body>, and one open
+   * while printing (e.g. "file changed on disk") printed its backdrop over
+   * every page, leaving them blank. */
+  body.solomd-printing > :not(#solomd-print-overlay) {
     display: none !important;
   }
   body.solomd-printing #solomd-print-overlay {
@@ -999,7 +1003,8 @@ body.solomd-printing {
   --syn-keyword: #a626a4;
   --syn-string: #50a14f;
   --syn-number: #986801;
-  --syn-comment: #a0a1a7;
+  /* Darker than the screen theme's #a0a1a7, which is too faint on paper. */
+  --syn-comment: #6a737d;
   --syn-function: #4078f2;
   --syn-variable: #383a42;
   --syn-type: #c18401;
@@ -1048,9 +1053,12 @@ body.solomd-printing {
   background: #1f1e1b;
   color: #e6e1d8;
 }
-/* Browsers drop backgrounds when printing unless told otherwise, which
-   would print dark text on white paper — unreadable. Only the dark option
-   needs it; light matches the paper anyway. */
+/* Browsers print in "economy" colour unless told otherwise: backgrounds are
+   dropped and colours washed out. The dark option needs exact colour or it
+   prints dark text on white; the light one needs it too — in the macOS text
+   PDF code blocks lost their shading and comments / quotes came out close to
+   invisible. */
+#solomd-print-overlay,
 #solomd-print-overlay.print-theme-dark,
 body.solomd-printing--dark {
   -webkit-print-color-adjust: exact;
