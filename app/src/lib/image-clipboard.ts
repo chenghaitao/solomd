@@ -69,7 +69,22 @@ function toBytes(data: unknown): Uint8Array {
 /** Bytes of the image behind `img`, as a Blob, from wherever it lives. */
 async function fetchImageBlob(img: HTMLImageElement): Promise<Blob> {
   const src = img.currentSrc || img.src || '';
-  const local = img.dataset.solomdLocalSrc || localPathFromAssetUrl(src);
+  return loadImageBlob(src, img.dataset.solomdLocalSrc || null);
+}
+
+/**
+ * Bytes of an image from its URL: a local file (plain path or asset URL),
+ * a `data:` / `blob:` URL, or a remote http(s) URL — through the page when
+ * the server allows it (CORS), otherwise fetched by Rust. Shared by copy
+ * image (#362) and the DOCX / raster-PDF exports, which lost remote images
+ * to the same cross-origin wall.
+ */
+export async function loadImageBlob(src: string, localPath?: string | null): Promise<Blob> {
+  const local =
+    localPath ||
+    localPathFromAssetUrl(src) ||
+    (src && !/^[a-z][a-z0-9+.-]*:/i.test(src) ? src : null) ||
+    (/^[a-z]:[\\/]/i.test(src) ? src : null);
   if (local) {
     try {
       const bytes = toBytes(await invoke('read_binary_file', { path: local }));
@@ -122,6 +137,17 @@ function drawToPng(source: HTMLImageElement, fallbackSize?: { w: number; h: numb
       reject(e); // SecurityError: tainted canvas
     }
   });
+}
+
+/** Re-encode any decodable image (webp, svg, avif, …) as PNG. */
+export async function blobToPng(blob: Blob): Promise<Blob> {
+  if (blob.type === 'image/png') return blob;
+  const url = URL.createObjectURL(blob);
+  try {
+    return await drawToPng(await decode(url));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 /** PNG bytes for the image an `<img>` element shows. */

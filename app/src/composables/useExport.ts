@@ -1,10 +1,11 @@
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { renderPlantumlForExport } from '../lib/plantuml';
 import { EditorView } from '@codemirror/view';
 import { invoke } from '@tauri-apps/api/core';
 import { writeText, writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager';
 import { Image } from '@tauri-apps/api/image';
 import { documentDir, join } from '@tauri-apps/api/path';
-import { isIOS, isWindowsDesktop } from '../lib/platform';
+import { isIOS, isMacOS, isWindowsDesktop } from '../lib/platform';
 // Loaded per export rather than at startup. Between them these three pull in
 // `docx`, jsPDF + html2canvas and the mermaid renderer — megabytes that a user
 // who only opens a note to read it should never have to compile.
@@ -254,6 +255,11 @@ export function useExport() {
   // app's own Documents directory — UIFileSharingEnabled + LSSupports
   // OpeningDocumentsInPlace surface that folder under "On My iPhone › SoloMD"
   // in the Files app, so users can move/iCloud-sync from there.
+  /** The PlantUML server when the user turned PlantUML on (#163), else null. */
+  function plantumlServer(): string | null {
+    return settings.plantumlEnabled && settings.plantumlServer ? settings.plantumlServer : null;
+  }
+
   async function pickWritePath(
     filename: string,
     filters: { name: string; extensions: string[] }[],
@@ -266,6 +272,12 @@ export function useExport() {
     // last save happened. Falls back to a bare filename for unsaved
     // buffers and virtual (SAF) paths, which is the old behaviour.
     const defaultPath = exportDefaultPath(activeOr()?.filePath, filename) ?? filename;
+    // Dev-only QA hook (like ?forcePlain): lets a self-test drive an export
+    // end to end without a native save panel. Stripped from release builds.
+    if (import.meta.env.DEV) {
+      const override = (window as unknown as { __solomdSavePathOverride?: string }).__solomdSavePathOverride;
+      if (override) return override;
+    }
     return await saveDialog({ defaultPath, filters });
   }
 
@@ -296,7 +308,7 @@ export function useExport() {
         content: ctx.content,
         title: ctx.baseName,
         filePath: ctx.filePath,
-        plantumlServer: settings.plantumlEnabled ? settings.plantumlServer : null,
+        plantumlServer: plantumlServer(),
       });
       toasts.dismiss(tid);
       await invoke('write_file', { path, content: html, encoding: 'UTF-8' });
@@ -321,6 +333,7 @@ export function useExport() {
         ctx.filePath,
         settings.docxPreset,
         t('docx.contents'),
+        plantumlServer(),
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       // Tauri 2 serializes Uint8Array as a number array which Rust accepts as Vec<u8>.
@@ -347,7 +360,7 @@ export function useExport() {
         ctx.content,
         userTouchedPdfDefaults(settings.pdfDefaults),
       );
-      const blob = await markdownToPdfBlob(ctx.content, ctx.baseName, pdfOpts, ctx.filePath);
+      const blob = await markdownToPdfBlob(ctx.content, ctx.baseName, pdfOpts, ctx.filePath, plantumlServer());
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path, data: Array.from(buffer) });
       toasts.dismiss(tid);
@@ -421,6 +434,17 @@ export function useExport() {
     const ctx = activeOr();
     if (!ctx) return;
 
+    // macOS: save the print layout straight to a file (print_webview_to_pdf)
+    // instead of opening the print sheet, which on a Mac without a printer
+    // asks the user to add one first. Ask where to save BEFORE mounting the
+    // print overlay, so cancelling leaves nothing behind.
+    const directPdf = isMacOS() && !isIOS();
+    let directPath: string | null = null;
+    if (directPdf) {
+      directPath = await pickWritePath(`${ctx.baseName}.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
+      if (!directPath) return;
+    }
+
     // Strip YAML front matter before rendering — users don't want the
     // metadata block to show up in the printed output.
     const pdfOpts = resolvePdfOptions(
@@ -478,6 +502,22 @@ export function useExport() {
         // never leave the overlay + `body.solomd-printing` mounted.
         console.error('[print] mermaid render failed', e);
       }
+      // PlantUML fences were printed as code: only the preview rendered them.
+      await renderPlantumlForExport(printContent, plantumlServer());
+      // KaTeX loads its big-operator fonts (∫ ∑ √ …, KaTeX_Size1-4) only when
+      // a glyph first needs them. Printing right after mounting captured the
+      // page before they arrived and the ∫ in an integral came out missing.
+      if (printContent.querySelector('.katex')) {
+        try {
+          await Promise.all(
+            ['KaTeX_Main', 'KaTeX_Math', 'KaTeX_AMS', 'KaTeX_Size1', 'KaTeX_Size2', 'KaTeX_Size3', 'KaTeX_Size4']
+              .map((f) => document.fonts.load(`16px ${f}`)),
+          );
+          await document.fonts.ready;
+        } catch {
+          /* print with whatever loaded */
+        }
+      }
     }
 
     // Give KaTeX / images a tick to apply layout before print.
@@ -503,6 +543,34 @@ export function useExport() {
       }
     }
     try {
+      if (directPath) {
+        const mmToPt = (mm: number) => (mm * 72) / 25.4;
+        const tid = toasts.info('Generating PDF…', 0);
+        try {
+          await invoke('print_webview_to_pdf', {
+            path: directPath,
+            paper: pdfOpts.pageSizeMm
+              ? [mmToPt(pdfOpts.pageSizeMm.width), mmToPt(pdfOpts.pageSizeMm.height)]
+              : null,
+            // No margins chosen → the app's own "Normal" 15 mm. (The print
+            // sheet path passes 0 and relies on the printer's hardware
+            // margins; a direct save has none, so text touched the edge.)
+            margins: pdfOpts.marginMm
+              ? [
+                  mmToPt(pdfOpts.marginMm.top),
+                  mmToPt(pdfOpts.marginMm.right),
+                  mmToPt(pdfOpts.marginMm.bottom),
+                  mmToPt(pdfOpts.marginMm.left),
+                ]
+              : [mmToPt(15), mmToPt(15), mmToPt(15), mmToPt(15)],
+          });
+        } finally {
+          toasts.dismiss(tid);
+        }
+        cleanup();
+        toasts.success('Exported to PDF');
+        return;
+      }
       await invoke('print_webview');
       // The native print sheet is modal; by the time invoke resolves,
       // the user has already dismissed it. Safe to tear down shortly after.
