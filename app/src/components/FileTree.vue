@@ -389,7 +389,7 @@ async function toggle(node: Node, how: 'click' | 'dblclick' = 'click') {
   if (how === 'dblclick' && !dblFolders) return;
   selected.value = { path: node.path, isDir: !!node.is_dir };
   if (!node.is_dir) {
-    await files.openPath(node.path);
+    await files.openPath(node.path, { fromTree: true });
     return;
   }
   if (dblFolders && how === 'click') return;
