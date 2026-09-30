@@ -546,6 +546,8 @@ export const es: I18n = {
     save: 'Guardar',
     dontSave: 'No guardar',
     cancel: 'Cancelar',
+    saveKey: 'G',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Archivo cambiado en disco',

@@ -546,6 +546,8 @@ export const de: I18n = {
     save: 'Speichern',
     dontSave: 'Nicht speichern',
     cancel: 'Abbrechen',
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Datei wurde auf der Festplatte geändert',

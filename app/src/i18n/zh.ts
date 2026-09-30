@@ -547,6 +547,8 @@ export const zh: I18n = {
     save: '保存',
     dontSave: '不保存',
     cancel: '取消',
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: '文件已被外部修改',

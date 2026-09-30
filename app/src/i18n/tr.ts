@@ -546,6 +546,8 @@ export const tr: I18n = {
     save: 'Kaydet',
     dontSave: 'Kaydetme',
     cancel: 'İptal',
+    saveKey: 'K',
+    dontSaveKey: 'M',
   },
   fileChanged: {
     title: 'Dosya Diskte Değişti',

@@ -546,6 +546,8 @@ export const pl: I18n = {
     save: 'Zapisz',
     dontSave: 'Nie zapisuj',
     cancel: 'Anuluj',
+    saveKey: 'Z',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Plik zmieniony na dysku',

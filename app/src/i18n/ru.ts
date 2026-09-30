@@ -544,6 +544,8 @@ export const ru: I18n = {
     save: 'Сохранить',
     dontSave: 'Не сохранять',
     cancel: 'Отмена',
+    saveKey: 'С',
+    dontSaveKey: 'Н',
   },
   fileChanged: {
     title: 'Файл изменён на диске',

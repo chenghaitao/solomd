@@ -546,6 +546,8 @@ export const ko: I18n = {
     save: '저장',
     dontSave: '저장 안 함',
     cancel: '취소',
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: '디스크에서 파일이 변경됨',

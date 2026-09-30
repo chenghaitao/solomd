@@ -545,8 +545,13 @@ export const en = {
     title: 'Unsaved Changes',
     message: '{file} has been modified. Save changes?',
     save: 'Save',
-    dontSave: "Don't Save",
+    dontSave: 'Don’t Save',
     cancel: 'Cancel',
+    // #357 keyboard access keys (Windows/Linux): Alt+key, or the plain key while
+    // the dialog has focus. If the letter occurs in the label it is underlined
+    // there; otherwise it is appended as “(S)”, the Windows convention for CJK.
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'File Changed on Disk',

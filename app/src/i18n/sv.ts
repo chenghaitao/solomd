@@ -546,6 +546,8 @@ export const sv: I18n = {
     save: 'Spara',
     dontSave: 'Spara inte',
     cancel: 'Avbryt',
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Filen har ändrats på disken',

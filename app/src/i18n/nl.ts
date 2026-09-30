@@ -546,6 +546,8 @@ export const nl: I18n = {
     save: 'Opslaan',
     dontSave: 'Niet opslaan',
     cancel: 'Annuleren',
+    saveKey: 'O',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Bestand gewijzigd op schijf',

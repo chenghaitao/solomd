@@ -548,6 +548,8 @@ export const pt: I18n = {
     save: 'Salvar',
     dontSave: 'Não salvar',
     cancel: 'Cancelar',
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Arquivo alterado no disco',

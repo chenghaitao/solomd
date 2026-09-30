@@ -546,6 +546,8 @@ export const fr: I18n = {
     save: 'Enregistrer',
     dontSave: 'Ne pas enregistrer',
     cancel: 'Annuler',
+    saveKey: 'E',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'Fichier modifié sur le disque',

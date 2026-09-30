@@ -546,6 +546,8 @@ export const ja: I18n = {
     save: '保存',
     dontSave: '保存しない',
     cancel: 'キャンセル',
+    saveKey: 'S',
+    dontSaveKey: 'N',
   },
   fileChanged: {
     title: 'ファイルがディスク上で変更されました',

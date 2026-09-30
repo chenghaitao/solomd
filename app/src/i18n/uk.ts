@@ -546,6 +546,8 @@ export const uk: I18n = {
     save: 'Зберегти',
     dontSave: 'Не зберігати',
     cancel: 'Скасувати',
+    saveKey: 'З',
+    dontSaveKey: 'Н',
   },
   fileChanged: {
     title: 'Файл змінено на диску',
