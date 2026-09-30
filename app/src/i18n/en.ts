@@ -627,6 +627,8 @@ export const en = {
     diagram: 'Diagram',
     exportPng: 'Export PNG',
     copyImage: 'Copy image',
+    imageCopied: 'Image copied',
+    copyImageFailed: 'Couldn’t copy the image: {error}',
   },
   backlinks: {
     heading: 'Backlinks',

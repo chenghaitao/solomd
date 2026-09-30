@@ -621,6 +621,8 @@ export const nl: I18n = {
     diagram: 'Diagram',
     exportPng: 'PNG exporteren',
     copyImage: 'Afbeelding kopiëren',
+    imageCopied: 'Afbeelding gekopieerd',
+    copyImageFailed: 'Kan de afbeelding niet kopiëren: {error}',
   },
   backlinks: {
     heading: 'Backlinks',

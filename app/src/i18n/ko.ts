@@ -621,6 +621,8 @@ export const ko: I18n = {
     diagram: '다이어그램',
     exportPng: 'PNG 내보내기',
     copyImage: '이미지 복사',
+    imageCopied: '이미지를 복사했습니다',
+    copyImageFailed: '이미지를 복사하지 못했습니다: {error}',
   },
   backlinks: {
     heading: '백링크',

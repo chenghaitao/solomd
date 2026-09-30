@@ -794,6 +794,7 @@ pub fn run_with(initial_file: Option<String>) {
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::read_binary_file,
+            commands::fetch_image_bytes,
             commands::write_file,
             commands::write_binary_file,
             commands::print_webview,

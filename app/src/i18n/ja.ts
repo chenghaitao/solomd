@@ -621,6 +621,8 @@ export const ja: I18n = {
     diagram: '図',
     exportPng: 'PNG をエクスポート',
     copyImage: '画像をコピー',
+    imageCopied: '画像をコピーしました',
+    copyImageFailed: '画像をコピーできませんでした：{error}',
   },
   backlinks: {
     heading: 'バックリンク',

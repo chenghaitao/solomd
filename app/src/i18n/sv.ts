@@ -621,6 +621,8 @@ export const sv: I18n = {
     diagram: 'Diagram',
     exportPng: 'Exportera PNG',
     copyImage: 'Kopiera bild',
+    imageCopied: 'Bilden kopierades',
+    copyImageFailed: 'Det gick inte att kopiera bilden: {error}',
   },
   backlinks: {
     heading: 'Bakåtlänkar',

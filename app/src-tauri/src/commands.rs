@@ -246,6 +246,53 @@ pub async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
     .map_err(|e| format!("join: {e}"))?
 }
 
+/// Upper bound for `fetch_image_bytes`: an image bigger than this is not
+/// something anyone means to paste into a forum post, and it keeps a bad URL
+/// from streaming an arbitrary amount of data into memory.
+const FETCH_IMAGE_MAX_BYTES: usize = 50 * 1024 * 1024;
+
+/// #362 — fetch a remote (http/https) image's bytes for "Copy image".
+///
+/// The webview can display a remote `<img>` but can't read its pixels: a
+/// cross-origin image without CORS headers taints the canvas, and `fetch()`
+/// from the page is blocked by the same rule. Fetching from Rust has no such
+/// restriction. Only http(s) URLs are accepted; the body is capped at
+/// `FETCH_IMAGE_MAX_BYTES`.
+#[tauri::command]
+pub async fn fetch_image_bytes(url: String) -> Result<Vec<u8>, String> {
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+        return Err("only http(s) URLs can be fetched".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent(concat!("SoloMD/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|e| format!("client: {e}"))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("request failed: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("HTTP {status}"));
+    }
+    if let Some(len) = resp.content_length() {
+        if len as usize > FETCH_IMAGE_MAX_BYTES {
+            return Err("image is too large".into());
+        }
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("read failed: {e}"))?;
+    if bytes.len() > FETCH_IMAGE_MAX_BYTES {
+        return Err("image is too large".into());
+    }
+    Ok(bytes.to_vec())
+}
+
 /// Write raw bytes to disk. Used for binary export targets like DOCX/PDF.
 #[tauri::command]
 pub async fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {

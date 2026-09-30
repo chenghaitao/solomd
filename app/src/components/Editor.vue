@@ -83,6 +83,7 @@ import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
 import { isAndroid, isIOS } from '../lib/platform';
 import EditorContextMenu, { type EditorMenuAction } from './EditorContextMenu.vue';
+import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
 import { computeListContinuation } from '../lib/list-continuation';
 
@@ -2620,8 +2621,11 @@ function enterPlainSelectAll() {
 // Linux keep the system menu, see onEditorContextMenu). On phones a long-press
 // fires `contextmenu` too; the system selection menu is better there, so we
 // leave it alone.
-const editorCtx = ref<{ x: number; y: number; hasSelection: boolean } | null>(null);
+const editorCtx = ref<{ x: number; y: number; hasSelection: boolean; hasImage: boolean } | null>(null);
 let ctxTextarea: HTMLTextAreaElement | null = null;
+// #362 — the rendered image the menu was opened on (CodeMirror live-edit
+// widgets and the Windows live blocks alike), for "Copy image".
+let ctxImage: HTMLImageElement | null = null;
 let ctxSavedRange: { el: HTMLTextAreaElement; start: number; end: number } | null = null;
 
 /** Right mousedown: remember the textarea selection before anything can
@@ -2662,7 +2666,20 @@ function onEditorContextMenu(event: MouseEvent) {
     hasSelection = !!el && el.selectionStart !== el.selectionEnd;
   }
   ctxSavedRange = null;
-  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection };
+  const target = event.target instanceof Element ? event.target : null;
+  const img = target?.closest('img');
+  ctxImage = img instanceof HTMLImageElement && img.src ? img : null;
+  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection, hasImage: !!ctxImage };
+}
+
+async function copyContextImage(img: HTMLImageElement) {
+  try {
+    await copyImageElement(img);
+    toasts.success(t('overlay.imageCopied'));
+  } catch (err) {
+    console.error('[copy image]', err);
+    toasts.error(t('overlay.copyImageFailed', { error: String((err as Error)?.message ?? err) }));
+  }
 }
 
 async function writeClipboard(text: string) {
@@ -2686,6 +2703,13 @@ async function readClipboard(): Promise<string> {
 
 async function onEditorMenuAction(id: EditorMenuAction) {
   editorCtx.value = null;
+  if (id === 'copyImage') {
+    const img = ctxImage;
+    ctxImage = null;
+    if (img) await copyContextImage(img);
+    return;
+  }
+  ctxImage = null;
   if (!usePlainWindowsEditor) {
     const v = view;
     if (!v) return;
@@ -4411,6 +4435,7 @@ const cls = computed(() => ({
       :x="editorCtx.x"
       :y="editorCtx.y"
       :has-selection="editorCtx.hasSelection"
+      :has-image="editorCtx.hasImage"
       @action="onEditorMenuAction"
       @close="editorCtx = null"
     />

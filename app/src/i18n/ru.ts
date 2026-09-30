@@ -619,6 +619,8 @@ export const ru: I18n = {
     diagram: 'Диаграмма',
     exportPng: 'Экспорт в PNG',
     copyImage: 'Копировать изображение',
+    imageCopied: 'Изображение скопировано',
+    copyImageFailed: 'Не удалось скопировать изображение: {error}',
   },
   backlinks: {
     heading: 'Обратные ссылки',

@@ -622,6 +622,8 @@ export const zh: I18n = {
     diagram: '图表',
     exportPng: '导出 PNG',
     copyImage: '复制图片',
+    imageCopied: '图片已复制',
+    copyImageFailed: '复制图片失败：{error}',
   },
   backlinks: {
     heading: '反向链接',

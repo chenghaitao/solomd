@@ -17,6 +17,7 @@ import { useTabsStore } from '../stores/tabs';
 import { useFiles } from '../composables/useFiles';
 import PreviewSearch from './PreviewSearch.vue';
 import { attachCodeCopyButtons as attachSharedCodeCopyButtons } from '../lib/code-copy';
+import { writePngToClipboard } from '../lib/image-clipboard';
 
 const props = withDefaults(
   defineProps<{
@@ -398,17 +399,9 @@ async function copyDiagramPng(svg: SVGElement) {
   const toasts = useToastsStore();
   try {
     const blob = await svgToPngBlob(svg, { scale: 2, background: diagramBackground() });
-    try {
-      const item = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([item]);
-    } catch {
-      // WKWebView denies navigator.clipboard outside a user gesture /
-      // focused document — same fallback as useExport.copyAsImage.
-      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
-      const { Image } = await import('@tauri-apps/api/image');
-      const img = await Image.fromBytes(new Uint8Array(await blob.arrayBuffer()));
-      await writeImage(img);
-    }
+    // Shared with the editor's "Copy image" (#362): Tauri plugin first, then
+    // the browser Clipboard API.
+    await writePngToClipboard(blob);
     toasts.success(t('overlay.copyImage') + ' ✓');
   } catch (err) {
     toasts.error(`Copy failed: ${err}`);

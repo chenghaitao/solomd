@@ -621,6 +621,8 @@ export const tr: I18n = {
     diagram: 'Diyagram',
     exportPng: 'PNG olarak dışa aktar',
     copyImage: 'Görseli kopyala',
+    imageCopied: 'Görsel kopyalandı',
+    copyImageFailed: 'Görsel kopyalanamadı: {error}',
   },
   backlinks: {
     heading: 'Geri Bağlantılar',

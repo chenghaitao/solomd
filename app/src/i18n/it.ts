@@ -621,6 +621,8 @@ export const it: I18n = {
     diagram: 'Diagramma',
     exportPng: 'Esporta PNG',
     copyImage: 'Copia immagine',
+    imageCopied: 'Immagine copiata',
+    copyImageFailed: 'Impossibile copiare l’immagine: {error}',
   },
   backlinks: {
     heading: 'Backlinks',

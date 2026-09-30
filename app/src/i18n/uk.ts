@@ -621,6 +621,8 @@ export const uk: I18n = {
     diagram: 'Діаграма',
     exportPng: 'Експортувати PNG',
     copyImage: 'Копіювати зображення',
+    imageCopied: 'Зображення скопійовано',
+    copyImageFailed: 'Не вдалося скопіювати зображення: {error}',
   },
   backlinks: {
     heading: 'Зворотні посилання',
