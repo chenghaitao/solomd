@@ -390,6 +390,8 @@ export const es: I18n = {
       heading: 'Exportación a PDF / impresión',
       headingHint: 'Valores predeterminados al exportar a PDF o imprimir. Cada documento puede sobrescribir mediante un bloque `pdf:` en el frontmatter YAML.',
       pageSize: 'Tamaño de página predeterminado',
+      pageSizeAuto: 'Seguir el diálogo de impresión',
+      pageSizeHint: 'Elige un tamaño concreto para que el índice del PDF tenga números de página: con «Seguir el diálogo de impresión» el papel puede cambiar en el diálogo y los números no serían fiables.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Personalizado…',

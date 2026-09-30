@@ -390,6 +390,8 @@ export const nl: I18n = {
       heading: 'PDF / afdruk-export',
       headingHint: 'Standaardinstellingen die worden toegepast bij export naar PDF of afdrukken. Elk document kan dit overschrijven via een `pdf:`-blok in YAML front matter.',
       pageSize: 'Standaard paginaformaat',
+      pageSizeAuto: 'Volg het afdrukvenster',
+      pageSizeHint: 'Kies een vast formaat om paginanummers in de PDF-inhoudsopgave te krijgen — bij ‘Volg het afdrukvenster’ kan het papier in het venster nog veranderen en kloppen de nummers niet.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Aangepast…',

@@ -392,6 +392,8 @@ export const pt: I18n = {
       heading: 'Exportar PDF / impressão',
       headingHint: 'Padrões aplicados ao exportar como PDF ou imprimir. Cada documento pode sobrescrever via bloco `pdf:` no frontmatter YAML.',
       pageSize: 'Tamanho de página padrão',
+      pageSizeAuto: 'Seguir a caixa de impressão',
+      pageSizeHint: 'Escolha um tamanho específico para ter números de página no índice do PDF — com «Seguir a caixa de impressão» o papel pode mudar na caixa e os números não seriam fiáveis.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Personalizado…',

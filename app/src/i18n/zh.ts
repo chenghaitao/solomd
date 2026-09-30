@@ -392,6 +392,8 @@ export const zh: I18n = {
       heading: 'PDF / 打印导出默认值',
       headingHint: '导出 PDF 或打印时使用的默认值。可在文档的 YAML front matter 中通过 `pdf:` 块按文档覆盖。',
       pageSize: '默认页面大小',
+      pageSizeAuto: '跟随打印对话框',
+      pageSizeHint: '想让 PDF 目录显示页码，请在这里选定一个纸张大小。选「跟随打印对话框」时纸张可能在对话框里被改掉，页码算不准，所以不显示。',
       letter: 'Letter (美国信纸)',
       legal: 'Legal (美国法律)',
       custom: '自定义…',

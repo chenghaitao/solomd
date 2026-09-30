@@ -1274,14 +1274,6 @@ function onSelectPdfFont(v: string) {
           </div>
         </section>
 
-        <!-- v2.5 F3: PDF / print export defaults. -->
-        <section data-cat="export">
-          <h3 style="font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px;">
-            {{ t('settings.pdfDefaults.heading') }}
-          </h3>
-          <p class="setting-hint">{{ t('settings.pdfDefaults.headingHint') }}</p>
-        </section>
-
         <section v-if="!isPhoneOrTablet" data-cat="integrations">
           <label>
             <input
@@ -1332,18 +1324,30 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.printThemeHint') }}</p>
         </section>
 
+        <!-- v2.5 F3: PDF / print export defaults. #347 — the heading sits right
+             above its controls; it used to be separated from them by the
+             Word template and print theme, and read as an empty section. -->
+        <section data-cat="export">
+          <h3 style="font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px;">
+            {{ t('settings.pdfDefaults.heading') }}
+          </h3>
+          <p class="setting-hint">{{ t('settings.pdfDefaults.headingHint') }}</p>
+        </section>
+
         <section data-cat="export">
           <label>{{ t('settings.pdfDefaults.pageSize') }}</label>
           <select
             :value="settings.pdfDefaults.pageSize"
             @change="settings.setPdfDefaults({ pageSize: ($event.target as HTMLSelectElement).value as any })"
           >
+            <option value="Auto">{{ t('settings.pdfDefaults.pageSizeAuto') }}</option>
             <option value="A4">A4 (210 × 297 mm)</option>
             <option value="A5">A5 (148 × 210 mm)</option>
             <option value="Letter">{{ t('settings.pdfDefaults.letter') }} (8.5 × 11 in)</option>
             <option value="Legal">{{ t('settings.pdfDefaults.legal') }} (8.5 × 14 in)</option>
             <option value="Custom">{{ t('settings.pdfDefaults.custom') }}</option>
           </select>
+          <p class="setting-hint">{{ t('settings.pdfDefaults.pageSizeHint') }}</p>
           <div
             v-if="settings.pdfDefaults.pageSize === 'Custom'"
             class="row"

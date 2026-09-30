@@ -390,6 +390,8 @@ export const it: I18n = {
       heading: 'Esportazione PDF / stampa',
       headingHint: 'Valori predefiniti applicati all\'export PDF o stampa. Ogni documento può sovrascrivere tramite blocco `pdf:` nel frontmatter YAML.',
       pageSize: 'Dimensione pagina predefinita',
+      pageSizeAuto: 'Segui la finestra di stampa',
+      pageSizeHint: 'Scegli un formato preciso per avere i numeri di pagina nell’indice del PDF: con «Segui la finestra di stampa» la carta può cambiare nella finestra e i numeri non sarebbero affidabili.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Personalizzata…',

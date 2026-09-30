@@ -362,6 +362,9 @@ interface Settings {
   // font fallback and reported the same "space after the apostrophe" bug
   // again. One-time marker that turns it off once for them.
   smartQuotesOptInMigrated: boolean;
+  /** #347 — one-time: a saved `pdfDefaults.pageSize` of `A4` from before
+   *  `Auto` existed was the untouched default, not a choice. */
+  pdfPageSizeAutoMigrated: boolean;
   // Promote plain numbered-section lines (`6.2 出口许可证管理目录`,
   // `6.2.1 …`) to headings whose level tracks the numbering depth. Off by
   // default — the promotion is heuristic (a line opening with a decimal like
@@ -459,8 +462,13 @@ interface Settings {
 
 /** v2.5 PDF / print export defaults. */
 export interface PdfDefaults {
-  /** Page size preset (`A4` / `A5` / `Letter` / `Legal`) or `Custom`. */
-  pageSize: 'A4' | 'A5' | 'Letter' | 'Legal' | 'Custom';
+  /** Page size preset (`A4` / `A5` / `Letter` / `Legal`) or `Custom`.
+   *  `Auto` (#347, the default) = don't set one; the print dialog decides.
+   *  Before `Auto` existed the default was `A4`, and an untouched `A4` meant
+   *  the same thing — so picking A4 on purpose was indistinguishable from not
+   *  choosing, and TOC page numbers (which need a known page size) could
+   *  never be switched on for A4. */
+  pageSize: 'Auto' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Custom';
   /** Custom page width in mm — only consulted when `pageSize === 'Custom'`. */
   customWidthMm: number;
   /** Custom page height in mm — only consulted when `pageSize === 'Custom'`. */
@@ -486,7 +494,7 @@ export interface PdfDefaults {
 
 export function defaultPdfDefaults(): PdfDefaults {
   return {
-    pageSize: 'A4',
+    pageSize: 'Auto',
     customWidthMm: 210,
     customHeightMm: 297,
     margin: 'Normal',
@@ -682,6 +690,7 @@ function defaults(): Settings {
     smartQuotes: false,
     keybindings: {},
     smartQuotesOptInMigrated: true,
+    pdfPageSizeAutoMigrated: true,
     markdownAutoNumberHeadings: false,
     rsPaneOrder: ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'neighborhood', 'types', 'history', 'inspector', 'agent'],
     previewFontSize: 15,
@@ -727,7 +736,7 @@ function mergePdfDefaults(saved: unknown): PdfDefaults {
     const v = typeof n === 'number' && Number.isFinite(n) ? n : fallback;
     return Math.max(min, Math.min(max, v));
   };
-  const okPageSize = ['A4', 'A5', 'Letter', 'Legal', 'Custom'] as const;
+  const okPageSize = ['Auto', 'A4', 'A5', 'Letter', 'Legal', 'Custom'] as const;
   const okMargin = ['Narrow', 'Normal', 'Wide', 'Custom'] as const;
   const okCodeTheme = ['preview', 'light', 'dark'] as const;
   return {
@@ -795,6 +804,15 @@ function load(): Settings {
       // default change. Clear it once. Anyone who genuinely wants typographic
       // quotes can switch it back on and that choice sticks, because the
       // marker is written here regardless.
+      // #347 — an old saved `A4` becomes `Auto`. Behaviour is identical: an
+      // untouched A4 applied no page setup, and when another PDF field was
+      // changed, Auto resolves to A4 exactly as A4 did.
+      if (!parsed.pdfPageSizeAutoMigrated) {
+        if (merged.pdfDefaults.pageSize === 'A4') {
+          merged.pdfDefaults = { ...merged.pdfDefaults, pageSize: 'Auto' };
+        }
+        merged.pdfPageSizeAutoMigrated = true;
+      }
       if (!parsed.smartQuotesOptInMigrated) {
         merged.smartQuotes = false;
         merged.smartQuotesOptInMigrated = true;

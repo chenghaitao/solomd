@@ -390,6 +390,8 @@ export const sv: I18n = {
       heading: 'PDF / utskriftsexport',
       headingHint: 'Standardvärden som används vid PDF-export eller utskrift. Varje dokument kan åsidosätta via ett `pdf:`-block i YAML-front matter.',
       pageSize: 'Standard sidstorlek',
+      pageSizeAuto: 'Följ utskriftsdialogen',
+      pageSizeHint: 'Välj en bestämd storlek för att få sidnummer i PDF:ens innehållsförteckning — med ”Följ utskriftsdialogen” kan papperet ändras i dialogen och numren bli fel.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Anpassad…',

@@ -862,6 +862,7 @@ button:disabled {
   font-size: 1.6em;
   font-weight: 700;
   margin: 0 0 0.8em;
+  text-align: center; /* #347 */
   color: var(--md-h1, inherit);
 }
 .solomd-print-content .md-toc .md-toc__link {

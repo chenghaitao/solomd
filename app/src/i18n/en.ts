@@ -391,6 +391,8 @@ export const en = {
       heading: 'PDF / print export',
       headingHint: 'Defaults applied when you export to PDF or print. Each document can override via a `pdf:` block in YAML front matter.',
       pageSize: 'Default page size',
+      pageSizeAuto: 'Follow the print dialog',
+      pageSizeHint: 'Pick a specific size to get page numbers in the PDF table of contents — with “Follow the print dialog” the paper can change in the dialog, so the numbers couldn’t be trusted.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Custom…',

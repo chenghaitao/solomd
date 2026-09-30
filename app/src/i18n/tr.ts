@@ -390,6 +390,8 @@ export const tr: I18n = {
       heading: 'PDF / yazdırma dışa aktarımı',
       headingHint: 'PDF olarak dışa aktarırken veya yazdırırken uygulanan varsayılanlar. Her belge YAML ön bilgisindeki `pdf:` bloğu ile bunları geçersiz kılabilir.',
       pageSize: 'Varsayılan sayfa boyutu',
+      pageSizeAuto: 'Yazdırma penceresine uy',
+      pageSizeHint: 'PDF içindekiler sayfasında sayfa numarası için burada belirli bir boyut seçin — “Yazdırma penceresine uy” seçiliyken kâğıt pencerede değişebilir, numaralar güvenilir olmaz.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Özel…',

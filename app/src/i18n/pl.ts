@@ -390,6 +390,8 @@ export const pl: I18n = {
       heading: 'Eksport PDF / drukowanie',
       headingHint: 'Wartości domyślne stosowane przy eksporcie do PDF lub drukowaniu. Każdy dokument może je nadpisać blokiem `pdf:` w nagłówku YAML.',
       pageSize: 'Domyślny rozmiar strony',
+      pageSizeAuto: 'Zgodnie z oknem drukowania',
+      pageSizeHint: 'Wybierz konkretny rozmiar, aby spis treści w PDF miał numery stron — przy „Zgodnie z oknem drukowania” papier może się zmienić w oknie i numery byłyby niepewne.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Niestandardowy…',

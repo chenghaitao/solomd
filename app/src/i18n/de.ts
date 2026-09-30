@@ -390,6 +390,8 @@ export const de: I18n = {
       heading: 'PDF / Druckexport',
       headingHint: 'Standardwerte beim Export als PDF oder Drucken. Jedes Dokument kann diese per `pdf:`-Block im YAML-Frontmatter überschreiben.',
       pageSize: 'Standard-Seitengröße',
+      pageSizeAuto: 'Wie im Druckdialog',
+      pageSizeHint: 'Wähle hier ein festes Format, damit das PDF-Inhaltsverzeichnis Seitenzahlen bekommt — bei „Wie im Druckdialog“ kann das Papier im Dialog noch wechseln, die Zahlen wären unzuverlässig.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Benutzerdefiniert…',

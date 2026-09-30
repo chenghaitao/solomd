@@ -390,6 +390,8 @@ export const ja: I18n = {
       heading: 'PDF / 印刷エクスポート',
       headingHint: 'PDF エクスポートや印刷時のデフォルト。各ドキュメントは YAML フロントマターの `pdf:` ブロックで上書き可能です。',
       pageSize: 'デフォルトページサイズ',
+      pageSizeAuto: '印刷ダイアログに従う',
+      pageSizeHint: 'PDF の目次にページ番号を入れるには、ここで用紙サイズを指定してください。「印刷ダイアログに従う」では用紙がダイアログで変わりうるため、番号を正しく計算できません。',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'カスタム…',

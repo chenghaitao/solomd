@@ -390,6 +390,8 @@ export const fr: I18n = {
       heading: 'Export PDF / impression',
       headingHint: 'Valeurs par défaut appliquées à l\'export PDF ou à l\'impression. Chaque document peut surcharger via un bloc `pdf:` dans le frontmatter YAML.',
       pageSize: 'Taille de page par défaut',
+      pageSizeAuto: 'Suivre la boîte d’impression',
+      pageSizeHint: 'Choisissez un format précis pour avoir les numéros de page dans la table des matières du PDF — avec « Suivre la boîte d’impression », le papier peut changer dans la boîte et les numéros seraient faux.',
       letter: 'Letter',
       legal: 'Legal',
       custom: 'Personnalisée…',

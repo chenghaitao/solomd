@@ -390,6 +390,8 @@ export const ko: I18n = {
       heading: 'PDF / 인쇄 내보내기',
       headingHint: 'PDF 내보내기나 인쇄 시 적용되는 기본값. 각 문서는 YAML 프런트매터의 `pdf:` 블록으로 재정의 가능.',
       pageSize: '기본 페이지 크기',
+      pageSizeAuto: '인쇄 대화상자 따르기',
+      pageSizeHint: 'PDF 목차에 페이지 번호를 넣으려면 여기서 용지 크기를 지정하세요. ‘인쇄 대화상자 따르기’에서는 용지가 대화상자에서 바뀔 수 있어 번호를 정확히 계산할 수 없습니다.',
       letter: 'Letter',
       legal: 'Legal',
       custom: '사용자 지정…',
