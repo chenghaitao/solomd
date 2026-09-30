@@ -13,7 +13,7 @@ import { useGithubSyncStore } from '../stores/githubSync';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useTabsStore } from '../stores/tabs';
 import { useI18n } from '../i18n';
-import { isMobile } from '../lib/platform';
+import { isMacOS, isMobile } from '../lib/platform';
 import { usePendingDeletes, isDeletePending, UNDO_WINDOW_MS } from '../composables/usePendingDeletes';
 import { isSafPath, fromSafPath, safList, safCreate } from '../lib/saf-fs';
 import {
@@ -390,6 +390,9 @@ async function toggle(node: Node, how: 'click' | 'dblclick' = 'click') {
   selected.value = { path: node.path, isDir: !!node.is_dir };
   if (!node.is_dir) {
     await files.openPath(node.path, { fromTree: true });
+    // #355 — the editor takes focus when a document opens; a click in the
+    // tree gives it back, so F2 / Delete act on the row just clicked.
+    if (how === 'click') refocusTree('fromEditor');
     return;
   }
   if (dblFolders && how === 'click') return;
@@ -1310,7 +1313,82 @@ async function commitEdit() {
 }
 
 function cancelEdit() {
+  refocusAfterEdit = true;
   editing.value = null;
+}
+
+// ---------------------------------------------------------------------------
+// #355 — F2 renames, Delete (⌘⌫ on macOS) deletes the selected row, the way
+// Explorer / Finder / VS Code do. Tree-scoped on purpose: the listener is on
+// the tree's own element, so the keys only mean "file" while keyboard focus
+// is in the tree — in the editor, Delete keeps deleting text. That is also
+// why these are not in the rebindable table (lib/keybindings.ts): every
+// action there is dispatched from a window-level handler, whatever has focus.
+// Both keys go through the very functions the context menu calls, so the
+// confirmation dialog, the undo toast and the inline rename are the same.
+// ---------------------------------------------------------------------------
+const treeEl = ref<HTMLElement | null>(null);
+const macKeys = isMacOS();
+const renameKbd = 'F2';
+const deleteKbd = computed(() => (macKeys ? '⌘⌫' : t('explorer.deleteKey')));
+
+/** Put keyboard focus back on the tree, after the editor's own deferred
+ *  focus has run.
+ *  - 'fromEditor': a click opened a file and the editor took focus on open.
+ *    Anything else that took it (a dialog, the palette) keeps it.
+ *  - 'ifLost': the inline rename box went away under the caret (Enter /
+ *    Escape) and focus fell to <body>. A blur-commit because the user clicked
+ *    into the editor must leave the editor focused. */
+function refocusTree(mode: 'fromEditor' | 'ifLost') {
+  const run = () => {
+    const el = treeEl.value;
+    if (!el) return;
+    const now = document.activeElement;
+    const lost = !now || now === document.body;
+    const editorGrab = !!now && !!now.closest('.cm-editor, .editor, textarea');
+    if (lost || (mode === 'fromEditor' && editorGrab)) {
+      el.focus({ preventScroll: true });
+    }
+  };
+  // Timers, not requestAnimationFrame: rAF is paused while the window is in
+  // the background, and the editor's focus lands in the same task as the
+  // open (nextTick) or shortly after, when the editor mounts for a new tab.
+  setTimeout(run, 0);
+  if (mode === 'fromEditor') setTimeout(run, 150);
+}
+
+// Enter / Escape in the inline box: once the box is gone (the commit awaits
+// the rename first), the keyboard is back in the tree rather than on <body>.
+let refocusAfterEdit = false;
+watch(editing, (e) => {
+  if (e || !refocusAfterEdit) return;
+  refocusAfterEdit = false;
+  refocusTree('ifLost');
+});
+
+function isDeleteChord(e: KeyboardEvent): boolean {
+  if (e.altKey || e.shiftKey) return false;
+  if (e.key === 'Delete') return !e.ctrlKey && !e.metaKey;
+  // Finder's Move to Trash. ⌘ only — Ctrl+Backspace is word-delete elsewhere.
+  return macKeys && e.key === 'Backspace' && e.metaKey && !e.ctrlKey;
+}
+
+function onTreeKey(e: KeyboardEvent) {
+  if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
+  const target = e.target as HTMLElement | null;
+  // The inline rename box, the filter popover's inputs… type normally there.
+  if (target?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+  if (editing.value || deleteTarget.value) return;
+  const isRename = e.key === 'F2' && !e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey;
+  const isDelete = !isRename && isDeleteChord(e);
+  if (!isRename && !isDelete) return;
+  const sel = selected.value;
+  const node = sel ? findNode(sel.path) : null;
+  if (!node) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (isRename) void startRename(node);
+  else deleteNode(node);
 }
 
 // CJK / IME guard for the rename / new-file inline input. Mirrors the pattern
@@ -1322,6 +1400,7 @@ function cancelEdit() {
 function onRenameKey(e: KeyboardEvent) {
   if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Enter') {
+    refocusAfterEdit = true;
     e.preventDefault();
     void commitEdit();
   }
@@ -1463,7 +1542,10 @@ onBeforeUnmount(() => {
 
 <template>
   <aside
+    ref="treeEl"
     class="ftree"
+    tabindex="-1"
+    @keydown="onTreeKey"
     :class="{ 'ftree--fullnames': settings.explorerFullNames }"
     :style="{ '--file-tree-width': settings.fileTreeWidth + 'px' }"
     @contextmenu.prevent="openCtx($event, null)"
@@ -1723,8 +1805,14 @@ onBeforeUnmount(() => {
         </button>
       </template>
       <div v-if="ctx.node" class="ftree__ctx-sep"></div>
-      <button v-if="ctx.node" class="ftree__ctx-item" @click="startRename(ctx.node)">
-        ✎ {{ t('explorer.rename') || 'Rename' }}
+      <button
+        v-if="ctx.node"
+        class="ftree__ctx-item ftree__ctx-item--kbd"
+        aria-keyshortcuts="F2"
+        @click="startRename(ctx.node)"
+      >
+        <span>✎ {{ t('explorer.rename') || 'Rename' }}</span>
+        <kbd v-if="!isMobile()" class="ftree__ctx-kbd">{{ renameKbd }}</kbd>
       </button>
       <button
         v-if="ctx.node && canMove && ctx.node.path !== root?.path"
@@ -1733,8 +1821,14 @@ onBeforeUnmount(() => {
       >
         ↪ {{ t('explorer.moveTo') || 'Move to…' }}
       </button>
-      <button v-if="ctx.node" class="ftree__ctx-item ftree__ctx-item--danger" @click="deleteNode(ctx.node)">
-        🗑 {{ t('explorer.delete') || 'Delete' }}
+      <button
+        v-if="ctx.node"
+        class="ftree__ctx-item ftree__ctx-item--kbd ftree__ctx-item--danger"
+        :aria-keyshortcuts="macKeys ? 'Meta+Backspace' : 'Delete'"
+        @click="deleteNode(ctx.node)"
+      >
+        <span>🗑 {{ t('explorer.delete') || 'Delete' }}</span>
+        <kbd v-if="!isMobile()" class="ftree__ctx-kbd">{{ deleteKbd }}</kbd>
       </button>
       <button v-if="ctx.node" class="ftree__ctx-item" @click="copyNodePath(ctx.node)">
         📋 {{ t('explorer.copyPath') || 'Copy Path' }}
@@ -2040,6 +2134,9 @@ export const FileTreeNode = defineComponent({
 </script>
 
 <style scoped>
+.ftree:focus {
+  outline: none;
+}
 .ftree {
   width: var(--file-tree-width, 240px);
   height: 100%;
@@ -2692,6 +2789,20 @@ export const FileTreeNode = defineComponent({
   color: var(--text);
   cursor: pointer;
   font: inherit;
+}
+.ftree__ctx-item--kbd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+/* #355 — the chord beside Rename / Delete, the look of the toolbar menus'
+   .dropdown__kbd. */
+.ftree__ctx-kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  margin-left: 16px;
 }
 .ftree__ctx-item:hover {
   background: color-mix(in srgb, var(--accent) 18%, transparent);

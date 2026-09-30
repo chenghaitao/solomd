@@ -223,6 +223,7 @@ export const ru: I18n = {
     deleted: '{name} удалён',
     undo: 'Отменить',
     deleteUndone: '{name} восстановлен',
+    deleteKey: 'Del',
     copyGitUrl: 'Копировать Git URL',
     copyGitUrlDone: 'Git URL скопирован в буфер обмена.',
     copyGitUrlNoRepo: 'У этой рабочей папки нет связанного Git-репозитория.',

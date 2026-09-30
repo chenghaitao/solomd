@@ -227,6 +227,7 @@ export const sv: I18n = {
     deleted: '{name} borttagen',
     undo: 'Ångra',
     deleteUndone: '{name} återställd',
+    deleteKey: 'Del',
     copyGitUrl: 'Kopiera Git-URL',
     copyGitUrlDone: 'Git-URL kopierad till urklipp.',
     copyGitUrlNoRepo: 'Den här arbetsytan har ingen länkad Git-fjärr.',

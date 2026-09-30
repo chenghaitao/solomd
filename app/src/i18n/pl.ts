@@ -227,6 +227,7 @@ export const pl: I18n = {
     deleted: 'Usunięto {name}',
     undo: 'Cofnij',
     deleteUndone: 'Przywrócono {name}',
+    deleteKey: 'Del',
     copyGitUrl: 'Kopiuj adres Git',
     copyGitUrlDone: 'Adres Git skopiowany do schowka.',
     copyGitUrlNoRepo: 'Ten obszar roboczy nie ma połączonego zdalnego repozytorium Git.',

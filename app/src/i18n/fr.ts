@@ -227,6 +227,7 @@ export const fr: I18n = {
     deleted: '{name} supprimé',
     undo: 'Annuler',
     deleteUndone: '{name} restauré',
+    deleteKey: 'Suppr',
     copyGitUrl: 'Copier l’URL Git',
     copyGitUrlDone: 'URL Git copiée dans le presse-papiers.',
     copyGitUrlNoRepo: 'Cet espace de travail n’a pas de dépôt Git distant lié.',

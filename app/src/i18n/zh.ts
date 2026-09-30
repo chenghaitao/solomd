@@ -225,6 +225,7 @@ export const zh: I18n = {
     deleted: '已删除 {name}',
     undo: '撤销',
     deleteUndone: '已恢复 {name}',
+    deleteKey: 'Del',
     copyGitUrl: '复制 Git 链接',
     copyGitUrlDone: 'Git 链接已复制到剪贴板。',
     copyGitUrlNoRepo: '这个工作区没有关联的 Git 远端。',

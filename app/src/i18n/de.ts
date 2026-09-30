@@ -227,6 +227,7 @@ export const de: I18n = {
     deleted: '{name} gelöscht',
     undo: 'Rückgängig',
     deleteUndone: '{name} wiederhergestellt',
+    deleteKey: 'Entf',
     copyGitUrl: 'Git-URL kopieren',
     copyGitUrlDone: 'Git-URL in die Zwischenablage kopiert.',
     copyGitUrlNoRepo: 'Dieser Arbeitsbereich hat kein verknüpftes Git-Remote.',

@@ -224,6 +224,9 @@ export const en = {
     deleted: 'Deleted {name}',
     undo: 'Undo',
     deleteUndone: 'Restored {name}',
+    // #355 — the Delete key as printed on this language’s keyboards (Entf, Suppr…),
+    // shown beside Delete in the file-tree menu. macOS shows ⌘⌫ instead.
+    deleteKey: 'Del',
     copyGitUrl: 'Copy Git URL',
     copyGitUrlDone: 'Git URL copied to clipboard.',
     copyGitUrlNoRepo: 'This workspace has no linked Git remote.',

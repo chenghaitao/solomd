@@ -227,6 +227,7 @@ export const tr: I18n = {
     deleted: '{name} silindi',
     undo: 'Geri al',
     deleteUndone: '{name} geri getirildi',
+    deleteKey: 'Del',
     copyGitUrl: 'Git URL’sini kopyala',
     copyGitUrlDone: 'Git URL’si panoya kopyalandı.',
     copyGitUrlNoRepo: 'Bu çalışma alanının bağlı bir Git uzak deposu yok.',

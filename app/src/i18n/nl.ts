@@ -227,6 +227,7 @@ export const nl: I18n = {
     deleted: '{name} verwijderd',
     undo: 'Ongedaan maken',
     deleteUndone: '{name} hersteld',
+    deleteKey: 'Del',
     copyGitUrl: 'Git-URL kopiëren',
     copyGitUrlDone: 'Git-URL naar het klembord gekopieerd.',
     copyGitUrlNoRepo: 'Deze werkruimte heeft geen gekoppelde Git-remote.',

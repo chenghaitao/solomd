@@ -227,6 +227,7 @@ export const ja: I18n = {
     deleted: '{name} を削除しました',
     undo: '元に戻す',
     deleteUndone: '{name} を元に戻しました',
+    deleteKey: 'Del',
     copyGitUrl: 'Git URL をコピー',
     copyGitUrlDone: 'Git URL をクリップボードにコピーしました。',
     copyGitUrlNoRepo: 'このワークスペースには Git リモートがありません。',

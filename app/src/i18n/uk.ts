@@ -227,6 +227,7 @@ export const uk: I18n = {
     deleted: '{name} видалено',
     undo: 'Скасувати',
     deleteUndone: '{name} відновлено',
+    deleteKey: 'Del',
     copyGitUrl: 'Копіювати Git URL',
     copyGitUrlDone: 'Git URL скопійовано в буфер обміну.',
     copyGitUrlNoRepo: 'Ця робоча область не має підключеного віддаленого Git.',

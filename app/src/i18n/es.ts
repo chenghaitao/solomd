@@ -227,6 +227,7 @@ export const es: I18n = {
     deleted: '{name} eliminado',
     undo: 'Deshacer',
     deleteUndone: '{name} restaurado',
+    deleteKey: 'Supr',
     copyGitUrl: 'Copiar URL de Git',
     copyGitUrlDone: 'URL de Git copiada al portapapeles.',
     copyGitUrlNoRepo: 'Este espacio de trabajo no tiene un remoto de Git vinculado.',
