@@ -557,10 +557,17 @@ function renderPlainBlock(src: string): string {
   const html = rewriteImageUrls(
     // Drop `disabled` on task checkboxes so they can be clicked to toggle in the
     // preview (handled by activatePlainBlockFromClick → togglePlainTask).
-    renderMarkdown(src || '\n', { tocSource }).replace(
-      /(<input class="task-list-item-checkbox" type="checkbox"[^>]*?)\s+disabled=""/g,
-      '$1',
-    ),
+    renderMarkdown(src || '\n', { tocSource })
+      .replace(
+        /(<input class="task-list-item-checkbox" type="checkbox"[^>]*?)\s+disabled=""/g,
+        '$1',
+      )
+      // #366 — markdown-it emits a hard break as `<br>\n`. Rendered `<p>` here
+      // is `white-space: pre-wrap`, so that `\n` became a SECOND line break:
+      // every line of a multi-line paragraph rendered double-spaced, then
+      // snapped back to single spacing when clicked into (the textarea) — the
+      // block's height halved/doubled on each click and the page jumped.
+      .replace(/<br>\n/g, '<br>'),
     root,
     props.tab.filePath,
   );
@@ -4707,7 +4714,10 @@ const cls = computed(() => ({
   color: var(--text);
   caret-color: var(--accent);
   font: inherit;
-  line-height: inherit;
+  /* #366 — same line pitch as the rendered block (.plain-block__render), so a
+     paragraph keeps its height when clicked into. At the inherited 1.6 every
+     line shrank by 1.4px on activation: a 24-line block jumped ~34px. */
+  line-height: 1.7;
   tab-size: 2;
   white-space: pre;
 }
