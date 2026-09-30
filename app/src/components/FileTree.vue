@@ -386,6 +386,12 @@ async function toggle(node: Node, how: 'click' | 'dblclick' = 'click') {
   // just two clicks (open, close) as it always was, so its own event is
   // ignored — and files open on the first click either way.
   const dblFolders = node.is_dir && settings.explorerDoubleClickFolders;
+  // #355 — a single click on a file keeps the keyboard in the tree (F2 / Del
+  // act on it, as in VS Code); a double click means "I want to write in it".
+  if (how === 'dblclick' && !node.is_dir) {
+    focusEditor();
+    return;
+  }
   if (how === 'dblclick' && !dblFolders) return;
   selected.value = { path: node.path, isDir: !!node.is_dir };
   if (!node.is_dir) {
@@ -1366,6 +1372,21 @@ watch(editing, (e) => {
   refocusTree('ifLost');
 });
 
+/** Move the keyboard into the active document's editor (either engine). */
+function focusEditor() {
+  const run = () => {
+    const pane =
+      document.querySelector('.pane-content .pane--editor:focus-within') ??
+      document.querySelector('.pane--editor');
+    const target = pane?.querySelector<HTMLElement>(
+      '.cm-content, .plain-block--active textarea, .plain-editor',
+    );
+    target?.focus({ preventScroll: true });
+  };
+  // After the pending refocusTree() timers (0 / 150 ms) from the click.
+  setTimeout(run, 200);
+}
+
 function isDeleteChord(e: KeyboardEvent): boolean {
   if (e.altKey || e.shiftKey) return false;
   if (e.key === 'Delete') return !e.ctrlKey && !e.metaKey;
@@ -1379,6 +1400,20 @@ function onTreeKey(e: KeyboardEvent) {
   // The inline rename box, the filter popover's inputs… type normally there.
   if (target?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
   if (editing.value || deleteTarget.value) return;
+  // Enter on a file: open it (if the click hasn't already) and hand the
+  // keyboard to the editor — the keyboard way out of the tree.
+  if (e.key === 'Enter' && !e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+    const sel = selected.value;
+    if (sel && !sel.isDir) {
+      e.preventDefault();
+      e.stopPropagation();
+      void (async () => {
+        if (tabs.activeTab?.filePath !== sel.path) await files.openPath(sel.path, { fromTree: true });
+        focusEditor();
+      })();
+    }
+    return;
+  }
   const isRename = e.key === 'F2' && !e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey;
   const isDelete = !isRename && isDeleteChord(e);
   if (!isRename && !isDelete) return;
