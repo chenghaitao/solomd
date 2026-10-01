@@ -139,11 +139,20 @@ bump_winget() {
     echo "winget   already has $VER"
     return 0
   fi
-  GITHUB_TOKEN="$(gh auth token)" komac update zhitong.SoloMD --version "$VER" \
+  # Until the first PR merges the package doesn't exist upstream and komac fails;
+  # judge by komac's own output, not by reaching the end of this function.
+  local out
+  out="$(GITHUB_TOKEN="$(gh auth token)" komac update zhitong.SoloMD --version "$VER" \
     --urls "$DL/SoloMD_${VER}_x64_en-US.msi" "$DL/SoloMD_${VER}_arm64_en-US.msi" \
     --release-notes-url "https://github.com/$REPO/releases/tag/$TAG" \
-    --submit < /dev/null 2>&1 | grep -E "Successfully|pull/|rror" || true
-  echo "winget   PR opened for $VER — the winget bot validates (installs it on a VM) and merges"
+    --submit < /dev/null 2>&1)" || true
+  if grep -q "pull/" <<<"$out"; then
+    echo "winget   PR opened for $VER: $(grep -o 'https://github.com/[^ ]*pull/[0-9]*' <<<"$out" | head -1)"
+  else
+    echo "winget   FAILED for $VER — komac said:" >&2
+    tail -5 <<<"$out" >&2
+    return 1
+  fi
 }
 
 check_scoop() {
