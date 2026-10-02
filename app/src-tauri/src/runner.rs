@@ -1029,6 +1029,7 @@ pub fn run_with(initial_file: Option<String>) {
             store_review::request_store_review,
             ios_folder::ios_pick_folder,
             ios_folder::ios_restore_folder,
+            ios_folder::ios_scoped_files,
             recipe_runner::recipes_list,
             recipe_runner::recipes_get,
             recipe_runner::recipes_save,

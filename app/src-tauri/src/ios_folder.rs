@@ -12,6 +12,10 @@
 //! bookmark so the access is restored on the next launch
 //! (`ios_restore_folder`). The picker also lists "On My iPhone › SoloMD", so
 //! the old folder remains one tap away. Elsewhere both commands are no-ops.
+//!
+//! It also opens the security scope of documents opened in place from the
+//! Files app ([`hook_open_url`], [`ios_scoped_files`]) — see the
+//! LSSupportsOpeningDocumentsInPlace note in ios-project-overlay.yml.
 
 use tauri::AppHandle;
 
@@ -20,7 +24,7 @@ const BOOKMARK_FILE: &str = "workspace-folder.bookmark";
 #[cfg(target_os = "ios")]
 mod imp {
     use objc2::rc::Retained;
-    use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject};
+    use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject, Sel};
     use objc2::{declare_class, msg_send, msg_send_id, mutability, ClassType, DeclaredClass};
     use std::ffi::{c_void, CStr, CString};
     use std::ptr::null_mut;
@@ -231,6 +235,73 @@ mod imp {
         rx
     }
 
+    /// Files tapped in the Files app whose security scope we opened.
+    static OPENED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    /// tao's own application:openURL:options: implementation.
+    static ORIG_OPEN_URL: AtomicUsize = AtomicUsize::new(0);
+
+    type OpenUrlFn =
+        unsafe extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject, *mut AnyObject) -> Bool;
+
+    unsafe extern "C" fn open_url_hook(
+        this: *mut AnyObject,
+        cmd: Sel,
+        app: *mut AnyObject,
+        url: *mut AnyObject,
+        options: *mut AnyObject,
+    ) -> Bool {
+        if !url.is_null() {
+            let is_file: Bool = msg_send![url, isFileURL];
+            if is_file.as_bool() {
+                // Only the NSURL iOS hands us carries the sandbox extension;
+                // tao reduces it to a string right after this. The scope stays
+                // open (and the URL retained) for the life of the process, so
+                // read_file and a later save back to the file both work.
+                let granted: Bool = msg_send![url, startAccessingSecurityScopedResource];
+                if granted.as_bool() {
+                    let _: *mut AnyObject = msg_send![url, retain];
+                }
+                let path: *mut AnyObject = msg_send![url, path];
+                if let (Some(p), Ok(mut list)) = (rust_string(path), OPENED.lock()) {
+                    if !list.contains(&p) {
+                        list.push(p);
+                    }
+                }
+            }
+        }
+        match ORIG_OPEN_URL.load(Ordering::SeqCst) {
+            0 => Bool::YES,
+            f => {
+                let orig: OpenUrlFn = std::mem::transmute(f);
+                orig(this, cmd, app, url, options)
+            }
+        }
+    }
+
+    /// Wrap tao's `AppDelegate` `application:openURL:options:`. Runs from
+    /// setup, which on iOS happens inside didFinishLaunching — before iOS
+    /// delivers the URL a cold launch was opened with.
+    pub fn hook_open_url() {
+        if ORIG_OPEN_URL.load(Ordering::SeqCst) != 0 {
+            return;
+        }
+        let Some(cls) = AnyClass::get("AppDelegate") else {
+            return;
+        };
+        let Some(method) = cls.instance_method(objc2::sel!(application:openURL:options:)) else {
+            return;
+        };
+        unsafe {
+            let hook: OpenUrlFn = open_url_hook;
+            let old = method.set_implementation(std::mem::transmute(hook));
+            ORIG_OPEN_URL.store(old as usize, Ordering::SeqCst);
+        }
+    }
+
+    pub fn opened() -> Vec<String> {
+        OPENED.lock().map(|l| l.clone()).unwrap_or_default()
+    }
+
     /// Resolve a stored bookmark and reopen its scope: the folder's (possibly
     /// moved) path, plus a fresh bookmark when the old one went stale.
     pub fn restore(bookmark: &[u8]) -> Option<(String, Option<Vec<u8>>)> {
@@ -318,5 +389,27 @@ pub fn ios_restore_folder(app: AppHandle) -> Result<Option<String>, String> {
     {
         let _ = app;
         Ok(None)
+    }
+}
+
+/// Wrap the app delegate's open-URL entry so in-place opens get their
+/// security scope.
+#[cfg(target_os = "ios")]
+pub fn hook_open_url() {
+    imp::hook_open_url();
+}
+
+/// Paths of documents opened in place from the Files app this session —
+/// readable and writable in place (the app saves back to them instead of
+/// making a copy).
+#[tauri::command]
+pub fn ios_scoped_files() -> Vec<String> {
+    #[cfg(target_os = "ios")]
+    {
+        imp::opened()
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Vec::new()
     }
 }
