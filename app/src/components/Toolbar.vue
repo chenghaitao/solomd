@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue';
 import Icon from './Icons.vue';
 import BrandMark from './BrandMark.vue';
 import PomodoroPopover from './PomodoroPopover.vue';
@@ -450,7 +450,9 @@ function menuAction(id: string) {
   // DOM event and the Tauri `solomd://menu` event).
   window.dispatchEvent(new CustomEvent('solomd:menu-action', { detail: id }));
 }
-type MenubarEntry = { id: string; label: string; shortcut?: string } | { sep: true };
+type MenubarItem = { id: string; label: string; shortcut?: string };
+// A submenu opens beside its row on hover (the View menu's three zoom axes).
+type MenubarEntry = MenubarItem | { sep: true } | { sub: string; label: string; items: Array<MenubarItem | { sep: true }> };
 // Shortcut labels show what the JS handlers (useShortcuts.ts) actually bind on
 // Windows — NOT the old native accelerators where the two differ (e.g. Ctrl+P
 // is the quick switcher, so Print shows Ctrl+Alt+Shift+P).
@@ -473,6 +475,10 @@ const menubarMenus = computed<Record<MenubarName, MenubarEntry[]>>(() => ({
     { id: 'window.new', label: t('menubar.newWindow'), shortcut: shortcutLabel('window.new', settings.keybindings, macChord) },
     { id: 'file.closeTab', label: t('menubar.closeTab'), shortcut: shortcutLabel('file.closeTab', settings.keybindings, macChord) },
     { sep: true },
+    // Settings are application-wide, not a view option — File is where
+    // Windows apps keep them, next to Exit.
+    { id: 'view.settings', label: t('menubar.settings'), shortcut: shortcutLabel('settings.open', settings.keybindings, macChord) },
+    { sep: true },
     // #221 — parity with the removed native menu's quit item. Now rebindable via Settings (#ctrlq).
     { id: 'file.exit', label: t('menubar.exit'), shortcut: shortcutLabel('file.exit', settings.keybindings, macChord) || 'Alt+F4' },
   ],
@@ -485,6 +491,9 @@ const menubarMenus = computed<Record<MenubarName, MenubarEntry[]>>(() => ({
     { id: 'edit.paste', label: t('menubar.paste'), shortcut: 'Ctrl+V' },
     { sep: true },
     { id: 'edit.selectAll', label: t('menubar.selectAll'), shortcut: 'Ctrl+A' },
+    { sep: true },
+    // One bar does both: the replace row is always part of it.
+    { id: 'edit.find', label: t('menubar.find'), shortcut: shortcutLabel('editor.find', settings.keybindings, macChord) },
   ],
   view: [
     { id: 'view.toggleTheme', label: t('menubar.toggleTheme') },
@@ -493,30 +502,87 @@ const menubarMenus = computed<Record<MenubarName, MenubarEntry[]>>(() => ({
     { id: 'view.toggleOutline', label: t('menubar.toggleOutline'), shortcut: shortcutLabel('view.toggleOutline', settings.keybindings, macChord) },
     { id: 'view.cycleView', label: t('menubar.cycleView'), shortcut: shortcutLabel('view.cycleView', settings.keybindings, macChord) },
     { sep: true },
-    { id: 'view.zoomUiIn', label: t('menubar.uiZoomIn'), shortcut: 'Ctrl+=' },
-    { id: 'view.zoomUiOut', label: t('menubar.uiZoomOut'), shortcut: 'Ctrl+-' },
-    { id: 'view.zoomUiReset', label: t('menubar.uiZoomReset'), shortcut: 'Ctrl+0' },
-    { sep: true },
-    { id: 'view.zoomEditorIn', label: t('menubar.editorZoomIn'), shortcut: 'Ctrl+Shift+=' },
-    { id: 'view.zoomEditorOut', label: t('menubar.editorZoomOut'), shortcut: 'Ctrl+Shift+-' },
-    { id: 'view.zoomEditorReset', label: t('menubar.editorZoomReset'), shortcut: 'Ctrl+Shift+0' },
-    { sep: true },
-    { id: 'view.zoomPreviewIn', label: t('menubar.previewZoomIn') },
-    { id: 'view.zoomPreviewOut', label: t('menubar.previewZoomOut') },
-    { id: 'view.zoomPreviewReset', label: t('menubar.previewZoomReset') },
+    // Nine rows of one pattern took half the menu; they share a submenu so
+    // the file tree / outline toggles stay the visible part.
+    {
+      sub: 'zoom',
+      label: t('menubar.zoom'),
+      items: [
+        { id: 'view.zoomUiIn', label: t('menubar.uiZoomIn'), shortcut: 'Ctrl+=' },
+        { id: 'view.zoomUiOut', label: t('menubar.uiZoomOut'), shortcut: 'Ctrl+-' },
+        { id: 'view.zoomUiReset', label: t('menubar.uiZoomReset'), shortcut: 'Ctrl+0' },
+        { sep: true },
+        { id: 'view.zoomEditorIn', label: t('menubar.editorZoomIn'), shortcut: 'Ctrl+Shift+=' },
+        { id: 'view.zoomEditorOut', label: t('menubar.editorZoomOut'), shortcut: 'Ctrl+Shift+-' },
+        { id: 'view.zoomEditorReset', label: t('menubar.editorZoomReset'), shortcut: 'Ctrl+Shift+0' },
+        { sep: true },
+        { id: 'view.zoomPreviewIn', label: t('menubar.previewZoomIn') },
+        { id: 'view.zoomPreviewOut', label: t('menubar.previewZoomOut') },
+        { id: 'view.zoomPreviewReset', label: t('menubar.previewZoomReset') },
+      ],
+    },
     { sep: true },
     { id: 'view.cmdPalette', label: t('menubar.palette'), shortcut: shortcutLabel('palette.open', settings.keybindings, macChord) },
     { id: 'search.global', label: t('menubar.globalSearch'), shortcut: shortcutLabel('search.global', settings.keybindings, macChord) },
-    { sep: true },
-    { id: 'view.settings', label: t('menubar.settings'), shortcut: 'Ctrl+,' },
   ],
+  // F1 opens a three-tab panel; one row per tab, so the menu says what is in it.
   help: [
     { id: 'help.markdown', label: t('menubar.mdHelp'), shortcut: shortcutLabel('help.markdown', settings.keybindings, macChord) },
+    { id: 'help.shortcuts', label: t('menubar.helpShortcuts') },
+    { id: 'help.cli', label: t('menubar.helpCli') },
     { sep: true },
     { id: 'help.about', label: t('menubar.about') },
   ],
 }));
 const menubarNames: MenubarName[] = ['file', 'edit', 'view', 'help'];
+
+// The open submenu, placed beside its row. A separate fixed layer rather than
+// a child of the menu: the menu scrolls (max-height), which would clip it.
+const menubarSub = ref<{ key: string; top: number; left: number } | null>(null);
+const SUBMENU_WIDTH = 240;
+function openMenubarSub(key: string, e: MouseEvent) {
+  cancelMenubarSubClose();
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  // Open to the right; flip left when the window has no room there.
+  const left = r.right + SUBMENU_WIDTH > window.innerWidth - 8 ? r.left - SUBMENU_WIDTH : r.right - 2;
+  menubarSub.value = { key, top: r.top - 4, left: Math.max(8, left) };
+}
+// Moving diagonally from the row to the submenu crosses the rows below it;
+// closing on the first of those would make the submenu impossible to reach.
+let menubarSubTimer = 0;
+function closeMenubarSubSoon() {
+  if (!menubarSub.value || menubarSubTimer) return;
+  menubarSubTimer = window.setTimeout(() => {
+    menubarSubTimer = 0;
+    menubarSub.value = null;
+  }, 300);
+}
+function cancelMenubarSubClose() {
+  clearTimeout(menubarSubTimer);
+  menubarSubTimer = 0;
+}
+const menubarSubItems = computed(() => {
+  const sub = menubarSub.value;
+  if (!sub || !menubarOpen.value) return null;
+  const entry = menubarMenus.value[menubarOpen.value].find((e) => 'sub' in e && e.sub === sub.key);
+  return entry && 'sub' in entry ? entry.items : null;
+});
+const menubarSubStyle = computed(() => {
+  const sub = menubarSub.value;
+  if (!sub) return undefined;
+  return {
+    position: 'fixed' as const,
+    top: `${sub.top}px`,
+    left: `${sub.left}px`,
+    minWidth: `${SUBMENU_WIDTH}px`,
+    zIndex: 1001,
+    maxHeight: `calc(100vh - ${sub.top}px - 8px)`,
+  };
+});
+watch(menubarOpen, () => {
+  cancelMenubarSubClose();
+  menubarSub.value = null;
+});
 
 // Root element — used by onScrollAnywhere to tell "a scroll that moves the
 // menu anchors" (toolbar's own overflow scroll) from pane scrolls.
@@ -695,6 +761,35 @@ onBeforeUnmount(() => {
       <Teleport to="body">
         <div v-if="menubarOpen" class="dropdown__menu" :style="floatStyle">
           <template v-for="(entry, i) in menubarMenus[menubarOpen]" :key="i">
+            <div v-if="'sep' in entry" class="dropdown__sep"></div>
+            <button
+              v-else-if="'sub' in entry"
+              class="dropdown__item dropdown__item--single dropdown__item--sub"
+              :class="{ active: menubarSub?.key === entry.sub }"
+              @mouseenter="openMenubarSub(entry.sub, $event)"
+              @mousedown.prevent="openMenubarSub(entry.sub, $event)"
+            >
+              <span class="dropdown__name">{{ entry.label }}</span>
+              <span class="dropdown__shortcut">›</span>
+            </button>
+            <button
+              v-else
+              class="dropdown__item dropdown__item--single"
+              @mouseenter="closeMenubarSubSoon"
+              @mousedown.prevent="menuAction(entry.id)"
+            >
+              <span class="dropdown__name">{{ entry.label }}</span>
+              <span v-if="entry.shortcut" class="dropdown__shortcut">{{ entry.shortcut }}</span>
+            </button>
+          </template>
+        </div>
+        <div
+          v-if="menubarOpen && menubarSubItems"
+          class="dropdown__menu dropdown__menu--sub"
+          :style="menubarSubStyle"
+          @mouseenter="cancelMenubarSubClose"
+        >
+          <template v-for="(entry, i) in menubarSubItems" :key="i">
             <div v-if="'sep' in entry" class="dropdown__sep"></div>
             <button
               v-else
@@ -912,6 +1007,18 @@ onBeforeUnmount(() => {
             <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h3')">
               <span class="dropdown__name">{{ t('cmd.fmt.h3') }}</span>
               <kbd v-if="chord('fmt.h3')" class="dropdown__kbd">{{ chord('fmt.h3') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h4')">
+              <span class="dropdown__name">{{ t('cmd.fmt.h4') }}</span>
+              <kbd v-if="chord('fmt.h4')" class="dropdown__kbd">{{ chord('fmt.h4') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h5')">
+              <span class="dropdown__name">{{ t('cmd.fmt.h5') }}</span>
+              <kbd v-if="chord('fmt.h5')" class="dropdown__kbd">{{ chord('fmt.h5') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h6')">
+              <span class="dropdown__name">{{ t('cmd.fmt.h6') }}</span>
+              <kbd v-if="chord('fmt.h6')" class="dropdown__kbd">{{ chord('fmt.h6') }}</kbd>
             </button>
             <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('ul')">
               <span class="dropdown__name">{{ t('cmd.fmt.ul') }}</span>
@@ -1502,6 +1609,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 260px;
+}
+.dropdown__item--sub.active {
+  background: var(--bg-hover);
 }
 .dropdown__shortcut {
   margin-left: auto;

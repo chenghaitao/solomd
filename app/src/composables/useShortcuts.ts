@@ -182,6 +182,36 @@ export function useShortcuts(hooks: Hooks = {}) {
     e.preventDefault();
   }
 
-  onMounted(() => window.addEventListener('keydown', handler));
-  onUnmounted(() => window.removeEventListener('keydown', handler));
+  // Ctrl+, did nothing while typing in either editor on Windows, and worked
+  // from the file tree or preview — i.e. only where an input method is
+  // attached to the focused field, which can consume the keydown of a chord
+  // outright. Its keyup still arrives. So a Ctrl chord whose keydown never
+  // reached the page runs on keyup instead. Keydowns are noted in the capture
+  // phase, before anything can stop them, so a chord already handled on
+  // keydown can never run twice. (macOS sends no keyup while ⌘ is held.)
+  const downCodes = new Set<string>();
+  function noteKeydown(e: KeyboardEvent) {
+    if (e.code) downCodes.add(e.code);
+  }
+  function onKeyup(e: KeyboardEvent) {
+    const seen = downCodes.delete(e.code);
+    if (seen || !e.ctrlKey || e.metaKey || !e.code) return;
+    handler(e);
+  }
+  function onBlur() {
+    downCodes.clear();
+  }
+
+  onMounted(() => {
+    window.addEventListener('keydown', noteKeydown, true);
+    window.addEventListener('keydown', handler);
+    window.addEventListener('keyup', onKeyup);
+    window.addEventListener('blur', onBlur);
+  });
+  onUnmounted(() => {
+    window.removeEventListener('keydown', noteKeydown, true);
+    window.removeEventListener('keydown', handler);
+    window.removeEventListener('keyup', onKeyup);
+    window.removeEventListener('blur', onBlur);
+  });
 }

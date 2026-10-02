@@ -202,10 +202,52 @@ function toggleCodeBlock(doc: string, from: number, to: number): FormatEdit {
   return { from: s, to: e, insert, selFrom: s + 3, selTo: s + 3 };
 }
 
+const INLINE_MARKERS: Partial<Record<FormatKind, string>> = { bold: '**', italic: '*', strike: '~~', code: '`' };
+// What a line may start with that is structure, not content: indent, quote
+// markers, then a heading, bullet, number or task box.
+const LINE_PREFIX = /^[ \t]*(?:>[ \t]?)*(?:#{1,6}[ \t]+|(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?/;
+
+/**
+ * Bold / italic / strike / code over a selection spanning lines. Emphasis
+ * cannot cross a line break in Markdown, so one pair around the whole range
+ * renders as literal asterisks — each line's content is wrapped on its own,
+ * as Typora does. Blank lines and line prefixes (`- `, `## `, `> `) stay
+ * outside the markers. Still a toggle: when every line already has the
+ * format it comes off all of them.
+ */
+function toggleInlineLines(doc: string, from: number, to: number, marker: string): FormatEdit {
+  const w = marker.length;
+  const segs = doc.slice(from, to).split('\n');
+  const atLineStart = from === 0 || doc[from - 1] === '\n';
+  const parts = segs.map((seg, i) => {
+    const lineStart = i > 0 || atLineStart;
+    const pre = lineStart ? seg.match(LINE_PREFIX)?.[0] ?? '' : '';
+    const rest = seg.slice(pre.length);
+    const core = rest.replace(/\s+$/, '');
+    return { pre, core, post: rest.slice(core.length) };
+  });
+  const has = (c: string) =>
+    c.length >= 2 * w && c.startsWith(marker) && c.endsWith(marker) &&
+    // `**x**` is bold, not italic: a single-star check must not match a double.
+    (w !== 1 || !(c.startsWith('**') && c.endsWith('**')) || (c.startsWith('***') && c.endsWith('***')));
+  const filled = parts.filter((p) => p.core);
+  const remove = filled.length > 0 && filled.every((p) => has(p.core));
+  const insert = parts
+    .map(({ pre, core, post }) => {
+      if (!core) return pre + post;
+      if (remove) return pre + core.slice(w, core.length - w) + post;
+      return pre + (has(core) ? core : marker + core + marker) + post;
+    })
+    .join('\n');
+  return { from, to, insert, selFrom: from, selTo: from + insert.length };
+}
+
 /** The edit that applies (or removes) `kind` at the given selection. */
 export function applyFormat(doc: string, from: number, to: number, kind: FormatKind): FormatEdit {
   const a = Math.max(0, Math.min(from, to, doc.length));
   const b = Math.max(0, Math.min(Math.max(from, to), doc.length));
+  const inline = INLINE_MARKERS[kind];
+  if (inline && doc.slice(a, b).includes('\n')) return toggleInlineLines(doc, a, b, inline);
   switch (kind) {
     case 'bold': return toggleStars(doc, a, b, 2);
     case 'italic': return toggleStars(doc, a, b, 1);

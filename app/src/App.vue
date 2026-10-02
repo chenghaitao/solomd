@@ -4,7 +4,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { openPath } from '@tauri-apps/plugin-opener';
+import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
@@ -209,6 +209,12 @@ function openSettingsAt(section: string | null = null) {
   settingsOpen.value = true;
 }
 const helpOpen = ref(false);
+// Which tab the F1 panel opens on — the Help menu has one row per tab.
+const helpTab = ref<'syntax' | 'shortcuts' | 'cli'>('syntax');
+function openHelpAt(tab: 'syntax' | 'shortcuts' | 'cli' = 'syntax') {
+  helpTab.value = tab;
+  helpOpen.value = true;
+}
 const searchOpen = ref(false);
 // v4.0.2 — search is now a sidebar pane (PR #50 by @beihai23). Tag clicks
 // from TagsPanel prefill `#tag` into the search box; the watcher in
@@ -343,7 +349,7 @@ function onFileChangedAction(action: 'reload' | 'overwrite' | 'cancel') {
 useShortcuts({
   openPalette: () => (paletteOpen.value = true),
   openSettings: () => (settingsOpen.value = true),
-  openHelp: () => (helpOpen.value = true),
+  openHelp: () => openHelpAt('syntax'),
   openGlobalSearch: () => toggleGlobalSearch(),
   openRagSearch: () => (ragSearchOpen.value = true),
   openQuickSwitcher: () => (quickSwitcherOpen.value = true),
@@ -804,7 +810,7 @@ watch(
 );
 
 function onOpenHelpEvent() {
-  helpOpen.value = true;
+  openHelpAt('syntax');
 }
 function onOpenSearchEvent() {
   toggleGlobalSearch();
@@ -945,7 +951,22 @@ function dispatchMenuAction(id: string) {
       toggleGlobalSearch();
       break;
     case 'help.markdown':
-      helpOpen.value = true;
+      openHelpAt('syntax');
+      break;
+    case 'help.shortcuts':
+      openHelpAt('shortcuts');
+      break;
+    case 'help.cli':
+      openHelpAt('cli');
+      break;
+    // Same routing as the Ctrl+F shortcut: preview has its own find, every
+    // editor mode opens the editor's find/replace bar.
+    case 'edit.find':
+      if (settings.viewMode === 'preview' && tabs.activeTab?.language === 'markdown') {
+        window.dispatchEvent(new CustomEvent('solomd:preview-search', { detail: { paneId: tiles.focusedPaneId } }));
+      } else {
+        window.dispatchEvent(new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId } }));
+      }
       break;
     case 'help.about':
       aboutOpen.value = true;
@@ -983,6 +1004,23 @@ function dispatchMenuAction(id: string) {
     default:
       console.warn('unknown menu action', id);
   }
+}
+
+/**
+ * Backstop for any external link a component renders without handling the
+ * click itself (the preview and the live-edit blocks do): the webview must
+ * never navigate away from SoloMD — the UI is replaced by the page, and on
+ * Windows nothing short of right-click → Back gets out. Runs after the
+ * components' own handlers, so anything they prevented is left alone.
+ */
+function onStrayLinkClick(e: MouseEvent) {
+  if (e.defaultPrevented) return;
+  const anchor = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+  if (!anchor) return;
+  const href = anchor.getAttribute('href') || '';
+  if (!/^(https?|mailto|tel):/i.test(href)) return;
+  e.preventDefault();
+  void openUrl(href).catch((err) => console.warn('[link] openUrl failed:', href, err));
 }
 
 function onDomMenuAction(e: Event) {
@@ -1098,6 +1136,8 @@ onMounted(async () => {
   }
 
   window.addEventListener('keydown', onEsc);
+  document.addEventListener('click', onStrayLinkClick);
+  document.addEventListener('auxclick', onStrayLinkClick);
   window.addEventListener('wheel', onWheelZoom, { passive: false, capture: true });
   window.addEventListener('blur', onWindowBlur);
   window.addEventListener('solomd:open-help', onOpenHelpEvent as EventListener);
@@ -1447,6 +1487,8 @@ window.addEventListener('solomd:open-settings', onOpenSettingsEvent as EventList
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onEsc);
+  document.removeEventListener('click', onStrayLinkClick);
+  document.removeEventListener('auxclick', onStrayLinkClick);
   window.removeEventListener('wheel', onWheelZoom, { capture: true } as EventListenerOptions);
   window.removeEventListener('blur', onWindowBlur);
   window.removeEventListener('solomd:open-help', onOpenHelpEvent as EventListener);
@@ -2070,7 +2112,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       :initial-section="settingsInitialSection"
       @close="settingsOpen = false; settingsInitialSection = null; refreshAiHasKey()"
     />
-    <MarkdownHelp :open="helpOpen" @close="helpOpen = false" />
+    <MarkdownHelp :open="helpOpen" :tab="helpTab" @close="helpOpen = false" />
     <RagSearch
       :open="ragSearchOpen"
       @close="ragSearchOpen = false"

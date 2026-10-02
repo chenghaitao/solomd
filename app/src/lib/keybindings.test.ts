@@ -56,3 +56,14 @@ test('search: a chord query matches the chord, not the letters in it', async () 
   assert.ok(ids('bold').includes('fmt.bold'));
   assert.ok(ids('heading').length >= 6);
 });
+
+test('an IME-processed chord (key "Process") is read from the physical key', async () => {
+  const { eventToCombo } = await import('./keybindings.ts');
+  const ev = (init: Partial<KeyboardEvent>) =>
+    ({ key: 'Process', code: '', keyCode: 229, isComposing: false, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...init }) as KeyboardEvent;
+  assert.equal(eventToCombo(ev({ code: 'Comma', ctrlKey: true })), 'Mod+Comma');
+  assert.equal(eventToCombo(ev({ code: 'KeyB', ctrlKey: true, shiftKey: true })), 'Mod+Shift+B');
+  assert.equal(eventToCombo(ev({ code: 'Digit4', ctrlKey: true })), 'Mod+4');
+  // Without Ctrl/⌘ it is text being composed, not a chord.
+  assert.equal(eventToCombo(ev({ code: 'KeyB' })), 'Process');
+});

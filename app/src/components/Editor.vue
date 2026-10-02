@@ -35,7 +35,7 @@ import {
   type FoldAnchor,
   type HeadingSpan,
 } from '../lib/heading-fold';
-import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights } from '../lib/textarea-metrics';
+import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights, offsetAtPoint } from '../lib/textarea-metrics';
 import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
 import { applyFormat, FORMAT_KINDS, type FormatKind } from '../lib/md-format';
@@ -86,6 +86,8 @@ import EditorContextMenu, { type EditorMenuAction } from './EditorContextMenu.vu
 import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
 import { computeListContinuation } from '../lib/list-continuation';
+import { mapPos, renumberAfterEdit, renumberChanges } from '../lib/list-renumber';
+import { openRenderedLink } from '../lib/link-open';
 
 // Incremental find. CoreMirror's search panel only scrolls to a match when you
 // press Enter / click Next — typing in the field just repaints the highlights
@@ -1321,7 +1323,17 @@ function syncPlainEditorAfterModeSwitch() {
 function handlePlainInput(event: Event) {
   if (plainLiveEnabled.value) return;
   const el = event.target as HTMLTextAreaElement;
-  if (!plainComposing.value) recordPlainHistory();
+  if (!plainComposing.value) {
+    recordPlainHistory();
+    // Ordered-list numbers follow a line added or removed (lib/list-renumber).
+    const renum = props.tab.language === 'markdown' ? renumberAfterEdit(plainText.value, el.value) : null;
+    if (renum) {
+      const a = mapPos(el.selectionStart ?? 0, renum.changes);
+      const b = mapPos(el.selectionEnd ?? 0, renum.changes);
+      el.value = renum.value;
+      el.setSelectionRange(a, b);
+    }
+  }
   plainText.value = el.value;
   tabs.setContent(props.tab.id, el.value);
   emitPlainCursorAndSelection();
@@ -2399,6 +2411,12 @@ function estimatePlainBlockCaretFromClick(index: number, event: MouseEvent): num
 }
 
 function activatePlainBlockFromClick(index: number, event: MouseEvent) {
+  // The click ending a cross-block drag selection (see onPlainDragEnd).
+  if (plainSwallowClick) {
+    plainSwallowClick = false;
+    event.preventDefault();
+    return;
+  }
   // Clicking a rendered task checkbox toggles its source marker instead of
   // entering edit mode.
   const target = event.target as HTMLElement | null;
@@ -2415,6 +2433,18 @@ function activatePlainBlockFromClick(index: number, event: MouseEvent) {
     event.preventDefault();
     if (ordinal >= 0) togglePlainTask(index, ordinal);
     return;
+  }
+  // A rendered link is text being edited: a click places the caret in it, as
+  // in Typora; Ctrl+click (⌘ on macOS) opens it the way the preview does. The
+  // webview must never follow it itself — that replaced the whole UI with the
+  // page, with no way back but right-click → Back.
+  const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+  if (anchor) {
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      openRenderedLink(anchor, event, props.tab.filePath);
+      return;
+    }
   }
   if (index === plainActiveBlock.value) return;
   // #300 — a drag that selected rendered text ends in a click too. Turning
@@ -2484,25 +2514,106 @@ function activatePlainBlock(index: number, caret?: number, holdScroll = false) {
  * caret at the end of the nearest block — the last one when clicking below
  * the text, which is where every other editor puts it.
  */
-function onPlainLiveHostMouseDown(event: MouseEvent) {
+/** The visible block nearest to viewport y (folded blocks are skipped). */
+function plainBlockIndexAtY(y: number): number {
   const host = plainLiveHost.value;
-  if (!host || event.button !== 0 || event.target !== host) return;
+  if (!host) return -1;
   const els = host.querySelectorAll<HTMLElement>(':scope > .plain-block');
-  if (!els.length) return;
-  let best = els.length - 1;
+  let best = -1;
   let bestDist = Infinity;
   els.forEach((el, i) => {
     const r = el.getBoundingClientRect();
-    const d = event.clientY < r.top ? r.top - event.clientY : event.clientY > r.bottom ? event.clientY - r.bottom : 0;
+    if (r.height === 0) return;
+    const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
     if (d < bestDist) {
       bestDist = d;
       best = i;
     }
   });
+  return best;
+}
+
+/**
+ * The document offset under a viewport point, whatever is there: rendered
+ * text (mapped back to the source), the active block's textarea, or the gap
+ * beside a block (its start or end).
+ */
+function plainDocOffsetAtPoint(x: number, y: number): { abs: number; block: number } | null {
+  const host = plainLiveHost.value;
+  const index = plainBlockIndexAtY(y);
+  const block = plainBlocks.value[index];
+  const el = host?.querySelectorAll<HTMLElement>(':scope > .plain-block')[index];
+  if (!block || !el) return null;
+  const r = el.getBoundingClientRect();
+  if (y < r.top) return { abs: block.start, block: index };
+  if (y > r.bottom) return { abs: block.start + block.text.length, block: index };
+  const ta = index === plainActiveBlock.value ? plainBlockEditors.value[index] : null;
+  if (ta) return { abs: block.start + offsetAtPoint(ta, ta.value, x, y), block: index };
+  const render = el.querySelector<HTMLElement>('.plain-block__render');
+  const prefix = render ? renderedPrefixAtPoint(render, x, y) : null;
+  const local = prefix != null
+    ? mapRenderedPrefixToSource(block.text, prefix)
+    : x < r.left + r.width / 2 ? 0 : block.text.length;
+  return { abs: block.start + local, block: index };
+}
+
+// Selecting across blocks with the mouse. Each block is either rendered HTML
+// or (the active one) its own textarea, so a native drag can't make an
+// editable selection across them: it stopped at the active textarea, worked
+// in one direction only, and what it did select could not be bolded or
+// deleted. A drag that crosses blocks (or starts beside one) therefore ends in
+// the merged single-textarea view that select-all uses, with exactly the
+// dragged range selected — where Ctrl+B, Delete and typing all work.
+let plainDrag: { abs: number; block: number; x: number; y: number; moved: boolean; gap: number | null } | null = null;
+let plainSwallowClick = false;
+
+function onPlainLiveHostMouseDown(event: MouseEvent) {
+  const host = plainLiveHost.value;
+  if (!host || event.button !== 0 || event.shiftKey || plainSelectAll.value) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('button, input, .plain-find')) return;
+  const start = plainDocOffsetAtPoint(event.clientX, event.clientY);
+  const onGap = target === host;
+  if (start) {
+    plainDrag = { ...start, x: event.clientX, y: event.clientY, moved: false, gap: onGap ? start.block : null };
+    window.addEventListener('mousemove', onPlainDragMove);
+    window.addEventListener('mouseup', onPlainDragEnd);
+  }
+  if (!onGap) return;
   // Keep the host from taking focus and the browser from starting a text
-  // selection on it; the block's textarea gets focus instead.
+  // selection on it. A plain click in the gap activates the nearest block on
+  // mouseup; a drag from here selects instead.
   event.preventDefault();
-  activatePlainBlock(best, Number.MAX_SAFE_INTEGER, true);
+  if (!start) {
+    const best = plainBlockIndexAtY(event.clientY);
+    if (best >= 0) activatePlainBlock(best, Number.MAX_SAFE_INTEGER, true);
+  }
+}
+
+function onPlainDragMove(event: MouseEvent) {
+  if (!plainDrag || plainDrag.moved) return;
+  if (Math.abs(event.clientX - plainDrag.x) + Math.abs(event.clientY - plainDrag.y) > 4) plainDrag.moved = true;
+}
+
+function onPlainDragEnd(event: MouseEvent) {
+  window.removeEventListener('mousemove', onPlainDragMove);
+  window.removeEventListener('mouseup', onPlainDragEnd);
+  const drag = plainDrag;
+  plainDrag = null;
+  if (!drag) return;
+  if (!drag.moved) {
+    if (drag.gap != null) activatePlainBlock(drag.gap, Number.MAX_SAFE_INTEGER, true);
+    return;
+  }
+  const end = plainDocOffsetAtPoint(event.clientX, event.clientY);
+  if (!end || end.abs === drag.abs) return;
+  // Inside one block the native selection is right (and #300 keeps a reading
+  // selection in rendered text as it is).
+  if (end.block === drag.block && drag.gap == null) return;
+  // The click that follows this mouseup must not activate a block and undo it.
+  plainSwallowClick = true;
+  setTimeout(() => { plainSwallowClick = false; }, 0);
+  enterPlainRangeSelection(drag.abs, end.abs);
 }
 
 function setPlainBlockEditor(index: number, el: HTMLTextAreaElement | null) {
@@ -2562,6 +2673,13 @@ function handlePlainBlockCompositionEnd(index: number, event: CompositionEvent) 
 function applyPlainFullEdit(next: string, absoluteCaret: number) {
   plainSelectAll.value = false; // full edits land in normal block view
   if (!plainComposing.value) recordPlainHistory();
+  const renum = !plainComposing.value && props.tab.language === 'markdown'
+    ? renumberAfterEdit(plainText.value, next)
+    : null;
+  if (renum) {
+    next = renum.value;
+    absoluteCaret = mapPos(absoluteCaret, renum.changes);
+  }
   plainText.value = next;
   tabs.setContent(props.tab.id, next);
   const nextBlocks = splitPlainMarkdownBlocks(next);
@@ -2610,6 +2728,37 @@ function enterPlainSelectAll() {
     el.select();
     plainSelectAllPending = false;
     autoSizePlainBlock(el);
+    emitPlainCursorAndSelection();
+  });
+}
+
+/**
+ * The merged single-textarea view of select-all, with `anchor`→`head`
+ * selected instead of everything (a mouse drag across blocks). Exits the same
+ * way: once the selection collapses.
+ */
+function enterPlainRangeSelection(anchor: number, head: number) {
+  const from = Math.min(anchor, head);
+  const to = Math.max(anchor, head);
+  plainSelectAllPending = true;
+  plainSelectAll.value = true;
+  plainActiveBlock.value = 0;
+  try {
+    window.getSelection()?.removeAllRanges();
+  } catch {
+    /* no page selection API */
+  }
+  nextTick(() => {
+    const el = plainBlockEditors.value[0];
+    if (!el) {
+      plainSelectAllPending = false;
+      plainSelectAll.value = false;
+      return;
+    }
+    el.focus({ preventScroll: true });
+    autoSizePlainBlock(el);
+    el.setSelectionRange(from, to, head < anchor ? 'backward' : 'forward');
+    plainSelectAllPending = false;
     emitPlainCursorAndSelection();
   });
 }
@@ -2804,11 +2953,21 @@ function updatePlainBlock(index: number, text: string, caret?: number) {
   plainSelectAll.value = false;
   // Snapshot the pre-edit document for undo (coalesced) before we mutate it.
   if (!plainComposing.value) recordPlainHistory();
-  const nextCaret = block.start + (caret ?? text.length);
+  let nextCaret = block.start + (caret ?? text.length);
   // Re-attach the block separator that splitPlainMarkdownBlocks stripped from
   // the editable text, so neighbouring blocks don't merge on every edit.
   const tail = block.hasTrailingNewline ? '\n' : '';
-  const next = `${plainText.value.slice(0, block.start)}${text}${tail}${plainText.value.slice(block.end)}`;
+  let next = `${plainText.value.slice(0, block.start)}${text}${tail}${plainText.value.slice(block.end)}`;
+  // Ordered-list numbers follow a line added or removed. When this rewrites
+  // the active block, its text no longer matches the textarea, so the fast
+  // path below is skipped and the caret is restored from `nextCaret`.
+  const renum = !plainComposing.value && props.tab.language === 'markdown'
+    ? renumberAfterEdit(plainText.value, next)
+    : null;
+  if (renum) {
+    next = renum.value;
+    nextCaret = mapPos(nextCaret, renum.changes);
+  }
   plainText.value = next;
   tabs.setContent(props.tab.id, next);
   const nextBlocks = splitPlainMarkdownBlocks(next);
@@ -2894,13 +3053,39 @@ function markdownExt() {
   // `cjkFriendlyEmphasis` keeps live edit in step with the preview on
   // `**限制：**硬链接`-shaped CJK bold (#262); without it the two panes
   // disagree about the same document.
-  return markdown({
-    base: markdownLanguage,
-    codeLanguages,
-    addKeymap: true,
-    extensions: [cjkFriendlyEmphasis],
-  });
+  return [
+    markdown({
+      base: markdownLanguage,
+      codeLanguages,
+      addKeymap: true,
+      extensions: [cjkFriendlyEmphasis],
+    }),
+    listRenumberFilter,
+  ];
 }
+
+/**
+ * Ordered-list numbers follow a line added or removed by the user — the
+ * textarea editors apply the same rule at their commit points
+ * (lib/list-renumber). Appended to the same transaction, so one undo step
+ * takes back the edit and the renumbering together.
+ */
+const listRenumberFilter = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || !(tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move'))) {
+    return tr;
+  }
+  let structural = false;
+  let from = Infinity;
+  let to = -1;
+  tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (inserted.lines > 1 || tr.startState.doc.sliceString(fromA, toA).includes('\n')) structural = true;
+    from = Math.min(from, fromB);
+    to = Math.max(to, toB);
+  });
+  if (!structural) return tr;
+  const changes = renumberChanges(tr.newDoc.toString(), from, to);
+  return changes.length ? [tr, { changes, sequential: true }] : tr;
+});
 
 function spellCheckExt(on: boolean) {
   return EditorView.contentAttributes.of({ spellcheck: on ? 'true' : 'false' });

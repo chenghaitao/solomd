@@ -201,6 +201,20 @@ fn save_language_preference(lang: String) -> Result<(), String> {
     std::fs::write(&path, lang.trim()).map_err(|e| e.to_string())
 }
 
+/// Pages that belong to the app itself: the bundled frontend (served from
+/// `tauri.localhost` on Windows), the dev server, and the internal schemes.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn is_app_url(url: &tauri::Url) -> bool {
+    match url.scheme() {
+        "tauri" | "asset" | "ipc" | "about" | "data" | "blob" => true,
+        "http" | "https" => matches!(
+            url.host_str(),
+            Some("tauri.localhost" | "asset.localhost" | "ipc.localhost" | "localhost" | "127.0.0.1")
+        ),
+        _ => false,
+    }
+}
+
 /// Set to true by `force_close_window` command after the frontend confirms close.
 static FORCE_CLOSE: AtomicBool = AtomicBool::new(false);
 
@@ -247,6 +261,10 @@ struct MenuStrings {
     global_search: &'static str,
     settings_menu: &'static str,
     md_help: &'static str,
+    help_shortcuts: &'static str,
+    help_cli: &'static str,
+    zoom: &'static str,
+    find: &'static str,
     about: &'static str,
     /// Only the Linux menu builds an Exit item (#272), so this is dead on
     /// macOS and Windows — where Quit lives in the app menu / Alt+F4.
@@ -290,6 +308,10 @@ fn strings_for(lang: &str) -> MenuStrings {
             global_search: "在文件夹中搜索…",
             settings_menu: "设置…",
             md_help: "Markdown 速查",
+            help_shortcuts: "快捷键一览",
+            help_cli: "命令行 (CLI)",
+            zoom: "缩放",
+            find: "查找和替换…",
             about: "关于 SoloMD",
             exit: "退出",
         }
@@ -327,6 +349,10 @@ fn strings_for(lang: &str) -> MenuStrings {
             global_search: "Search in Folder…",
             settings_menu: "Settings…",
             md_help: "Markdown Cheatsheet",
+            help_shortcuts: "Keyboard Shortcuts",
+            help_cli: "Command Line (CLI)",
+            zoom: "Zoom",
+            find: "Find and Replace…",
             about: "About SoloMD",
             exit: "Exit",
         }
@@ -389,6 +415,11 @@ fn build_app_menu<R: tauri::Runtime>(
     let exit_item =
         accel!(MenuItemBuilder::with_id("file.exit", s.exit), "file.exit", "Ctrl+Q").build(app)?;
 
+    // Settings are application-wide, not a view option: the macOS app menu
+    // holds them by HIG convention, File does everywhere else.
+    let settings_item = accel!(MenuItemBuilder::with_id("view.settings", s.settings_menu), "view.settings", "CmdOrCtrl+,")
+        .build(app)?;
+
     #[cfg(target_os = "linux")]
     let file_submenu = SubmenuBuilder::new(app, s.file)
         .item(&new_md)
@@ -407,6 +438,8 @@ fn build_app_menu<R: tauri::Runtime>(
         .separator()
         .item(&new_window)
         .item(&close_tab)
+        .separator()
+        .item(&settings_item)
         .separator()
         .item(&exit_item)
         .build()?;
@@ -430,6 +463,10 @@ fn build_app_menu<R: tauri::Runtime>(
         .item(&close_tab)
         .build()?;
 
+    // No accelerator on purpose: a native menu accelerator wins over the
+    // webview, and ⌘F has to reach whichever find is focused (the editor's,
+    // the preview's, the settings search box).
+    let find_item = MenuItemBuilder::with_id("edit.find", s.find).build(app)?;
     let edit_submenu = SubmenuBuilder::new(app, s.edit)
         .undo()
         .redo()
@@ -438,6 +475,8 @@ fn build_app_menu<R: tauri::Runtime>(
         .copy()
         .paste()
         .select_all()
+        .separator()
+        .item(&find_item)
         .build()?;
 
     let toggle_theme = MenuItemBuilder::with_id("view.toggleTheme", s.toggle_theme).build(app)?;
@@ -473,16 +512,9 @@ fn build_app_menu<R: tauri::Runtime>(
         .build(app)?;
     let global_search = accel!(MenuItemBuilder::with_id("search.global", s.global_search), "search.global", "CmdOrCtrl+Shift+F")
         .build(app)?;
-    let settings_item = accel!(MenuItemBuilder::with_id("view.settings", s.settings_menu), "view.settings", "CmdOrCtrl+,")
-        .build(app)?;
 
-    let view_submenu = SubmenuBuilder::new(app, s.view)
-        .item(&toggle_theme)
-        .separator()
-        .item(&toggle_sidebar)
-        .item(&toggle_outline)
-        .item(&cycle_view)
-        .separator()
+    // Nine rows of one pattern took half the View menu.
+    let zoom_submenu = SubmenuBuilder::new(app, s.zoom)
         .item(&ui_zoom_in)
         .item(&ui_zoom_out)
         .item(&ui_zoom_reset)
@@ -494,19 +526,31 @@ fn build_app_menu<R: tauri::Runtime>(
         .item(&preview_zoom_in)
         .item(&preview_zoom_out)
         .item(&preview_zoom_reset)
+        .build()?;
+    let view_submenu = SubmenuBuilder::new(app, s.view)
+        .item(&toggle_theme)
+        .separator()
+        .item(&toggle_sidebar)
+        .item(&toggle_outline)
+        .item(&cycle_view)
+        .separator()
+        .item(&zoom_submenu)
         .separator()
         .item(&palette)
         .item(&global_search)
-        .separator()
-        .item(&settings_item)
         .build()?;
 
     let md_help = accel!(MenuItemBuilder::with_id("help.markdown", s.md_help), "help.markdown", "F1")
         .build(app)?;
     let about = MenuItemBuilder::with_id("help.about", s.about).build(app)?;
 
+    // F1 opens a three-tab panel; one row per tab.
+    let help_shortcuts = MenuItemBuilder::with_id("help.shortcuts", s.help_shortcuts).build(app)?;
+    let help_cli = MenuItemBuilder::with_id("help.cli", s.help_cli).build(app)?;
     let help_submenu = SubmenuBuilder::new(app, s.help)
         .item(&md_help)
+        .item(&help_shortcuts)
+        .item(&help_cli)
         .separator()
         .item(&about)
         .build()?;
@@ -757,6 +801,30 @@ pub fn run_with(initial_file: Option<String>) {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init());
+
+    // The main webview must never navigate away from the app. A followed link
+    // replaced the whole UI with the web page, and since the page that handles
+    // close-requested was gone, Esc, Ctrl+W, Alt+F4 and the close button all
+    // stopped working — only right-click → Back got out. External URLs go to
+    // the system browser instead. Windows only: WebView2 reports main-frame
+    // navigations here, whereas WKWebView / WebKitGTK also report iframes, and
+    // video embeds in notes are iframes. The frontend intercepts link clicks
+    // on every platform; this is the backstop for whatever it misses.
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(
+        tauri::plugin::Builder::<tauri::Wry>::new("nav-guard")
+            .on_navigation(|_webview, url| {
+                if is_app_url(url) {
+                    return true;
+                }
+                if matches!(url.scheme(), "http" | "https" | "mailto" | "tel") {
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = _webview.app_handle().opener().open_url(url.as_str(), None::<&str>);
+                }
+                false
+            })
+            .build(),
+    );
 
     // v4.3.x — issue #56 reopen: the original fix landed in `lib.rs::run`
     // but `main.rs` calls `runner::run_with` instead, so the StateFlags::all()
@@ -1136,4 +1204,30 @@ pub fn run_with(initial_file: Option<String>) {
             _ => {}
         }
     });
+}
+
+#[cfg(test)]
+mod nav_guard_tests {
+    use super::is_app_url;
+
+    fn ok(u: &str) -> bool {
+        is_app_url(&tauri::Url::parse(u).unwrap())
+    }
+
+    #[test]
+    fn app_pages_stay_in_the_webview() {
+        assert!(ok("http://tauri.localhost/index.html"));
+        assert!(ok("https://tauri.localhost/#heading"));
+        assert!(ok("http://localhost:1420/?quickCapture=1"));
+        assert!(ok("tauri://localhost/"));
+        assert!(ok("about:blank"));
+    }
+
+    #[test]
+    fn everything_else_is_refused() {
+        assert!(!ok("https://example.com/"));
+        assert!(!ok("http://tauri.localhost.evil.com/"));
+        assert!(!ok("mailto:a@b.c"));
+        assert!(!ok("file:///C:/Windows/notepad.exe"));
+    }
 }
