@@ -106,3 +106,22 @@ test('#360: list and quote prefixes on an empty first line too', () => {
   assert.equal(run('|\nsecond', 'ul'), '- |\nsecond');
   assert.equal(run('|\nsecond', 'quote'), '> |\nsecond');
 });
+
+test('bold across paragraphs wraps each line on its own (emphasis cannot cross a line break)', () => {
+  assert.equal(
+    run('|段落A\n\n段落B\n\n段落C 最后|一段', 'bold'),
+    '|**段落A**\n\n**段落B**\n\n**段落C 最后**|一段',
+  );
+  // …and the same command takes it off again.
+  assert.equal(run('|**段落A**\n\n**段落B**|', 'bold'), '|段落A\n\n段落B|');
+});
+
+test('multi-line inline formats leave line prefixes outside the markers', () => {
+  assert.equal(run('|- one\n- two\n## Title|', 'bold'), '|- **one**\n- **two**\n## **Title**|');
+  assert.equal(run('|1. a\n2. b|', 'strike'), '|1. ~~a~~\n2. ~~b~~|');
+});
+
+test('mixed lines are completed, not toggled off; italic does not mistake bold', () => {
+  assert.equal(run('|**a**\nb|', 'bold'), '|**a**\n**b**|');
+  assert.equal(run('|**a**\n**b**|', 'italic'), '|***a***\n***b***|');
+});

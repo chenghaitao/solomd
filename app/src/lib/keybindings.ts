@@ -207,7 +207,17 @@ export function eventToCombo(e: KeyboardEvent): KeyCombo | null {
   if (['Control', 'Meta', 'Shift', 'Alt', 'CapsLock'].includes(raw)) return null;
 
   let key: string;
-  if (e.altKey && /^Key[A-Z]$/.test(e.code)) {
+  // Windows, with an input method attached to the focused field (a Chinese
+  // IME — in its English mode too): keys the IME looks at arrive as
+  // key "Process" / keyCode 229. Under a Ctrl/⌘ chord that is never text, so
+  // read the physical key — otherwise every chord typed into the editor is
+  // dead there and works everywhere else.
+  const imeProcessed = (raw === 'Process' || e.keyCode === 229) && (e.ctrlKey || e.metaKey);
+  if (imeProcessed && /^Key[A-Z]$/.test(e.code)) {
+    key = e.code.slice(3);
+  } else if (imeProcessed && /^Digit\d$/.test(e.code)) {
+    key = e.code.slice(5);
+  } else if (e.altKey && /^Key[A-Z]$/.test(e.code)) {
     key = e.code.slice(3).toUpperCase();
   } else if (e.altKey && /^Digit\d$/.test(e.code)) {
     // Same story for the number row: ⌥8 arrives as "•", ⌥7 as "¶".

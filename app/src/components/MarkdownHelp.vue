@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { activeKeyActions, combosFor, filterKeyActions, formatCombo, type KeyActionDef } from '../lib/keybindings';
 import { useI18n } from '../i18n';
 import { isMacOS } from '../lib/platform';
 import { useSettingsStore } from '../stores/settings';
 import { DsModal, DsTabs, DsInput } from '../ui';
 
-const props = defineProps<{ open: boolean }>();
+type Tab = 'syntax' | 'shortcuts' | 'cli';
+// `tab` picks the tab each time the panel opens (Help menu: one row per tab).
+const props = defineProps<{ open: boolean; tab?: Tab }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
 
-type Tab = 'syntax' | 'shortcuts' | 'cli';
-const activeTab = ref<Tab>('syntax');
-const helpTabs = [
-  { value: 'syntax', label: 'Markdown 语法' },
-  { value: 'shortcuts', label: '快捷键' },
-  { value: 'cli', label: 'CLI' },
-];
+const activeTab = ref<Tab>(props.tab ?? 'syntax');
+watch(
+  () => props.open,
+  (open) => {
+    if (open && props.tab) activeTab.value = props.tab;
+  },
+);
 const query = ref('');
 const today = new Date().toISOString().slice(0, 10);
 const cliExampleNew = `solomd new "daily-${today}" "今日待办："`;
@@ -37,6 +39,11 @@ const kbSettings = useSettingsStore();
  * the literal list, because there is no table to read them from.
  */
 const { t } = useI18n();
+const helpTabs = computed(() => [
+  { value: 'syntax', label: 'Markdown 语法' },
+  { value: 'shortcuts', label: t('menubar.helpShortcuts') },
+  { value: 'cli', label: 'CLI' },
+]);
 function actionName(a: KeyActionDef): string {
   const key = `cmd.${a.id}`;
   const translated = t(key);

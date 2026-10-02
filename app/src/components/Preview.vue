@@ -2,7 +2,7 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { initMermaid } from '../lib/mermaid-lazy';
 import { mermaidThemeFor } from '../lib/themes';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openRenderedLink } from '../lib/link-open';
 import { renderMarkdown, extractImageRoot } from '../lib/markdown';
 import { plantumlSvgUrl } from '../lib/plantuml';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
@@ -14,7 +14,6 @@ import { useToastsStore } from '../stores/toasts';
 import { useI18n } from '../i18n';
 import { useSettingsStore } from '../stores/settings';
 import { useTabsStore } from '../stores/tabs';
-import { useFiles } from '../composables/useFiles';
 import PreviewSearch from './PreviewSearch.vue';
 import { attachCodeCopyButtons as attachSharedCodeCopyButtons } from '../lib/code-copy';
 import { writePngToClipboard } from '../lib/image-clipboard';
@@ -45,7 +44,6 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'topline', line: number): void }>();
 const settings = useSettingsStore();
 const tabs = useTabsStore();
-const files = useFiles();
 const { t } = useI18n();
 const host = ref<HTMLDivElement | null>(null);
 const searchOpen = ref(false);
@@ -440,82 +438,13 @@ watch(
 /**
  * Intercept all link clicks inside the preview pane and open them in the
  * system browser instead of navigating the Tauri webview (which would
- * replace the SoloMD UI with the target page).
+ * replace the SoloMD UI with the target page). Shared with the Windows
+ * live-edit blocks — see lib/link-open.
  */
 function handleLinkClick(e: MouseEvent) {
   const anchor = (e.target as HTMLElement).closest('a');
   if (!anchor) return;
-  // Wikilink (F1, v2.0): intercept and dispatch resolution to App.vue.
-  if (anchor.classList.contains('md-wikilink')) {
-    const target = anchor.getAttribute('data-wikilink-target') || '';
-    if (target) {
-      e.preventDefault();
-      e.stopPropagation();
-      window.dispatchEvent(new CustomEvent('solomd:wiki-open', { detail: { target } }));
-    }
-    return;
-  }
-  const href = anchor.getAttribute('href');
-  if (!href) return;
-  // Allow in-page anchor jumps (#heading)
-  if (href.startsWith('#')) return;
-  e.preventDefault();
-  e.stopPropagation();
-  // External URL: open in system browser
-  if (/^(https?|mailto|tel):/i.test(href)) {
-    openUrl(href).catch((err) => {
-      console.warn('[Preview] openUrl failed:', href, err);
-    });
-    return;
-  }
-  // Relative path: resolve against current file's directory. #163-followup —
-  // route through openLinkedFile so a link to a PDF / Office / etc. opens with
-  // the OS default app (when openLinkedFilesExternally is on) instead of being
-  // converted to Markdown; md / text / images still open in-app.
-  if (props.filePath) {
-    const resolved = resolveRelativePath(props.filePath, href);
-    files.openLinkedFile(resolved, { bypassNewWindow: true }).catch((err) => {
-      console.warn('[Preview] openLinkedFile failed:', resolved, err);
-    });
-  }
-}
-
-/**
- * #116 — resolve a relative markdown link against the current file's path.
- * Robust to (a) Windows back-slash separators, (b) percent-encoded hrefs
- * (CJK filenames / spaces are URL-encoded by the renderer), and (c) `../` /
- * `./` traversal. The result is emitted in the base path's separator style so
- * the Rust side opens it on every platform.
- */
-function resolveRelativePath(basePath: string, href: string): string {
-  // Strip any #fragment / ?query the anchor may carry, then decode.
-  let rel = href.replace(/[#?].*$/, '');
-  try {
-    rel = decodeURIComponent(rel);
-  } catch {
-    /* malformed encoding — fall back to the raw href */
-  }
-  const winStyle = basePath.includes('\\') && !basePath.includes('/');
-  const sepCh = winStyle ? '\\' : '/';
-  // #138 — a UNC path (`\\server\share\…`, or WSL's `\\wsl$\Ubuntu\…` /
-  // `\\wsl.localhost\…`) starts with a DOUBLE separator. Splitting on
-  // `[\\/]+` collapses that pair into one match, so a naive join emits a
-  // single leading `\` — an invalid path that Rust's `fs::read` rejects with
-  // os error 3. Detect it and restore the second leading separator.
-  const isUnc = /^[\\/]{2}/.test(basePath);
-  // Directory segments of the current file (drop the file name itself).
-  const segs = basePath.split(/[\\/]+/);
-  segs.pop();
-  for (const part of rel.split(/[\\/]+/)) {
-    if (part === '' || part === '.') continue;
-    if (part === '..') {
-      if (segs.length > 1) segs.pop();
-      continue;
-    }
-    segs.push(part);
-  }
-  const joined = segs.join(sepCh);
-  return isUnc ? sepCh + joined : joined;
+  openRenderedLink(anchor, e, props.filePath);
 }
 
 onMounted(async () => {

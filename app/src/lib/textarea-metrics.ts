@@ -252,3 +252,40 @@ export function firstVisualRowEnd(el: HTMLTextAreaElement, text: string): number
     mirror.remove();
   }
 }
+
+/**
+ * The text offset under viewport point (x, y) inside `el` — what
+ * `caretRangeFromPoint` gives for ordinary text but not for a textarea
+ * (Chromium's `caretPositionFromPoint` answers the end of the value for every
+ * point). A transparent mirror is laid exactly over the textarea's content box
+ * for one hit test. Points outside the text clamp to its start / end.
+ */
+export function offsetAtPoint(el: HTMLTextAreaElement, text: string, x: number, y: number): number {
+  const rect = el.getBoundingClientRect();
+  if (y < rect.top) return 0;
+  if (y > rect.bottom) return text.length;
+  const cs = getComputedStyle(el);
+  const mirror = createMirror(el);
+  const left = rect.left + el.clientLeft + parseFloat(cs.paddingLeft || '0') - el.scrollLeft;
+  const top = rect.top + el.clientTop + parseFloat(cs.paddingTop || '0') - el.scrollTop;
+  Object.assign(mirror.style, {
+    position: 'fixed',
+    left: `${left}px`,
+    top: `${top}px`,
+    visibility: 'visible',
+    opacity: '0',
+    zIndex: '2147483647',
+    pointerEvents: 'auto',
+  });
+  const node = document.createTextNode(text + '​');
+  mirror.appendChild(node);
+  try {
+    const doc = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
+    const r = doc.caretRangeFromPoint?.(x, y) ?? null;
+    if (r && r.startContainer === node) return Math.min(r.startOffset, text.length);
+    // Beside the text (left of a row / past the last row): nearest end.
+    return y > top + mirror.getBoundingClientRect().height / 2 ? text.length : 0;
+  } finally {
+    mirror.remove();
+  }
+}
