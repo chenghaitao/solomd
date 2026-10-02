@@ -126,6 +126,12 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
         <div id="dl-daily"></div>
       </div>
 
+      <!-- Promoter referral codes, from ref_visit / ref_download events. -->
+      <div class="panel">
+        <h2>Referrals (?ref= codes, selected range)</h2>
+        <div id="referrals"></div>
+      </div>
+
       <h2 style="margin-top: 26px;">App usage</h2>
       <div class="grid" id="kpis"></div>
 
@@ -272,6 +278,14 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
             { key: 'os', label: 'OS' },
             { key: 'count', label: 'Events', num: true, bar: true },
           ]);
+          $('referrals').innerHTML = (data.referrals || []).length
+            ? table(data.referrals, [
+                { key: 'ref', label: 'Code' },
+                { key: 'visits', label: 'Visits', num: true, bar: true },
+                { key: 'downloads', label: 'Downloads', num: true },
+                { key: 'devices', label: 'Browsers', num: true },
+              ])
+            : '<div class="empty">No referral visits in this range.</div>';
           $('locales').innerHTML = table(data.locales, [
             { key: 'locale', label: 'Locale' },
             { key: 'count', label: 'Events', num: true, bar: true },

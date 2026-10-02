@@ -1,9 +1,10 @@
 {
-  "note": "Nicknames only, added with the sponsor's consent. The website, the README (scripts/update-sponsors-readme.py) and the app's About dialog all read this file.",
+  "note": "Supporters, added with their consent. The website (homepage, /thanks, /promote), the README (scripts/update-sponsors-readme.py, incl. the All Contributors table) and the app's About dialog all read this file. sponsors: name, since (YYYY-MM), optional github (username, for the README avatar) and url. promoters: name, since, platform, url (the piece itself), optional ref (their ?ref= code), github, featured + quote (shown on the homepage).",
   "sponsors": [
     {
       "name": "tyysoft(太阳雨)",
       "since": "2026-09"
     }
-  ]
+  ],
+  "promoters": []
 }

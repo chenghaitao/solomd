@@ -21,6 +21,7 @@ onMounted(async () => {
 // app release. Silent on failure (offline, blocked): the section just stays
 // hidden. Fetched once per session, only when the dialog is first opened.
 const sponsors = ref<string[]>([]);
+const promoters = ref<string[]>([]);
 let sponsorsLoaded = false;
 async function loadSponsors() {
   if (sponsorsLoaded) return;
@@ -29,10 +30,14 @@ async function loadSponsors() {
     const res = await fetch('https://solomd.app/sponsors.json', { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return;
     const data = await res.json();
-    sponsors.value = (data?.sponsors ?? [])
-      .map((s: { name?: unknown }) => (typeof s?.name === 'string' ? s.name.trim() : ''))
-      .filter((n: string) => n.length > 0 && n.length <= 40)
-      .slice(0, 200);
+    const names = (list: unknown) =>
+      (Array.isArray(list) ? list : [])
+        .map((s: { name?: unknown }) => (typeof s?.name === 'string' ? s.name.trim() : ''))
+        .filter((n: string) => n.length > 0 && n.length <= 40)
+        .slice(0, 200);
+    sponsors.value = names(data?.sponsors);
+    // People who wrote about SoloMD or recommended it (solomd.app/promote).
+    promoters.value = names(data?.promoters);
   } catch {
     /* offline or blocked — nothing to show */
   }
@@ -47,6 +52,7 @@ const links = {
   // github.com often doesn't resolve. Same policy as the update toast (#154).
   releases: 'https://solomd.app/whats-new',
   sponsor: 'https://solomd.app/#sponsor',
+  promote: 'https://solomd.app/promote',
 };
 
 // NOTE: this function intentionally is NOT named `open` because that
@@ -124,6 +130,13 @@ async function visit(url: string) {
         <div class="about__sponsors-title">Thanks to our sponsors / 感谢赞助者</div>
         <div class="about__sponsors-names">{{ sponsors.join(' · ') }}</div>
       </div>
+      <div v-if="promoters.length" class="about__sponsors">
+        <div class="about__sponsors-title">Thanks to our promoters / 感谢推广者</div>
+        <div class="about__sponsors-names">{{ promoters.join(' · ') }}</div>
+      </div>
+      <button class="about__promote" @click="visit(links.promote)">
+        📣 Help spread the word / 帮忙推广 SoloMD →
+      </button>
 
       <div class="about__footer">
         © 2026 xiangdong li · MIT License<br />
@@ -238,5 +251,18 @@ async function visit(url: string) {
   font-size: 10px;
   color: var(--text-faint);
   line-height: 1.7;
+}
+
+.about__promote {
+  margin: 4px auto 14px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.about__promote:hover {
+  text-decoration: underline;
 }
 </style>
