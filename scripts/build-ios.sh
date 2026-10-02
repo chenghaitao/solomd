@@ -36,6 +36,10 @@
 #                               profile file — used as
 #                               PROVISIONING_PROFILE_SPECIFIER)
 # Optional env:
+#   IOS_BUNDLE_VERSION         CFBundleVersion override, for an extra TestFlight
+#                              build of a version already uploaded (e.g. 4.14.61
+#                              under 4.14.6 — higher than the existing build, at
+#                              most three integers). Default: the app version.
 #   IOS_LAUNCHCTL_PROXY        URL like http://127.0.0.1:7897 — if set,
 #                              we register it at launchctl so Xcode
 #                              subprocess can reach GitHub
@@ -163,7 +167,12 @@ echo "==> Building iOS .ipa (release / arm64)"
 # VITE_APP_STORE_BUILD gates the Vue UI (import.meta.env in app-build.ts).
 export SOLOMD_APP_STORE_BUILD=1
 export VITE_APP_STORE_BUILD=true
-( cd app && pnpm tauri ios build )
+if [ -n "${IOS_BUNDLE_VERSION:-}" ]; then
+  echo "==> CFBundleVersion: $IOS_BUNDLE_VERSION"
+  ( cd app && pnpm tauri ios build --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$IOS_BUNDLE_VERSION\"}}}" )
+else
+  ( cd app && pnpm tauri ios build )
+fi
 
 IPA=app/src-tauri/gen/apple/build/arm64/SoloMD.ipa
 [ -f "$IPA" ] || { echo "ERROR: build didn't produce $IPA" >&2; exit 1; }
