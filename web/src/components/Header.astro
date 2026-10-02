@@ -71,8 +71,8 @@ const TOPBAR = {
         <span class="header__sponsor-heart">♥</span>
         <span class="header__sponsor-label">{NAV.sponsor}</span>
       </a>
-      <a href="https://github.com/zhitongblog/solomd" target="_blank" rel="noopener">
-        {tr.nav.github}
+      <a href="https://github.com/zhitongblog/solomd" target="_blank" rel="noopener" data-star-cta="header">
+        {tr.nav.github} <span class="header__stars" data-stars></span>
       </a>
       <div class="header__lang-wrap">
         <button type="button" class="header__lang" aria-haspopup="true" aria-expanded="false">
@@ -88,6 +88,23 @@ const TOPBAR = {
   </div>
 </header>
 
+<script is:inline>
+  // Live GitHub star count for every [data-stars] on the page (header link,
+  // hero button, post-download card). /api/stats is a Pages Function with a
+  // 5-minute edge cache; on failure the build-time text stays.
+  (function () {
+    var els = document.querySelectorAll('[data-stars]');
+    if (!els.length) return;
+    fetch('/api/stats')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s || typeof s.stars !== 'number' || s.stars <= 0) return;
+        var txt = '⭐ ' + (s.stars >= 1000 ? (s.stars / 1000).toFixed(1) + 'k' : s.stars);
+        els.forEach(function (el) { el.textContent = txt; });
+      })
+      .catch(function () {});
+  })();
+</script>
 <script is:inline>
   document.addEventListener('click', (e) => {
     const wrap = document.querySelector('.header__lang-wrap');
@@ -298,5 +315,12 @@ const TOPBAR = {
     .header__nav { gap: 6px; }
     .header__sponsor { padding: 4px 8px; }
     .header__lang { padding-left: 8px; padding-right: 8px; }
+  }
+  .header__stars {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+  }
+  .header__stars:empty {
+    display: none;
   }
 </style>

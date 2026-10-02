@@ -8,6 +8,7 @@ const tr = getT(lang);
 const VERSION = '4.14.5';
 const REPO = 'zhitongblog/solomd';
 const baseUrl = `https://github.com/${REPO}/releases/download/v${VERSION}`;
+const GITHUB_URL = `https://github.com/${REPO}`;
 const langPrefix = lang === 'en' ? '' : `/${lang}`;
 const whatsNewHref = `${langPrefix}/whats-new/`;
 // /agents/ sub-page exists only in en + zh; ja/ko link to en.
@@ -148,11 +149,18 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
       >
         ⬇ {tr.hero.ctaPrimary}
       </a>
+      <!-- Stars are how a free project gets found; the second button asks
+           for one, with the live count (filled by Header's [data-stars]). -->
       <a
-        href="#features"
-        class="btn btn--secondary btn--lg"
+        href={GITHUB_URL}
+        class="btn btn--secondary btn--lg hero__star"
+        target="_blank"
+        rel="noopener"
+        data-star-cta="hero"
       >
-        {tr.hero.ctaSecondary}
+        <svg class="hero__star-gh" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span>{tr.hero.ctaStar}</span>
+        <span class="hero__star-count" data-stars>{initialStars > 0 ? fmtStars(initialStars) : '⭐'}</span>
       </a>
     </div>
     <p class="hero__trust">
@@ -213,6 +221,61 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
     </div>
   </div>
 </section>
+
+<!-- Post-download star prompt: the moment someone has just chosen SoloMD is
+     the one moment asking for a star is reasonable. Shown once; "later"
+     hides it for 30 days, starring hides it for good. -->
+<aside class="star-nudge" id="star-nudge" hidden aria-live="polite">
+  <button class="star-nudge__close" type="button" aria-label={tr.hero.starNudgeLater} data-star-later>×</button>
+  <p class="star-nudge__title">{tr.hero.starNudgeTitle}</p>
+  <p class="star-nudge__body">{tr.hero.starNudgeBody}</p>
+  <div class="star-nudge__actions">
+    <a class="btn btn--primary star-nudge__cta" href={GITHUB_URL} target="_blank" rel="noopener" data-star-go>
+      {tr.hero.starNudgeCta} <span class="star-nudge__count" data-stars></span>
+    </a>
+    <button class="star-nudge__later" type="button" data-star-later>{tr.hero.starNudgeLater}</button>
+  </div>
+</aside>
+
+<script is:inline>
+  (function () {
+    var KEY = 'solomd.starNudge';
+    var LATER_MS = 30 * 24 * 3600 * 1000;
+    var card = document.getElementById('star-nudge');
+    if (!card) return;
+    function read() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+    function write(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+    function suppressed() {
+      var v = read();
+      if (!v) return false;
+      if (v.state === 'starred') return true;
+      return v.state === 'later' && Date.now() - v.at < LATER_MS;
+    }
+    var shown = false;
+    function show() {
+      if (shown || suppressed()) return;
+      shown = true;
+      setTimeout(function () { card.hidden = false; card.classList.add('star-nudge--in'); }, 700);
+    }
+    function hide(state) {
+      write({ state: state, at: Date.now() });
+      card.classList.remove('star-nudge--in');
+      card.hidden = true;
+    }
+    // Any way of getting SoloMD counts: an installer, a store page, the
+    // Gitee mirror, or copying the one-line install command.
+    var DOWNLOAD = /\/releases\/download\/|apps\.apple\.com|play\.google\.com\/store|apps\.microsoft\.com|gitee\.com\/[^/]+\/solomd\/releases/;
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('[data-star-go]')) { hide('starred'); return; }
+      if (t.closest('[data-star-later]')) { hide('later'); return; }
+      if (t.closest('[data-star-cta]')) { write({ state: 'starred', at: Date.now() }); return; }
+      var a = t.closest('a[href]');
+      if ((a && DOWNLOAD.test(a.href)) || t.closest('.hi-copy')) show();
+    }, true);
+  })();
+</script>
 
 <script is:inline>
   // Fetch live stars + downloads from our own /api/stats endpoint.
@@ -672,5 +735,82 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
   }
   @media (max-width: 720px) {
     .hero__demo { margin-top: 32px; aspect-ratio: 1920 / 873; }
+  }
+
+  .hero__star {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hero__star-count {
+    padding-left: 8px;
+    border-left: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+  }
+  .star-nudge {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 60;
+    width: min(360px, calc(100vw - 32px));
+    padding: 18px 18px 16px;
+    border-radius: 14px;
+    background: var(--bg-elev, var(--bg, #fff));
+    color: var(--text);
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .star-nudge--in {
+    opacity: 1;
+    transform: none;
+  }
+  .star-nudge__close {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    border: 0;
+    background: none;
+    color: var(--text-muted, inherit);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .star-nudge__title {
+    margin: 0 0 6px;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .star-nudge__body {
+    margin: 0 0 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-muted, inherit);
+  }
+  .star-nudge__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .star-nudge__cta {
+    display: inline-flex;
+    gap: 6px;
+  }
+  .star-nudge__later {
+    border: 0;
+    background: none;
+    color: var(--text-muted, inherit);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  @media (max-width: 480px) {
+    .star-nudge { right: 16px; bottom: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .star-nudge { transition: none; }
   }
 </style>
