@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const ja: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'フォルダ選択を開けないため、SoloMD 自身のフォルダ（ファイル › このiPhone内 › SoloMD）を使います。',
+    savedAs: '{name} として保存しました',
+    restoreFailed: '前回選んだフォルダを再び開けませんでした。SoloMD 自身のフォルダを表示しています。「フォルダを開く」で選び直せます。',
+  },
   menubar: {
     file: 'ファイル',
     edit: '編集',

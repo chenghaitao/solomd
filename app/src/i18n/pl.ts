@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const pl: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'Wybór folderu jest niedostępny, więc SoloMD używa własnego folderu (Pliki › Na moim iPhonie › SoloMD).',
+    savedAs: 'Zapisano jako {name}',
+    restoreFailed: 'Nie udało się ponownie otworzyć ostatnio wybranego folderu — wyświetlany jest folder SoloMD. Wybierz go ponownie przez Otwórz folder.',
+  },
   menubar: {
     file: 'Plik',
     edit: 'Edycja',

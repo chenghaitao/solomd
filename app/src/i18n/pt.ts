@@ -3,6 +3,11 @@ import type { I18n } from './en';
 // Brazilian Portuguese (pt-BR) — primary market is Brazil's tech scene.
 // European Portuguese readers should still find this readable.
 export const pt: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'O seletor de pastas não está disponível, então o SoloMD usa sua própria pasta (Arquivos › No Meu iPhone › SoloMD).',
+    savedAs: 'Salvo como {name}',
+    restoreFailed: 'Não foi possível reabrir a pasta escolhida da última vez — mostrando a pasta do SoloMD. Use Abrir pasta para escolhê-la de novo.',
+  },
   menubar: {
     file: 'Arquivo',
     edit: 'Editar',

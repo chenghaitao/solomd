@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const es: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'El selector de carpetas no está disponible, así que SoloMD usa su propia carpeta (Archivos › En mi iPhone › SoloMD).',
+    savedAs: 'Guardado como {name}',
+    restoreFailed: 'No se pudo volver a abrir la carpeta elegida la última vez; se muestra la carpeta propia de SoloMD. Usa Abrir carpeta para elegirla de nuevo.',
+  },
   menubar: {
     file: 'Archivo',
     edit: 'Edición',

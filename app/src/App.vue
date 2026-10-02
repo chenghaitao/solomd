@@ -4,6 +4,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { documentDir } from '@tauri-apps/api/path';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
@@ -1051,7 +1052,35 @@ function onWindowBlur() {
   void files.autoSaveDirtyTabs();
 }
 
+/**
+ * iOS: the workspace may be a folder picked with the system picker, whose
+ * access is reopened from a bookmark at launch (src-tauri/src/ios_folder.rs,
+ * done in Rust setup before the tree lists it). Follow the folder if it was
+ * moved; if it can no longer be opened, say so and show the app's own folder
+ * instead of an empty, unreadable tree.
+ */
+async function reconcileIosFolder() {
+  if (!isIOS() || !workspace.currentFolder) return;
+  try {
+    const docs = (await documentDir()).replace(/\/+$/, '');
+    const cur = workspace.currentFolder;
+    if (cur === docs || cur.startsWith(docs + '/')) return; // the app's own folder
+    const reopened = await invoke<string | null>('ios_restore_folder');
+    if (reopened) {
+      if (reopened !== cur) workspace.setFolder(reopened);
+      return;
+    }
+    workspace.setFolder(docs);
+    void import('./stores/toasts').then(({ useToastsStore }) => {
+      useToastsStore().warning(t('iosFolder.restoreFailed'), 8000);
+    });
+  } catch {
+    /* not fatal — the tree reports what it cannot read */
+  }
+}
+
 onMounted(async () => {
+  void reconcileIosFolder();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar
   // and was untappable. Read the real bar heights natively and inject them as

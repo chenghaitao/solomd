@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const ko: I18n = {
+  iosFolder: {
+    pickerUnavailable: '폴더 선택기를 열 수 없어 SoloMD 자체 폴더(파일 › 나의 iPhone › SoloMD)를 사용합니다.',
+    savedAs: '{name}(으)로 저장됨',
+    restoreFailed: '지난번에 선택한 폴더를 다시 열 수 없어 SoloMD 자체 폴더를 표시합니다. \'폴더 열기\'로 다시 선택하세요.',
+  },
   menubar: {
     file: '파일',
     edit: '편집',
