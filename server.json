@@ -3,7 +3,7 @@
   "name": "io.github.zhitongblog/solomd",
   "title": "SoloMD",
   "description": "Read and search a folder of Markdown notes: search, backlinks, tags, tasks, outlines, git history.",
-  "version": "4.14.5",
+  "version": "4.14.6",
   "repository": {
     "url": "https://github.com/zhitongblog/solomd",
     "source": "github",
@@ -13,8 +13,8 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/zhitongblog/solomd/releases/download/v4.14.5/solomd-mcp-4.14.5.mcpb",
-      "fileSha256": "1f3f86288cc1687c3e33898871c911eeb9a83c675674d538e04bcb01c70c8d1c",
+      "identifier": "https://github.com/zhitongblog/solomd/releases/download/v4.14.6/solomd-mcp-4.14.6.mcpb",
+      "fileSha256": "d80eabd5f9cbc0cc591b0087523f918bab3f0e6de875ffcc61089ce581fb936e",
       "transport": {
         "type": "stdio"
       }
