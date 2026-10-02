@@ -100,7 +100,7 @@ async function visit(url: string) {
         <button class="about__link" @click="visit(links.github)">
           <span class="about__link-icon">⭐</span>
           <div>
-            <div class="about__link-title">GitHub</div>
+            <div class="about__link-title">Star on GitHub / 去 GitHub 点 Star</div>
             <div class="about__link-url">zhitongblog/solomd</div>
           </div>
         </button>

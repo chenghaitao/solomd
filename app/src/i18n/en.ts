@@ -1,6 +1,10 @@
 export const en = {
   // Windows unified title bar — in-app File/Edit/View/Help menubar
   // (Toolbar.vue). Strings mirror the native menu (runner.rs strings_for).
+  starPrompt: {
+    message: 'Enjoying SoloMD? A GitHub star helps other people find it — it\'s made by one developer, and free.',
+    action: '★ Star on GitHub',
+  },
   menubar: {
     file: 'File',
     edit: 'Edit',

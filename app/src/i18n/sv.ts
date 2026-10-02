@@ -1,6 +1,10 @@
 import type { I18n } from './en';
 
 export const sv: I18n = {
+  starPrompt: {
+    message: 'Gillar du SoloMD? En stjärna på GitHub hjälper andra att hitta den — den är gratis och gjord av en enda person.',
+    action: '★ Stjärna på GitHub',
+  },
   menubar: {
     file: 'Arkiv',
     edit: 'Redigera',

@@ -1,6 +1,10 @@
 import type { I18n } from './en';
 
 export const tr: I18n = {
+  starPrompt: {
+    message: 'SoloMD\'yi beğendin mi? GitHub\'daki bir yıldız başkalarının da bulmasına yardım eder — ücretsiz ve tek bir kişi tarafından geliştiriliyor.',
+    action: '★ GitHub\'da yıldız ver',
+  },
   menubar: {
     file: 'Dosya',
     edit: 'Düzen',

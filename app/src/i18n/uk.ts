@@ -1,6 +1,10 @@
 import type { I18n } from './en';
 
 export const uk: I18n = {
+  starPrompt: {
+    message: 'Подобається SoloMD? Зірка на GitHub допомагає іншим його знайти — він безкоштовний, і його робить одна людина.',
+    action: '★ Зірка на GitHub',
+  },
   menubar: {
     file: 'Файл',
     edit: 'Редагування',

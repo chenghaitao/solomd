@@ -2,6 +2,10 @@ import type { I18n } from './en';
 
 export const zh: I18n = {
   // Windows 统一标题栏 — 应用内 文件/编辑/视图/帮助 菜单栏(Toolbar.vue)。
+  starPrompt: {
+    message: '觉得 SoloMD 好用？去 GitHub 点个 Star 吧——它由一个人开发、免费开源，Star 能让更多人发现它。',
+    action: '★ 去点 Star',
+  },
   menubar: {
     file: '文件',
     edit: '编辑',

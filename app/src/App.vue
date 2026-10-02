@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
+import { recordDay, shouldPrompt, type StarPromptState } from './lib/star-prompt';
 import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
@@ -1043,7 +1044,47 @@ function onWindowBlur() {
   void files.autoSaveDirtyTabs();
 }
 
+/**
+ * Ask for a GitHub star once, after SoloMD has been opened on several
+ * different days (lib/star-prompt) — never on day one, never twice, and not
+ * in the first minute of a session, when the user came to write.
+ */
+const STAR_PROMPT_KEY = 'solomd.starPrompt';
+function scheduleStarPrompt() {
+  const today = new Date().toISOString().slice(0, 10);
+  let state: StarPromptState | null = null;
+  try {
+    state = JSON.parse(localStorage.getItem(STAR_PROMPT_KEY) || 'null');
+  } catch {
+    state = null;
+  }
+  const next = recordDay(state, today);
+  try {
+    localStorage.setItem(STAR_PROMPT_KEY, JSON.stringify(next));
+  } catch {
+    return; // no storage: we could never remember having asked
+  }
+  if (!shouldPrompt(next, today)) return;
+  setTimeout(() => {
+    try {
+      localStorage.setItem(STAR_PROMPT_KEY, JSON.stringify({ ...next, shown: true }));
+    } catch {
+      return;
+    }
+    void import('./stores/toasts').then(({ useToastsStore }) => {
+      useToastsStore().push(
+        t('starPrompt.message'),
+        'info',
+        20000,
+        () => void openUrl('https://github.com/zhitongblog/solomd').catch(() => {}),
+        { actionLabel: t('starPrompt.action') },
+      );
+    });
+  }, 60_000);
+}
+
 onMounted(async () => {
+  scheduleStarPrompt();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar
   // and was untappable. Read the real bar heights natively and inject them as

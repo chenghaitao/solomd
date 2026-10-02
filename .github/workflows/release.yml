@@ -122,6 +122,9 @@ jobs:
           releaseBody: |
             ## SoloMD ${{ github.ref_name }}
 
+            > ⭐ **Like SoloMD? [Star it on GitHub](https://github.com/zhitongblog/solomd)** — it's free, made by one developer, and stars are how other people find it.
+            > 觉得好用？请[去 GitHub 点个 Star](https://github.com/zhitongblog/solomd) —— 免费开源、一个人维护，Star 能让更多人发现它。
+
             ### What's new / 更新内容
 
             https://solomd.app/whats-new · [中文](https://solomd.app/zh/whats-new)

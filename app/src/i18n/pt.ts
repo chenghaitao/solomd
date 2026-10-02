@@ -3,6 +3,10 @@ import type { I18n } from './en';
 // Brazilian Portuguese (pt-BR) — primary market is Brazil's tech scene.
 // European Portuguese readers should still find this readable.
 export const pt: I18n = {
+  starPrompt: {
+    message: 'Está gostando do SoloMD? Uma estrela no GitHub ajuda outras pessoas a encontrá-lo — é gratuito e feito por uma única pessoa.',
+    action: '★ Estrela no GitHub',
+  },
   menubar: {
     file: 'Arquivo',
     edit: 'Editar',
