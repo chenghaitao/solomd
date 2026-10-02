@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const nl: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'De mapkiezer is niet beschikbaar, dus SoloMD gebruikt zijn eigen map (Bestanden › Op mijn iPhone › SoloMD).',
+    savedAs: 'Opgeslagen als {name}',
+    restoreFailed: 'De vorige keer gekozen map kon niet opnieuw worden geopend — SoloMD\'s eigen map wordt getoond. Kies hem opnieuw met Map openen.',
+  },
   starPrompt: {
     message: 'Bevalt SoloMD? Een ster op GitHub helpt anderen het te vinden — het is gratis en gemaakt door één persoon.',
     action: '★ Ster op GitHub',

@@ -661,15 +661,24 @@ export function useFiles() {
       return;
     }
     if (isIOS()) {
+      // The system folder picker (src-tauri/src/ios_folder.rs): any folder —
+      // iCloud Drive, another app's folder, or "On My iPhone › SoloMD" — with
+      // its security scope opened and remembered across launches. Cancelling
+      // changes nothing; only if the picker cannot be shown at all do we fall
+      // back to the app's own folder, as before.
       try {
-        const dir = await documentDir();
-        workspace.setFolder(dir);
+        const picked = await invoke<string | null>('ios_pick_folder');
+        if (!picked) return;
+        workspace.setFolder(picked);
         if (!settings.showFileTree) settings.toggleFileTree();
-        toasts.info(
-          `Workspace pinned to the SoloMD folder. Drop .md files there via the Files app and they'll show up here.`,
-        );
-      } catch (e) {
-        toasts.error(String(e));
+      } catch {
+        try {
+          workspace.setFolder(await documentDir());
+          if (!settings.showFileTree) settings.toggleFileTree();
+          toasts.info(t('iosFolder.pickerUnavailable'));
+        } catch (e) {
+          toasts.error(String(e));
+        }
       }
       return;
     }
@@ -693,8 +702,37 @@ export function useFiles() {
       deriveNameFromHeading(tab) ||
       tab.fileName ||
       (tab.language === 'markdown' ? 'Untitled.md' : 'Untitled.txt');
-    const dir = await documentDir();
-    return await join(dir, fname);
+    // Into the folder the user is working in (a picked folder, or the app's
+    // own); never over a file that is already there.
+    const dir = workspace.currentFolder || (await documentDir());
+    let taken = new Set<string>();
+    try {
+      const entries = await invoke<Array<{ name: string }>>('list_dir', { path: dir, showHidden: true });
+      taken = new Set(entries.map((e) => e.name));
+    } catch {
+      /* unreadable — fall through with the plain name */
+    }
+    const dot = fname.lastIndexOf('.');
+    const stem = dot > 0 ? fname.slice(0, dot) : fname;
+    const ext = dot > 0 ? fname.slice(dot) : '';
+    let name = fname;
+    for (let i = 2; taken.has(name) && i < 1000; i++) name = `${stem} ${i}${ext}`;
+    return await join(dir, name);
+  }
+
+  /** iOS: a path we can write in place — inside the app's own Documents or
+   *  inside the folder picked as the workspace (its scope is open). A path
+   *  from an "Open With" hand-off is neither, and keeps the copy-to-Documents
+   *  route. */
+  async function iosWritableInPlace(path: string | null | undefined): Promise<boolean> {
+    if (!path) return false;
+    const roots = [workspace.currentFolder];
+    try {
+      roots.push(await documentDir());
+    } catch {
+      /* no Documents — only the workspace counts */
+    }
+    return roots.some((r) => !!r && path.startsWith(r.replace(/\/+$/, '') + '/'));
   }
 
 
@@ -726,14 +764,20 @@ export function useFiles() {
     // this event, so `tab.content` below is current.
     window.dispatchEvent(new Event('solomd:flush-content-sync'));
     let path = tab.filePath;
+    let iosCopy = false;
     if (isIOS()) {
-      // On iOS, never trust the existing path — it may have come from a
-      // deep-link "Open With" and not be writable from Rust fs. Always
-      // route to Documents.
-      path = await iosResolvePath(tab);
+      // A file inside the workspace (or the app's Documents) saves where it
+      // is. Anything else — no path yet, or a deep-link "Open With" path Rust
+      // cannot write — goes into the workspace as a new file. (This used to
+      // send every save to the Documents root, even files in a subfolder.)
+      if (!(await iosWritableInPlace(path))) {
+        path = await iosResolvePath(tab);
+        iosCopy = true;
+      }
     } else if (!path) {
       return saveTabAs(tab);
     }
+    if (!path) return saveTabAs(tab);
     try {
       // Restore the file's original line endings on write — we
       // normalize CRLF→LF on open so CodeMirror behaves, but the user
@@ -771,9 +815,9 @@ export function useFiles() {
         );
       }
       if (!opts.silent) {
-        if (isIOS()) {
+        if (isIOS() && iosCopy) {
           const fname = path.split(/[\\/]/).pop() ?? path;
-          toasts.success(`Saved to On My iPhone › SoloMD › ${fname}`);
+          toasts.success(t('iosFolder.savedAs', { name: fname }));
         } else {
           toasts.success(`Saved ${tab.fileName}`);
         }

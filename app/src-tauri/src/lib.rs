@@ -1,6 +1,7 @@
 pub mod app_build;
 // App Store builds ask for a rating with Apple's own sheet (iOS starts here).
 pub mod store_review;
+pub mod ios_folder;
 pub mod commands;
 // Image-bed (图床) upload: PicGo / shell command / sm.ms / S3-compatible / GitHub.
 pub mod image_upload;
@@ -147,6 +148,12 @@ pub fn run() {
             {
                 dev_bridge::spawn(app.handle().clone());
             }
+            // iOS: reopen the security scope of the folder picked last time
+            // before the UI lists it — without it the first read fails.
+            #[cfg(target_os = "ios")]
+            {
+                let _ = ios_folder::ios_restore_folder(app.handle().clone());
+            }
             // Show the window only after first paint to suppress the
             // position-jump flicker on Windows (issue #60). The window
             // is born hidden (tauri.conf.json: "visible": false) and
@@ -177,6 +184,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_build::app_build_info,
             store_review::request_store_review,
+            ios_folder::ios_pick_folder,
+            ios_folder::ios_restore_folder,
             commands::read_file,
             commands::read_binary_file,
             commands::fetch_image_bytes,

@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const de: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'Die Ordnerauswahl ist nicht verfügbar, daher nutzt SoloMD seinen eigenen Ordner (Dateien › Auf meinem iPhone › SoloMD).',
+    savedAs: 'Gespeichert als {name}',
+    restoreFailed: 'Der zuletzt gewählte Ordner konnte nicht wieder geöffnet werden – angezeigt wird SoloMDs eigener Ordner. Mit „Ordner öffnen“ kannst du ihn erneut wählen.',
+  },
   starPrompt: {
     message: 'Gefällt dir SoloMD? Ein GitHub-Stern hilft anderen, es zu finden — es ist kostenlos und von einer einzelnen Person gemacht.',
     action: '★ Stern auf GitHub',

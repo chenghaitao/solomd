@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const tr: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'Klasör seçici kullanılamıyor; SoloMD kendi klasörünü kullanıyor (Dosyalar › iPhone’umda › SoloMD).',
+    savedAs: '{name} olarak kaydedildi',
+    restoreFailed: 'Son seçtiğin klasör yeniden açılamadı — SoloMD\'nin kendi klasörü gösteriliyor. Klasör Aç ile tekrar seçebilirsin.',
+  },
   starPrompt: {
     message: 'SoloMD\'yi beğendin mi? GitHub\'daki bir yıldız başkalarının da bulmasına yardım eder — ücretsiz ve tek bir kişi tarafından geliştiriliyor.',
     action: '★ GitHub\'da yıldız ver',

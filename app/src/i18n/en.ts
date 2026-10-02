@@ -1,6 +1,11 @@
 export const en = {
   // Windows unified title bar — in-app File/Edit/View/Help menubar
   // (Toolbar.vue). Strings mirror the native menu (runner.rs strings_for).
+  iosFolder: {
+    pickerUnavailable: 'The folder picker isn\'t available, so SoloMD uses its own folder (Files app › On My iPhone › SoloMD).',
+    savedAs: 'Saved as {name}',
+    restoreFailed: 'Couldn\'t reopen the folder you picked last time — showing SoloMD\'s own folder. Use Open Folder to choose it again.',
+  },
   starPrompt: {
     message: 'Enjoying SoloMD? A GitHub star helps other people find it — it\'s made by one developer, and free.',
     action: '★ Star on GitHub',

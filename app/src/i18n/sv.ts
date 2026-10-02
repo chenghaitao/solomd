@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const sv: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'Mappväljaren är inte tillgänglig, så SoloMD använder sin egen mapp (Filer › På min iPhone › SoloMD).',
+    savedAs: 'Sparad som {name}',
+    restoreFailed: 'Det gick inte att öppna mappen du valde senast igen — SoloMD:s egen mapp visas. Välj den igen med Öppna mapp.',
+  },
   starPrompt: {
     message: 'Gillar du SoloMD? En stjärna på GitHub hjälper andra att hitta den — den är gratis och gjord av en enda person.',
     action: '★ Stjärna på GitHub',

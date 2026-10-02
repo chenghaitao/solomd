@@ -2,6 +2,11 @@ import type { I18n } from './en';
 
 export const zh: I18n = {
   // Windows 统一标题栏 — 应用内 文件/编辑/视图/帮助 菜单栏(Toolbar.vue)。
+  iosFolder: {
+    pickerUnavailable: '无法打开文件夹选择器，已改用 SoloMD 自己的文件夹（「文件」App › 我的 iPhone › SoloMD）。',
+    savedAs: '已另存为 {name}',
+    restoreFailed: '无法重新打开上次选择的文件夹，已显示 SoloMD 自己的文件夹。可以用「打开文件夹」重新选择。',
+  },
   starPrompt: {
     message: '觉得 SoloMD 好用？去 GitHub 点个 Star 吧——它由一个人开发、免费开源，Star 能让更多人发现它。',
     action: '★ 去点 Star',

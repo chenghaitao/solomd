@@ -1,6 +1,11 @@
 import type { I18n } from './en';
 
 export const ru: I18n = {
+  iosFolder: {
+    pickerUnavailable: 'Выбор папки недоступен, поэтому SoloMD использует свою папку (Файлы › На iPhone › SoloMD).',
+    savedAs: 'Сохранено как {name}',
+    restoreFailed: 'Не удалось снова открыть папку, выбранную в прошлый раз, — показана папка SoloMD. Выберите её заново через «Открыть папку».',
+  },
   starPrompt: {
     message: 'Нравится SoloMD? Звезда на GitHub помогает другим его найти — он бесплатный, и его делает один человек.',
     action: '★ Звезда на GitHub',
