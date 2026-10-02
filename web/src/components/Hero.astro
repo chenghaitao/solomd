@@ -167,8 +167,8 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
     </div>
     <p class="hero__trust">
       {(lang === 'zh'
-        ? ['开源 · MIT', '已签名 · 已公证', '无需账号', '零遥测', '永久免费']
-        : ['Open source · MIT', 'Signed & notarized', 'No account', 'Zero telemetry', 'Free forever']
+        ? ['开源 · MIT', '已签名 · 已公证', '无需账号', '无广告', '永久免费']
+        : ['Open source · MIT', 'Signed & notarized', 'No account', 'No ads', 'Free forever']
       ).map((t, i) => (
         <span class="hero__trust-item">{i > 0 && <span class="hero__trust-dot">·</span>}{t}</span>
       ))}
