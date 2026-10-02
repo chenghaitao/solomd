@@ -1025,6 +1025,7 @@ pub fn run_with(initial_file: Option<String>) {
             app_build::app_build_info,
             ios_folder::ios_pick_folder,
             ios_folder::ios_restore_folder,
+            ios_folder::ios_scoped_files,
             recipe_runner::recipes_list,
             recipe_runner::recipes_get,
             recipe_runner::recipes_save,

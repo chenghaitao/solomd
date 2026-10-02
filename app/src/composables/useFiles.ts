@@ -732,7 +732,17 @@ export function useFiles() {
     } catch {
       /* no Documents — only the workspace counts */
     }
-    return roots.some((r) => !!r && path.startsWith(r.replace(/\/+$/, '') + '/'));
+    if (roots.some((r) => !!r && path.startsWith(r.replace(/\/+$/, '') + '/'))) return true;
+    // A document opened in place from the Files app: its security scope is
+    // open for this session, so save back to the original. iOS may report
+    // the same file with or without the /private prefix.
+    try {
+      const bare = (p: string) => p.replace(/^\/private(?=\/)/, '');
+      const scoped = await invoke<string[]>('ios_scoped_files');
+      return scoped.some((p) => bare(p) === bare(path));
+    } catch {
+      return false;
+    }
   }
 
 

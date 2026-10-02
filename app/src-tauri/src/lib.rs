@@ -147,10 +147,14 @@ pub fn run() {
                 dev_bridge::spawn(app.handle().clone());
             }
             // iOS: reopen the security scope of the folder picked last time
-            // before the UI lists it — without it the first read fails.
+            // before the UI lists it — without it the first read fails. And
+            // catch documents opened in place from the Files app before tao
+            // drops their security scope (setup runs inside
+            // didFinishLaunching, ahead of a cold launch's open-URL call).
             #[cfg(target_os = "ios")]
             {
                 let _ = ios_folder::ios_restore_folder(app.handle().clone());
+                ios_folder::hook_open_url();
             }
             // Show the window only after first paint to suppress the
             // position-jump flicker on Windows (issue #60). The window
@@ -183,6 +187,7 @@ pub fn run() {
             app_build::app_build_info,
             ios_folder::ios_pick_folder,
             ios_folder::ios_restore_folder,
+            ios_folder::ios_scoped_files,
             commands::read_file,
             commands::read_binary_file,
             commands::fetch_image_bytes,
