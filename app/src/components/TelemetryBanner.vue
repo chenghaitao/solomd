@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useSettingsStore } from '../stores/settings';
 import { useI18n } from '../i18n';
+import { IS_APP_STORE_BUILD } from '../lib/app-build';
 
 const settings = useSettingsStore();
 const { t } = useI18n();
@@ -15,7 +16,8 @@ function onDisable() {
 </script>
 
 <template>
-  <div v-if="!settings.telemetryNoticeAck" class="telemetry-banner">
+  <!-- App Store builds send no usage data, so there is nothing to announce. -->
+  <div v-if="!IS_APP_STORE_BUILD && !settings.telemetryNoticeAck" class="telemetry-banner">
     <div class="telemetry-banner__text">{{ t('settings.telemetryNotice') }}</div>
     <div class="telemetry-banner__actions">
       <button class="telemetry-banner__btn" @click="onDisable">

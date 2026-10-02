@@ -2177,7 +2177,9 @@ function onSelectPdfFont(v: string) {
           </div>
         </section>
 
-        <section data-cat="advanced">
+        <!-- App Store builds send no usage data at all (lib/telemetry.ts), so
+             there is no switch to show. -->
+        <section v-if="!IS_APP_STORE_BUILD" data-cat="advanced">
           <label>
             <input type="checkbox" :checked="settings.telemetryEnabled" @change="settings.toggleTelemetry()" />
             {{ t('settings.telemetry') }}

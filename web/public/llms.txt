@@ -19,7 +19,7 @@ Full documentation in one file (deep context): https://solomd.app/llms-full.txt
 - **Installer size:** ~15 MB (vs Typora 70 MB, Obsidian 110 MB)
 - **Memory at idle:** ~80–150 MB
 - **Tech stack:** Tauri 2 (Rust backend), Vue 3 + CodeMirror 6 (frontend), markdown-it (renderer); on Windows the live editor uses native `<textarea>` blocks instead of CodeMirror to avoid WebView2's contentEditable IME bugs
-- **Telemetry:** anonymous usage counts (features used, version, OS — no file content, no IP), on by default, one switch in Settings turns it off
+- **Telemetry:** anonymous usage counts (features used, version, OS — no file content, no IP), on by default in website / Play / Microsoft Store builds with a switch in Settings to turn it off; the App Store builds (iOS, iPadOS, Mac App Store) send none
 - **Pricing:** $0. No paid tier, no subscription, no in-app purchase, no ads.
 - **Internationalization:** 14 UI languages (en, zh, ja, ko, de, fr, es, pt, it, pl, nl, tr, sv, uk)
 
