@@ -1045,8 +1045,8 @@ function onWindowBlur() {
 }
 
 /**
- * Ask for a GitHub star once, after SoloMD has been opened on several
- * different days (lib/star-prompt) — never on day one, never twice, and not
+ * Ask for a GitHub star (an App Store rating in App Store builds) once,
+ * after SoloMD has been opened on several different days (lib/star-prompt) — never on day one, never twice, and not
  * in the first minute of a session, when the user came to write.
  */
 const STAR_PROMPT_KEY = 'solomd.starPrompt';
@@ -1069,6 +1069,13 @@ function scheduleStarPrompt() {
     try {
       localStorage.setItem(STAR_PROMPT_KEY, JSON.stringify({ ...next, shown: true }));
     } catch {
+      return;
+    }
+    // App Store builds ask for an App Store rating instead, with Apple's own
+    // sheet and no custom question in front of it (src-tauri/src/store_review.rs).
+    // Ratings are what that channel's ranking and conversion run on.
+    if (IS_APP_STORE_BUILD) {
+      void invoke('request_store_review').catch(() => {});
       return;
     }
     void import('./stores/toasts').then(({ useToastsStore }) => {

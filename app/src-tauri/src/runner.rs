@@ -135,6 +135,9 @@ mod rag;
 // so the About panel's build details fell back silently on desktop.
 #[path = "app_build.rs"]
 mod app_build;
+// App Store builds ask for a rating with Apple's own sheet.
+#[path = "store_review.rs"]
+mod store_review;
 // #295 — Windows portable mode (`data` folder next to the exe).
 #[path = "portable.rs"]
 mod portable;
@@ -1021,6 +1024,7 @@ pub fn run_with(initial_file: Option<String>) {
             rag::rag_reindex_file,
             // about-dialog build info (was lib.rs-only too).
             app_build::app_build_info,
+            store_review::request_store_review,
             recipe_runner::recipes_list,
             recipe_runner::recipes_get,
             recipe_runner::recipes_save,

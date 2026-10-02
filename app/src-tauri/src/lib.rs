@@ -1,4 +1,6 @@
 pub mod app_build;
+// App Store builds ask for a rating with Apple's own sheet (iOS starts here).
+pub mod store_review;
 pub mod commands;
 // Image-bed (图床) upload: PicGo / shell command / sm.ms / S3-compatible / GitHub.
 pub mod image_upload;
@@ -174,6 +176,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_build::app_build_info,
+            store_review::request_store_review,
             commands::read_file,
             commands::read_binary_file,
             commands::fetch_image_bytes,

@@ -188,6 +188,11 @@ core-foundation-sys = "0.8"
 objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSArray", "NSString", "NSUserDefaults", "NSURL", "NSGeometry"] }
 
+# App Store rating sheet (src/store_review.rs) on iOS; macOS uses the
+# objc2 already listed above.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.5"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = [
   "Win32_UI_Shell",
