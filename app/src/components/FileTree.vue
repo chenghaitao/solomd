@@ -705,11 +705,72 @@ const EditRowAtRoot = () => renderEditRow(0);
 function openCtx(e: MouseEvent, node: Node | null) {
   e.preventDefault();
   e.stopPropagation();
+  openCtxAt(e.clientX, e.clientY, node);
+}
+function openCtxAt(x: number, y: number, node: Node | null) {
   // Right-clicking a row selects it (the usual desktop convention), so the
   // menu's actions and "new file" agree about what "here" means. Empty-area
   // clicks keep whatever was selected.
   if (node) selected.value = { path: node.path, isDir: !!node.is_dir };
-  ctx.value = { x: e.clientX, y: e.clientY, node };
+  ctx.value = { x, y, node };
+  // Keep it on screen: on a phone a press near the right or bottom edge
+  // put half the menu (often Delete) out of reach.
+  void nextTick(() => {
+    const el = ctxEl.value;
+    if (!el || !ctx.value) return;
+    const r = el.getBoundingClientRect();
+    const nx = Math.max(8, Math.min(ctx.value.x, window.innerWidth - r.width - 8));
+    const ny = Math.max(8, Math.min(ctx.value.y, window.innerHeight - r.height - 8));
+    if (nx !== ctx.value.x || ny !== ctx.value.y) ctx.value = { ...ctx.value, x: nx, y: ny };
+  });
+}
+const ctxEl = ref<HTMLElement | null>(null);
+
+// Touch screens. iOS's web view never turns a long-press into a
+// `contextmenu` event (Android's does), so on an iPhone or iPad the menu with
+// Rename / Move to… / Delete could not be opened at all — the App Store
+// review "can create files but not delete or move them". A long-press now
+// opens it on every touch device, and each row also shows a "⋯" button
+// (CSS, coarse pointers only) so the menu can be found without knowing.
+const LONG_PRESS_MS = 500;
+let longPress: { timer: number; x: number; y: number } | null = null;
+let ctxOpenedAt = 0;
+function startLongPress(e: PointerEvent, node: Node) {
+  cancelLongPress();
+  const x = e.clientX;
+  const y = e.clientY;
+  longPress = {
+    x,
+    y,
+    timer: window.setTimeout(() => {
+      longPress = null;
+      detachLongPress();
+      // The finger lifting off ends in a click: it must neither open the
+      // file under it nor close the menu it just opened.
+      suppressClick.value = true;
+      ctxOpenedAt = Date.now();
+      openCtxAt(x, y, node);
+    }, LONG_PRESS_MS),
+  };
+  window.addEventListener('pointermove', onLongPressMove);
+  window.addEventListener('pointerup', cancelLongPress);
+  window.addEventListener('pointercancel', cancelLongPress);
+  window.addEventListener('scroll', cancelLongPress, true);
+}
+function onLongPressMove(e: PointerEvent) {
+  // A finger that travels is scrolling the list, not pressing a row.
+  if (longPress && Math.hypot(e.clientX - longPress.x, e.clientY - longPress.y) > 10) cancelLongPress();
+}
+function detachLongPress() {
+  window.removeEventListener('pointermove', onLongPressMove);
+  window.removeEventListener('pointerup', cancelLongPress);
+  window.removeEventListener('pointercancel', cancelLongPress);
+  window.removeEventListener('scroll', cancelLongPress, true);
+}
+function cancelLongPress() {
+  if (longPress) window.clearTimeout(longPress.timer);
+  longPress = null;
+  detachLongPress();
 }
 function closeCtx() {
   ctx.value = null;
@@ -1188,6 +1249,10 @@ function onNodePress(e: PointerEvent, node: Node) {
   // rows' common ancestor — the <ul> — so no row handler ever consumes the
   // flag, and without this it would swallow the user's *next* click instead.
   suppressClick.value = false;
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+    startLongPress(e, node);
+    return;
+  }
   if (e.button !== 0 || e.pointerType !== 'mouse' || !canMove.value) return;
   pointerStart = { x: e.clientX, y: e.clientY, node };
   window.addEventListener('pointermove', onDragMove);
@@ -1663,6 +1728,8 @@ function onWindowClick() {
   sortOpen.value = false;
   if (switcherOpen.value) closeSwitcher();
   if (!ctx.value) return;
+  // The click that ends the long-press which opened the menu.
+  if (Date.now() - ctxOpenedAt < 700) return;
   closeCtx();
 }
 function onWindowKey(e: KeyboardEvent) {
@@ -1679,6 +1746,7 @@ onMounted(() => {
   window.addEventListener('keydown', onWindowKey);
 });
 onBeforeUnmount(() => {
+  cancelLongPress();
   window.removeEventListener('click', onWindowClick);
   window.removeEventListener('keydown', onWindowKey);
   // A tree unmounted mid-drag (workspace switch, sidebar hidden) must not
@@ -1939,6 +2007,7 @@ onBeforeUnmount(() => {
          whether the click landed on a file, a folder, or empty area. -->
     <div
       v-if="ctx"
+      ref="ctxEl"
       class="ftree__ctx"
       :style="{ left: ctx.x + 'px', top: ctx.y + 'px' }"
       @click.stop
@@ -1951,7 +2020,9 @@ onBeforeUnmount(() => {
           📁 {{ t('explorer.newFolder') || 'New Folder' }}
         </button>
       </template>
-      <div v-if="ctx.node" class="ftree__ctx-sep"></div>
+      <!-- Only between the "new file / folder" section (folders) and the rest:
+           on a file the menu would otherwise open with an empty divider. -->
+      <div v-if="ctx.node && ctx.node.is_dir" class="ftree__ctx-sep"></div>
       <button
         v-if="ctx.node"
         class="ftree__ctx-item ftree__ctx-item--kbd"
@@ -2272,6 +2343,19 @@ export const FileTreeNode = defineComponent({
             !n.is_dir && props.inboxPaths.has(n.path)
               ? h('span', { class: 'ftree__inbox-dot', title: 'inbox' }, '●')
               : null,
+            // Touch screens only (CSS): the row's menu, findable without a
+            // long-press or a right-click.
+            h('button', {
+              class: 'ftree__more',
+              type: 'button',
+              'aria-label': 'More',
+              onPointerdown: (ev: PointerEvent) => ev.stopPropagation(),
+              onClick: (ev: MouseEvent) => {
+                ev.stopPropagation();
+                const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                emit('contextmenu', { clientX: r.left, clientY: r.bottom, preventDefault() {}, stopPropagation() {} } as unknown as MouseEvent, n);
+              },
+            }, '⋯'),
           ]
         ),
       ];
@@ -3087,5 +3171,35 @@ html.solomd-tree-drag-invalid * {
 }
 .ftree-ghost--invalid .ftree-ghost__action {
   color: var(--danger);
+}
+
+
+/* Global (not scoped): the rows are rendered by FileTreeNode via h(), and
+   these must also reach them. Touch screens: no long-press callout or text selection on rows (iOS would
+   offer "Copy / Look Up" instead of our menu), and a "⋯" button per row. */
+.ftree__more { display: none; }
+@media (pointer: coarse) {
+  .ftree__item {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .ftree__more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    min-width: 32px;
+    height: 28px;
+    padding: 0 6px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .ftree__more:active { background: var(--bg-hover); }
 }
 </style>
