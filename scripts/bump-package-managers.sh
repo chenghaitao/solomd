@@ -168,12 +168,16 @@ check_scoop() {
   fi
 }
 
+# One channel failing (winget, until its first PR merges) must not skip the
+# channels after it; the exit status still reports that something failed.
+rc=0
 for ch in "${CHANNELS[@]}"; do
   case "$ch" in
-    brew)   bump_brew ;;
-    choco)  bump_choco ;;
-    winget) bump_winget ;;
-    scoop)  check_scoop ;;
+    brew)   bump_brew || rc=1 ;;
+    choco)  bump_choco || rc=1 ;;
+    winget) bump_winget || rc=1 ;;
+    scoop)  check_scoop || rc=1 ;;
     *) echo "unknown channel: $ch" >&2; exit 1 ;;
   esac
 done
+exit $rc
