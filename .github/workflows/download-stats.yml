@@ -1,10 +1,11 @@
 name: Download stats
 
-# Once a day: collect download counts from every channel and store them in
-# solomd.app's D1 (web/migrations/0003_downloads.sql) through
-# POST /api/admin/downloads. The homepage total (/api/stats) and the /admin
-# dashboard read from there. See scripts/collect-downloads.py for what each
-# channel counts.
+# Collect download counts from every channel and store them in solomd.app's D1
+# (web/migrations/0003_downloads.sql) through POST /api/admin/downloads. The
+# homepage total (/api/stats) and the /admin dashboard read from there. See
+# scripts/collect-downloads.py for what each channel counts.
+#
+# Upstream runs this on a nightly cron; this fork does not (see `on:` below).
 #
 # Secrets:
 #   SOLOMD_INGEST_TOKEN   must equal the INGEST_TOKEN secret of the Cloudflare
@@ -15,10 +16,13 @@ name: Download stats
 # A channel whose secrets are missing is skipped, not recorded as zero.
 
 on:
-  schedule:
-    # 03:17 UTC — after Apple's daily analytics files land, off the hour to
-    # dodge GitHub's top-of-the-hour cron congestion.
-    - cron: '17 3 * * *'
+  # Scheduled collection is disabled in this fork. The job posts to upstream's
+  # solomd.app ingest endpoint (POST /api/admin/downloads) and needs
+  # SOLOMD_INGEST_TOKEN to match that Cloudflare Pages project's secret. This
+  # fork has neither, so every nightly run died at "SOLOMD_INGEST_TOKEN is not
+  # set" and painted the Actions tab red. No upstream endpoint, no schedule.
+  # workflow_dispatch is kept so this can be run by hand once a matching
+  # backend and secrets exist here.
   workflow_dispatch:
 
 permissions:
