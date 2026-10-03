@@ -91,8 +91,25 @@ set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 where pnpm >nul 2>&1
 if errorlevel 1 (
   echo [1/5] pnpm not found, enabling it through corepack - needs Node 16.13 or newer ...
-  corepack enable >nul 2>&1
-  corepack prepare pnpm@10 --activate >nul 2>&1
+  REM corepack is a .cmd shim, and a .cmd invoked WITHOUT `call` never returns
+  REM to its caller: cmd hands control over and the build dies silently on that
+  REM line - the message above is the last thing printed and nothing after it
+  REM ever runs. So every corepack/npm/pnpm shim below is invoked with `call`.
+  REM On top of that, a bare `corepack enable` writes the pnpm shim next to
+  REM corepack.exe, i.e. into C:\Program Files\nodejs, which a non-elevated
+  REM console cannot write to (EPERM) - so even a returning call leaves `pnpm`
+  REM missing. Hence the retry into a per-user shim directory, prepended to
+  REM PATH: the shims are thin wrappers around corepack, so they work anywhere.
+  call corepack enable pnpm >nul 2>&1
+  where pnpm >nul 2>&1
+  if errorlevel 1 (
+    set "SHIMDIR=%LOCALAPPDATA%\corepack-shims"
+    if not exist "!SHIMDIR!" mkdir "!SHIMDIR!"
+    call corepack enable pnpm --install-directory "!SHIMDIR!" >nul 2>&1
+    if exist "!SHIMDIR!\pnpm.cmd" set "PATH=!SHIMDIR!;!PATH!"
+  )
+  REM pnpm's major is pinned to the one the release workflow uses.
+  call corepack prepare pnpm@10 --activate >nul 2>&1
 )
 where pnpm >nul 2>&1
 if errorlevel 1 (
@@ -104,6 +121,7 @@ if errorlevel 1 (
   echo [ERROR] pnpm is still unavailable, install it manually: npm i -g pnpm
   exit /b 1
 )
+for /f "delims=" %%V in ('pnpm -v 2^>nul') do echo [1/5] pnpm %%V
 
 REM Host Rust target triple -> arch label (x64 / arm64)
 for /f "tokens=1,* delims=: " %%A in ('rustc -vV ^| findstr /C:"host:"') do set "HOSTTRIPLE=%%B"
@@ -126,7 +144,12 @@ if errorlevel 1 (
 REM -- 3/5 install the frontend dependencies -----------------------------
 echo [3/5] pnpm install - app ...
 cd /D "%~dp0app"
-call pnpm install
+REM   A node_modules tree left behind by a different pnpm major makes pnpm
+REM   purge it first, and that purge asks for confirmation on stdin - which a
+REM   script cannot answer, so the install aborts with
+REM   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY. Answer it up front; the purge
+REM   then just happens and the tree is rebuilt from the lockfile.
+call pnpm install --config.confirmModulesPurge=false
 if errorlevel 1 (
   echo [ERROR] pnpm install failed
   exit /b 1
