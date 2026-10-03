@@ -1,6 +1,7 @@
 import { createApp, defineAsyncComponent } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
+import { reanchorIosContainerPaths } from './lib/ios-container';
 import './styles/cjk-font.css';
 import './styles/main.css';
 import './styles/hljs-theme.css';
@@ -24,4 +25,10 @@ const rootComponent = isSlideshow
     : App;
 const app = createApp(rootComponent);
 app.use(createPinia());
-app.mount('#app');
+
+// iOS: point stored paths at the current app container before any store reads
+// them (lib/ios-container). Bounded, so a slow path API never blocks launch.
+void Promise.race([
+  reanchorIosContainerPaths().catch(() => {}),
+  new Promise((r) => setTimeout(r, 1500)),
+]).then(() => app.mount('#app'));
