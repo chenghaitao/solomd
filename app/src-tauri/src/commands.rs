@@ -1314,10 +1314,7 @@ pub fn entry_times(meta: &fs::Metadata) -> (Option<u64>, Option<u64>) {
 /// "instant" and "10 seconds with the antivirus also doing on-access
 /// scanning". Reported by user 2026-04-26 as "Win 下打开一个文件比较多
 /// 的目录还是有些卡顿".
-pub fn list_dir_inner(path: String, show_hidden: bool) -> Result<Vec<DirEntry>, String> {
-    list_dir_with(path, show_hidden, false)
-}
-
+///
 /// `with_times` stats every entry for its modified/created time. It is off
 /// for the normal listing (see above for why metadata() is avoided) and on
 /// only when the tree is sorted by date (#342).

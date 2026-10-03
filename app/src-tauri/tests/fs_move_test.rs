@@ -216,19 +216,19 @@ fn refuses_a_collision_a_missing_source_and_a_folder_into_itself() {
 
 #[test]
 fn hidden_entries_are_listed_only_when_asked_for() {
-    use app_lib::commands::list_dir_inner;
+    use app_lib::commands::list_dir_with;
     let root = tmp("hidden");
     fs::create_dir_all(root.join(".config")).unwrap();
     fs::write(root.join(".gitignore"), b"x").unwrap();
     fs::write(root.join("visible.md"), b"x").unwrap();
 
-    let plain = list_dir_inner(root.to_string_lossy().to_string(), false).unwrap();
+    let plain = list_dir_with(root.to_string_lossy().to_string(), false, false).unwrap();
     assert_eq!(
         plain.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(),
         vec!["visible.md"]
     );
 
-    let all = list_dir_inner(root.to_string_lossy().to_string(), true).unwrap();
+    let all = list_dir_with(root.to_string_lossy().to_string(), true, false).unwrap();
     let names: Vec<&str> = all.iter().map(|e| e.name.as_str()).collect();
     // Dirs still sort ahead of files.
     assert_eq!(names, vec![".config", ".gitignore", "visible.md"]);

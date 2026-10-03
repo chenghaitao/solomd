@@ -216,3 +216,11 @@ gio = "0.18"
 
 [dev-dependencies]
 tempfile = "3"
+
+# Import libraries: link.exe announces every .lib/.exp it writes on stdout
+# ("正在创建库 X 和对象 Y"), and rustc 1.9x reports linker stdout through the
+# `linker_messages` lint - so every build ends with a few lines of MSVC chatter
+# that say nothing about our code. Silence that one lint only; the real ones
+# (dead_code, unused, ...) stay on.
+[lints.rust]
+linker_messages = "allow"
