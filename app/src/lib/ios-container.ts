@@ -13,7 +13,7 @@
  * are left alone.
  */
 import { documentDir } from '@tauri-apps/api/path';
-import { isIOS } from './platform';
+import { isIOS } from './platform.ts';
 
 const CONTAINER = /\/Data\/Application\/([0-9A-Fa-f-]{36})(?=\/|$)/g;
 
