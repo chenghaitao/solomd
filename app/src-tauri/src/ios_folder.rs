@@ -302,6 +302,18 @@ mod imp {
         OPENED.lock().map(|l| l.clone()).unwrap_or_default()
     }
 
+    /// Path of the folder whose scope is open right now, if any.
+    pub fn active_path() -> Option<String> {
+        let url = ACTIVE_URL.load(Ordering::SeqCst) as *mut AnyObject;
+        if url.is_null() {
+            return None;
+        }
+        objc2::rc::autoreleasepool(|_| unsafe {
+            let path: *mut AnyObject = msg_send![url, path];
+            rust_string(path)
+        })
+    }
+
     /// Resolve a stored bookmark and reopen its scope: the folder's (possibly
     /// moved) path, plus a fresh bookmark when the old one went stale.
     pub fn restore(bookmark: &[u8]) -> Option<(String, Option<Vec<u8>>)> {
@@ -371,6 +383,11 @@ pub async fn ios_pick_folder(app: AppHandle) -> Result<Option<String>, String> {
 pub fn ios_restore_folder(app: AppHandle) -> Result<Option<String>, String> {
     #[cfg(target_os = "ios")]
     {
+        // Launch already reopened it (setup); resolving the bookmark again and
+        // swapping URLs would stop the first scope for nothing.
+        if let Some(path) = imp::active_path() {
+            return Ok(Some(path));
+        }
         let file = bookmark_path(&app)?;
         let Ok(bytes) = std::fs::read(&file) else {
             return Ok(None);

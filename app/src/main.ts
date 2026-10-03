@@ -3,6 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import { isLang, loadLocale } from './i18n';
 import { useSettingsStore } from './stores/settings';
+import { reanchorIosContainerPaths } from './lib/ios-container';
 import './styles/cjk-font.css';
 import './styles/main.css';
 import './styles/hljs-theme.css';
@@ -33,6 +34,15 @@ app.use(pinia);
 // one in use before the first paint so a translated UI never flashes English;
 // `t()` falls back to English for the few ms until the chunk lands.
 const settings = useSettingsStore(pinia);
-void loadLocale(isLang(settings.language) ? settings.language : 'en').finally(() => {
+
+// iOS: point stored paths at the current app container before any store reads
+// them (lib/ios-container). Bounded, so a slow path API never blocks launch.
+void Promise.all([
+  Promise.race([
+    reanchorIosContainerPaths().catch(() => {}),
+    new Promise((r) => setTimeout(r, 1500)),
+  ]),
+  loadLocale(isLang(settings.language) ? settings.language : 'en').catch(() => {}),
+]).finally(() => {
   app.mount('#app');
 });

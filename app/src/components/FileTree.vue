@@ -196,6 +196,9 @@ const TRUNCATED_SENTINEL = '__solomd_truncated__';
  *  drive). Distinct from "empty": an empty tree under the folder's own name is
  *  indistinguishable from data loss, which is how it read before. */
 const rootMissing = ref(false);
+/** Why the root could not be listed — shown under the path so a report says
+ *  "permission denied" vs "no such file" without a debugger. */
+const rootError = ref('');
 
 /**
  * #325 — attachment folders are the app's, not the user's: pasted images land
@@ -345,6 +348,7 @@ async function loadDir(path: string): Promise<{ children: Node[]; truncated: boo
     // Only the root's disappearance is worth a special state; a subfolder that
     // vanished mid-expand just lists as empty.
     if (path === workspace.currentFolder) {
+      rootError.value = String(e);
       try {
         rootMissing.value = !(await invoke<boolean>('fs_dir_exists', { path }));
       } catch {
@@ -1912,6 +1916,7 @@ onBeforeUnmount(() => {
       <div v-if="rootMissing" class="ftree__missing">
         <p class="ftree__missing-title">{{ t('explorer.folderMissing') }}</p>
         <p class="ftree__missing-path">{{ root.path }}</p>
+        <p v-if="rootError" class="ftree__missing-path">{{ rootError }}</p>
         <div class="ftree__missing-actions">
           <button class="ftree__open-btn" @click="files.openFolder">
             {{ t('explorer.folderMissingLocate') }}
