@@ -77,3 +77,6 @@ dist/
 # Python bytecode from the release scripts
 __pycache__/
 *.pyc
+
+# WorkBuddy / agent tooling data (local only — never commit)
+.workbuddy/
