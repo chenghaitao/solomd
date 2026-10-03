@@ -15,6 +15,76 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.9] — 2026-10-03
+
+一条线：**同步上游 25 个提交**（上游 4.14.4 之后，横跨 4.14.5 / 4.14.6 / 4.14.7 三个版本窗口），
+**只取纯产品代码的功能与修复**——市场推广 / 赞助 / 商店与 MCP 分发内容一律不引入；本地改动全部保留。
+
+### 上游同步
+
+上游 `b799439..3dbcbb0` 共 25 个提交、167 个文件有改动。落地方式是 **`-s ours` 记录合并 + 只 cherry-pick
+纯产品修复**：先把上游合并记进来但不带任何内容，再逐个挑选修复——营销 / 赞助 / 分发内容**从未进入工作树**。
+
+**纳入（8 项，纯产品修复）**
+
+| 上游提交 | 内容 |
+|---|---|
+| `ff3a650` | 导出：macOS 文字版 PDF 不再依赖打印机；Word / PDF 保留图片、图表与公式 |
+| `0a2e2ca` | 编辑器：Windows 实时编辑的链接与跨段选择、列表自动重编号、菜单项、编辑器内 `Ctrl+,` |
+| `561d1dd` | iOS：文件树支持删除 / 移动 / 重命名 |
+| `1063e76` | iOS：工作目录可切换到 Files 里任意文件夹 |
+| `7d37b8c` | iOS：在 Files 里显示 SoloMD 的文件夹，并就地编辑其中的文档 |
+| `4228553` | iOS：升级后旧容器路径自动重定位（"文件夹不在原位置"） |
+| `5982f72` | 脚本：komac 失败时 winget 不再误报 "PR opened" |
+| `51abb49` | 脚本：某个包管理器渠道失败不再中断其余渠道 |
+
+**排除：市场推广 / 赞助（6 项）**
+
+| 上游提交 | 内容 | 理由 |
+|---|---|---|
+| `2a93f9a` | promoter 计划（"像赞助者一样署名"） | 推广 + 赞助 |
+| `d1cb547` | App / About / Release / README 求 GitHub star | 推广 |
+| `44c1162` | 官网 Hero 求 star 按钮 + 实时计数 | 推广 |
+| `07767dd` | 把"零遥测"文案改成"opt-out 匿名统计" | 推广文案 + 遥测 |
+| `06a39c3` | App Store 构建弹 Apple 评分框 | 推广 / 评价引导 |
+| `1efb96d` | App Store 构建发送使用数据 | 遥测 |
+
+**排除：商店 / MCP 分发（11 项）**
+
+| 上游提交 | 内容 |
+|---|---|
+| `f39360a` `a871eff` `6d9e179` | 官网版本号 / whats-new / llms.txt 站点更新（4.14.5 / 4.14.6 / 4.14.7） |
+| `a8acc83` | 官网 Microsoft Store 版本 pin |
+| `b5c45b7` `b239fda` `6d85478` | 版本号 4.14.5 / 4.14.6 / 4.14.7（随商店发版说明） |
+| `adf636f` `3dbcbb0` | MCP manifest / Registry 注册（4.14.6 / 4.14.7） |
+| `2ce1fa2` `10b22b2` | TestFlight 构建的 `IOS_APP_VERSION` / `IOS_BUNDLE_VERSION` 覆盖 |
+
+### 合并取舍（本地特性怎么保下来的）
+
+- **遥测保持删除**：上游 `1efb96d` 会改本地早已删除的 `lib/telemetry.ts`、`TelemetryBanner.vue`；
+  该提交整体不引入，`git grep` 确认这些文件仍不存在。
+- **i18n**：`1063e76` 的 15 个语言文件里，incoming 侧同时含**保留的 `iosFolder`** 与被排除的 **`starPrompt`**，
+  逐文件只保留 `iosFolder`、丢弃 `starPrompt`。
+- **Rust**：`1063e76` 的 `lib.rs` / `runner.rs` 冲突里同样混入被排除的 `store_review`，
+  只保留 `ios_folder`（`store_review.rs` 不落地）。
+- **`main.ts`**：保留 fork 的按需语言包挂载，叠加上游的 iOS 路径重定位（iOS 侧限时 1.5s，语言包完整后再挂载）。
+- **`Cargo.toml`**：`objc2-foundation` 增加 `NSURL` / `NSGeometry` 特性——这是保留的 `ios_folder.rs` 所需，
+  虽然该特性原属被排除的 iOS 提交，这里按依赖需要保留。
+- **MCP manifest**：`3fcd132`（winget 修复）附带把 `manifest.json` 版本抬到 4.14.5；因 MCP 分发属排除项，
+  已回退到已注册的 4.14.4，令 `mcp-server/` 与 `server.json` 保持零改动。
+
+### 验证
+
+- `vue-tsc --noEmit` 通过。
+- `vite build` 通过（3392 个模块，约 14.5s）。
+- 随修复带进来的 4 个单元测试用 fork 的 `node:test` 运行：**40 / 40 通过**。其中上游的
+  `ios-container.test.ts` 原本 `import 'vitest'`（本 fork 未装 vitest），已改写为 `node:test`；
+  并把 `ios-container.ts` 的 `./platform` 补成 `./platform.ts`（仓库本就开启 `allowImportingTsExtensions`，
+  多个 lib 文件已用 `.ts` 扩展名），使其可被 `node --test` 解析。
+- 营销 / 赞助 / 分发标记零回流：`store_review`、`starPrompt`、`promote` 页与 `supporters` 均无新增；
+  含这些关键词的文件集合与同步前**完全一致**。
+- 无冲突标记残留。
+
 ## [4.14.8] — 2026-09-30
 
 一条线：**同步上游 14 个提交**（上游 4.14.4 之后的一批），本地功能与改动点全部保留。
