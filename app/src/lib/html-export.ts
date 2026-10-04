@@ -137,6 +137,10 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
     border: 1px solid var(--rule);
     padding: 8px 14px;
     text-align: left;
+    /* #370 — a long unbreakable run breaks inside its cell instead of pushing
+       the table past the page (and off the paper when printed). */
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   /* #271 — short cells stay on one line (see markdown.ts table_short_cells). */
   .cell-nowrap { white-space: nowrap; }
