@@ -2351,6 +2351,33 @@ function mapRenderedPrefixToSource(source: string, renderedPrefix: string): numb
   return si;
 }
 
+/**
+ * mapRenderedPrefixToSource for a whole live-edit block. A fenced code block's
+ * opening fence line (```` ```lang ````) is not rendered at all, so the
+ * rendered text is matched against the code body only — otherwise letters of
+ * the info string (`c` in ```` ```c ````) could pair with the code's first
+ * characters and skew the offset.
+ */
+function mapBlockPrefixToSource(source: string, renderedPrefix: string): number {
+  const fence = /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n/.exec(source);
+  if (!fence) return mapRenderedPrefixToSource(source, renderedPrefix);
+  const bodyStart = fence[0].length;
+  return bodyStart + mapRenderedPrefixToSource(source.slice(bodyStart), renderedPrefix);
+}
+
+/** Visible text from the start of `render` up to (node, offset), or null. */
+function renderedPrefixAtNode(render: HTMLElement, node: Node, offset: number): string | null {
+  if (!render.contains(node)) return null;
+  const pre = document.createRange();
+  pre.selectNodeContents(render);
+  try {
+    pre.setEnd(node, offset);
+  } catch {
+    return null;
+  }
+  return pre.toString();
+}
+
 /** Visible text from the start of `render` up to the click point, or null. */
 function renderedPrefixAtPoint(render: HTMLElement, x: number, y: number): string | null {
   const doc = document as Document & {
@@ -2372,15 +2399,7 @@ function renderedPrefixAtPoint(render: HTMLElement, x: number, y: number): strin
       offset = p.offset;
     }
   }
-  if (!node || !render.contains(node)) return null;
-  const pre = document.createRange();
-  pre.selectNodeContents(render);
-  try {
-    pre.setEnd(node, offset);
-  } catch {
-    return null;
-  }
-  return pre.toString();
+  return node ? renderedPrefixAtNode(render, node, offset) : null;
 }
 
 function estimatePlainBlockCaretFromClick(index: number, event: MouseEvent): number | undefined {
@@ -2394,7 +2413,7 @@ function estimatePlainBlockCaretFromClick(index: number, event: MouseEvent): num
   // instead of snapping to the line start.
   const renderedPrefix = renderedPrefixAtPoint(render, event.clientX, event.clientY);
   if (renderedPrefix != null) {
-    return mapRenderedPrefixToSource(block.text, renderedPrefix);
+    return mapBlockPrefixToSource(block.text, renderedPrefix);
   }
 
   // Fallback: estimate the clicked line from the vertical position and place
@@ -2450,9 +2469,59 @@ function activatePlainBlockFromClick(index: number, event: MouseEvent) {
   // #300 — a drag that selected rendered text ends in a click too. Turning
   // the block into a textarea at that point throws the selection away and
   // moves the page under someone who was only reading (or about to copy).
+  // #374 — except inside a rendered code block, where a multi-line selection
+  // (a triple-click selects the whole block) moves into the editable view.
+  if (enterPlainRangeFromRenderedCode(index)) return;
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
   activatePlainBlock(index, estimatePlainBlockCaretFromClick(index, event), true);
+}
+
+/**
+ * #374 — a multi-line page selection inside a rendered code block of block
+ * `index`, mapped back to the source; null when there is none.
+ *
+ * The Windows live editor kept a drag *inside one block* as a native
+ * selection over the rendered HTML (#300: someone reading or copying must
+ * not have the block turn into a textarea under them). Across blocks the
+ * same kind of selection crashed WebView2 in the Windows text input
+ * framework (textinputframework.dll, 0xc0000005) and took the app down;
+ * 0a2e2cac moved those drags into the merged single-textarea view. A fenced
+ * code block is ONE block, so ten lines selected in its highlighted render
+ * (dozens of hljs spans, line-number wrappers, the copy button) stayed on the
+ * old path — the one left that matches the reported freeze. Code is the render whose
+ * text is the source verbatim, so the range maps back exactly.
+ */
+function plainRenderedCodeSelection(index: number): { anchor: number; head: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !sel.anchorNode || !sel.focusNode) return null;
+  const block = plainBlocks.value[index];
+  const el = plainLiveHost.value?.querySelectorAll<HTMLElement>(':scope > .plain-block')[index];
+  const render = el?.querySelector<HTMLElement>('.plain-block__render');
+  if (!block || !render) return null;
+  const range = sel.getRangeAt(0);
+  if (!render.contains(range.startContainer) || !render.contains(range.endContainer)) return null;
+  const inCode = (n: Node) => !!(n instanceof Element ? n : n.parentElement)?.closest('pre');
+  if (!inCode(range.startContainer) && !inCode(range.endContainer)) return null;
+  // One line is a word or a phrase — leave a reading selection that small
+  // alone, as everywhere else in rendered text.
+  if (!range.toString().includes('\n')) return null;
+  const at = (node: Node, offset: number) => {
+    const prefix = renderedPrefixAtNode(render, node, offset);
+    return prefix == null ? null : block.start + mapBlockPrefixToSource(block.text, prefix);
+  };
+  const anchor = at(sel.anchorNode, sel.anchorOffset);
+  const head = at(sel.focusNode, sel.focusOffset);
+  if (anchor == null || head == null || anchor === head) return null;
+  return { anchor, head };
+}
+
+/** Move a rendered-code selection (see above) into the merged textarea view. */
+function enterPlainRangeFromRenderedCode(index: number): boolean {
+  const range = plainRenderedCodeSelection(index);
+  if (!range) return false;
+  enterPlainRangeSelection(range.anchor, range.head);
+  return true;
 }
 
 /** Flip the `ordinal`-th task checkbox marker in a block's source, in place. */
@@ -2552,7 +2621,7 @@ function plainDocOffsetAtPoint(x: number, y: number): { abs: number; block: numb
   const render = el.querySelector<HTMLElement>('.plain-block__render');
   const prefix = render ? renderedPrefixAtPoint(render, x, y) : null;
   const local = prefix != null
-    ? mapRenderedPrefixToSource(block.text, prefix)
+    ? mapBlockPrefixToSource(block.text, prefix)
     : x < r.left + r.width / 2 ? 0 : block.text.length;
   return { abs: block.start + local, block: index };
 }
@@ -2608,8 +2677,16 @@ function onPlainDragEnd(event: MouseEvent) {
   const end = plainDocOffsetAtPoint(event.clientX, event.clientY);
   if (!end || end.abs === drag.abs) return;
   // Inside one block the native selection is right (and #300 keeps a reading
-  // selection in rendered text as it is).
-  if (end.block === drag.block && drag.gap == null) return;
+  // selection in rendered text as it is) — but not over several lines of a
+  // rendered code block (#374, see plainRenderedCodeSelection).
+  if (end.block === drag.block && drag.gap == null) {
+    const code = drag.block !== plainActiveBlock.value ? plainRenderedCodeSelection(drag.block) : null;
+    if (!code) return;
+    plainSwallowClick = true;
+    setTimeout(() => { plainSwallowClick = false; }, 0);
+    enterPlainRangeSelection(code.anchor, code.head);
+    return;
+  }
   // The click that follows this mouseup must not activate a block and undo it.
   plainSwallowClick = true;
   setTimeout(() => { plainSwallowClick = false; }, 0);
