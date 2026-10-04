@@ -2,6 +2,7 @@ import { createApp, defineAsyncComponent } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { reanchorIosContainerPaths } from './lib/ios-container';
+import { isWindowsDesktop } from './lib/platform';
 import './styles/cjk-font.css';
 import './styles/main.css';
 import './styles/hljs-theme.css';
@@ -26,9 +27,23 @@ const rootComponent = isSlideshow
 const app = createApp(rootComponent);
 app.use(createPinia());
 
+// Windows: the editor engine follows the WebView2 version (platform.ts
+// resolveWindowsEditorEngine), and Editor.vue decides it once at load, so the
+// version must be known before mount.
+async function readWebviewVersion(): Promise<void> {
+  if (!isWindowsDesktop()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  const v = await invoke<string | null>('webview_runtime_version');
+  if (v) (window as unknown as { __SOLOMD_WEBVIEW_VERSION__?: string }).__SOLOMD_WEBVIEW_VERSION__ = v;
+}
+
 // iOS: point stored paths at the current app container before any store reads
-// them (lib/ios-container). Bounded, so a slow path API never blocks launch.
+// them (lib/ios-container). Both are bounded, so a slow API never blocks
+// launch — an unknown WebView2 version just means the native textarea.
 void Promise.race([
-  reanchorIosContainerPaths().catch(() => {}),
+  Promise.all([
+    reanchorIosContainerPaths().catch(() => {}),
+    readWebviewVersion().catch(() => {}),
+  ]),
   new Promise((r) => setTimeout(r, 1500)),
 ]).then(() => app.mount('#app'));

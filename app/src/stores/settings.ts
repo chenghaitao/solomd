@@ -1,6 +1,7 @@
 import { isTreeSortMode, type TreeSortMode } from '../lib/tree-sort';
 import { defineStore } from 'pinia';
 import type { Theme, ViewMode } from '../types';
+import type { WindowsEditorEngine } from '../lib/platform';
 import { isIOS, isMobile } from '../lib/platform';
 
 const LS_KEY = 'solomd.settings.v1';
@@ -94,10 +95,14 @@ interface Settings {
   /** Hint keys already shown — `bold`, `heading`, … Never shown twice. */
   formatHintsSeen: string[];
   vimMode: boolean;
-  /** Windows only: 'native' textarea (IME-safe, default) or 'codemirror'
-   *  (syntax highlighting, non-jumping live edit) — #328, #344. Vim mode
-   *  forces CodeMirror regardless. Ignored on other platforms. */
-  windowsEditorEngine: 'native' | 'codemirror';
+  /** Windows only: 'auto' (default — CodeMirror on WebView2 154+, the
+   *  IME-safe native textarea below that), 'native' or 'codemirror' (#328,
+   *  #344). Vim mode forces CodeMirror regardless. Ignored elsewhere. */
+  windowsEditorEngine: WindowsEditorEngine;
+  /** True once the user picked native/CodeMirror themselves. Before `auto`
+   *  existed every install stored 'native' (the old default), so a stored
+   *  'native' without this flag is not a choice and becomes 'auto'. */
+  windowsEditorEngineExplicit: boolean;
   uiFontSize: number;
   language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru';
   autoCheckUpdate: boolean;
@@ -583,7 +588,8 @@ function defaults(): Settings {
     formatHints: true,
     formatHintsSeen: [],
     vimMode: false,
-    windowsEditorEngine: 'native',
+    windowsEditorEngine: 'auto',
+    windowsEditorEngineExplicit: false,
     uiFontSize: 13,
     autoCheckUpdate: true,
     language: (() => {
@@ -783,7 +789,14 @@ function load(): Settings {
       merged.pdfDefaults = mergePdfDefaults(parsed.pdfDefaults);
       // #180 — keybindings is a free-form map, so a tampered or older blob
       // could put anything here; keep only string/null values.
-      if (merged.windowsEditorEngine !== 'codemirror') merged.windowsEditorEngine = 'native';
+      // 'codemirror' was always a choice; 'native' only counts as one when the
+      // user picked it after 'auto' existed; anything else follows WebView2.
+      if (merged.windowsEditorEngine === 'native' && parsed.windowsEditorEngineExplicit === true) {
+        merged.windowsEditorEngineExplicit = true;
+      } else if (merged.windowsEditorEngine !== 'codemirror') {
+        merged.windowsEditorEngine = 'auto';
+        merged.windowsEditorEngineExplicit = false;
+      }
       merged.explorerSortByFolder = {};
       if (parsed.explorerSortByFolder && typeof parsed.explorerSortByFolder === 'object') {
         for (const [k, v] of Object.entries(parsed.explorerSortByFolder)) {
@@ -1130,8 +1143,10 @@ export const useSettingsStore = defineStore('settings', {
       this.vimMode = !this.vimMode;
       this.persist();
     },
-    setWindowsEditorEngine(engine: 'native' | 'codemirror') {
-      this.windowsEditorEngine = engine === 'codemirror' ? 'codemirror' : 'native';
+    setWindowsEditorEngine(engine: WindowsEditorEngine) {
+      this.windowsEditorEngine =
+        engine === 'codemirror' || engine === 'native' ? engine : 'auto';
+      this.windowsEditorEngineExplicit = this.windowsEditorEngine !== 'auto';
       this.persist();
     },
     toggleAutoCheckUpdate() {

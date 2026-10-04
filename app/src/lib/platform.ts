@@ -95,23 +95,50 @@ export function isWindowsEditorRuntime(): boolean {
   );
 }
 
-/** Which editor Windows uses: the native textarea or CodeMirror (#328, #344). */
-export type WindowsEditorEngine = 'native' | 'codemirror';
+/** Which editor Windows uses: the native textarea, CodeMirror (#328, #344),
+ *  or `auto` — CodeMirror on WebView2 154+, the textarea below that. */
+export type WindowsEditorEngine = 'auto' | 'native' | 'codemirror';
 
 /**
- * Windows falls back to the native textarea for reliable CJK IME input, but
- * Vim is a CodeMirror extension and therefore requires the CodeMirror editor.
- * The user can also pick CodeMirror outright (Settings → Editor engine) for
- * syntax highlighting and the non-jumping live edit, without Vim keys.
- * Keep this decision pure so the Windows hand-off can be regression tested
- * without booting a platform WebView.
+ * First WebView2 major version on which CodeMirror is the default on Windows.
+ * The native textarea exists because CodeMirror dropped or doubled characters
+ * under some IMEs in WebView2; that was a Chromium regression, fixed in 154.
+ * Below it the textarea stays the safe default.
+ */
+export const CODEMIRROR_SAFE_WEBVIEW2_MAJOR = 154;
+
+/** The webview version main.ts read at startup (Windows only), or null. */
+export function currentWebviewVersion(): string | null {
+  if (typeof window === 'undefined') return null;
+  const v = (window as unknown as { __SOLOMD_WEBVIEW_VERSION__?: unknown }).__SOLOMD_WEBVIEW_VERSION__;
+  return typeof v === 'string' && v ? v : null;
+}
+
+/** What `auto` means for this webview: CodeMirror from WebView2 154 on,
+ *  otherwise (older, or the version could not be read) the native textarea. */
+export function resolveWindowsEditorEngine(
+  engine: WindowsEditorEngine,
+  webviewVersion: string | null = currentWebviewVersion(),
+): 'native' | 'codemirror' {
+  if (engine !== 'auto') return engine;
+  const major = Number.parseInt((webviewVersion ?? '').split('.')[0], 10);
+  return Number.isFinite(major) && major >= CODEMIRROR_SAFE_WEBVIEW2_MAJOR ? 'codemirror' : 'native';
+}
+
+/**
+ * Windows may use the native textarea for reliable CJK IME input on older
+ * WebView2, but Vim is a CodeMirror extension and therefore requires the
+ * CodeMirror editor. The user can also pick an engine outright (Settings →
+ * Editor engine). Keep this decision pure so the Windows hand-off can be
+ * regression tested without booting a platform WebView.
  */
 export function shouldUsePlainWindowsEditor(
   windowsRuntime: boolean,
   vimMode: boolean,
-  engine: WindowsEditorEngine = 'native',
+  engine: WindowsEditorEngine = 'auto',
+  webviewVersion: string | null = currentWebviewVersion(),
 ): boolean {
-  return windowsRuntime && !vimMode && engine !== 'codemirror';
+  return windowsRuntime && !vimMode && resolveWindowsEditorEngine(engine, webviewVersion) === 'native';
 }
 
 /**
