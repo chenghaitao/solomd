@@ -340,6 +340,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* #367 — while the split divider is dragged, keep the resize cursor wherever
+   the pointer wanders and don't select text in either pane. */
+body.split-divider--dragging,
+body.split-divider--dragging * {
+  cursor: col-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -408,6 +417,12 @@ button:disabled {
 }
 :root.narrow-viewport .pane--editor {
   border-bottom: 1px solid var(--border);
+  /* #367 — the saved side-by-side ratio is a width; stacked, both halves
+     share the height evenly again (the inline style needs !important). */
+  flex: 1 1 0 !important;
+}
+:root.narrow-viewport .split-divider {
+  display: none;
 }
 
 /* Toolbar: the strip already scrolls horizontally (#134), which is what keeps

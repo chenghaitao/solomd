@@ -359,6 +359,7 @@ export const nl: I18n = {
     distinctSplitPanesHint: 'Geeft het voorbeeld in de gesplitste weergave een iets andere achtergrond, zodat de twee panelen niet als één brede kolom ogen.',
     splitLiveSync: 'Gesplitste weergave synchroon houden',
     splitLiveSyncHint: 'Aan: het voorbeeld werkt bij terwijl je typt en scrolt mee met de editor. Uit: beide panelen scrollen los van elkaar en het voorbeeld ververst pas bij opslaan.',
+    splitDividerLabel: 'Breedte van editor en voorbeeld aanpassen',
     markdownHardBreaks: 'Enkele regeleinden als regelafbreking weergeven',
     markdownHardBreaksHint: 'Zoals Typora: één keer Enter geeft een regelafbreking in het voorbeeld en alle exports. Uit = strikte Markdown (enkele regeleinden smelten samen tot één alinea; lege regel scheidt).',
     smartQuotes: 'Typografische aanhalingstekens',

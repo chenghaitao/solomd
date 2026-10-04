@@ -359,6 +359,7 @@ export const pl: I18n = {
     distinctSplitPanesHint: 'W widoku podzielonym nadaje podglądowi nieco inne tło, żeby oba panele nie wyglądały jak jedna szeroka kolumna.',
     splitLiveSync: 'Synchronizuj widok podzielony',
     splitLiveSyncHint: 'Włączone: podgląd odświeża się podczas pisania i przewija razem z edytorem. Wyłączone: panele przewijają się niezależnie, a podgląd odświeża się dopiero po zapisaniu.',
+    splitDividerLabel: 'Zmień szerokość edytora i podglądu',
     markdownHardBreaks: 'Renderuj pojedyncze nowe linie jako łamanie wiersza',
     markdownHardBreaksHint: 'Jak w Typorze: jedno naciśnięcie Enter tworzy łamanie wiersza w podglądzie i wszystkich eksportach. Wyłączone = ścisły Markdown (pojedyncze nowe linie łączą się w akapit; pusty wiersz rozdziela).',
     smartQuotes: 'Cudzysłowy typograficzne',
