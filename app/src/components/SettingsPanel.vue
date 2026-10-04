@@ -42,7 +42,8 @@ import GithubSyncSettings from './GithubSyncSettings.vue';
 import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
 import ThemeMarketplace from './ThemeMarketplace.vue';
-import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime } from '../lib/platform';
+import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime, resolveWindowsEditorEngine } from '../lib/platform';
+import type { WindowsEditorEngine } from '../lib/platform';
 import { loadCustomTheme } from '../lib/custom-theme';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { DsModal } from '../ui';
@@ -62,6 +63,12 @@ const masBuild = isMasBuild();
  * only produced `Command … not found` errors the moment the user touched them.
  */
 const gitBackend = hasGitBackend();
+// What "Automatic" resolves to on this machine's WebView2 (shown in its label).
+const autoEngineName = computed(() =>
+  resolveWindowsEditorEngine('auto') === 'codemirror'
+    ? t('settings.windowsEditorEngineNameCodeMirror')
+    : t('settings.windowsEditorEngineNameNative'),
+);
 
 const { t } = useI18n();
 // #180 — the chord in this sentence comes from the user's bindings, not from
@@ -2044,8 +2051,9 @@ function onSelectPdfFont(v: string) {
           <select
             :value="settings.vimMode ? 'codemirror' : settings.windowsEditorEngine"
             :disabled="settings.vimMode"
-            @change="settings.setWindowsEditorEngine(($event.target as HTMLSelectElement).value as 'native' | 'codemirror')"
+            @change="settings.setWindowsEditorEngine(($event.target as HTMLSelectElement).value as WindowsEditorEngine)"
           >
+            <option value="auto">{{ t('settings.windowsEditorEngineAuto', { current: autoEngineName }) }}</option>
             <option value="native">{{ t('settings.windowsEditorEngineNative') }}</option>
             <option value="codemirror">{{ t('settings.windowsEditorEngineCodeMirror') }}</option>
           </select>

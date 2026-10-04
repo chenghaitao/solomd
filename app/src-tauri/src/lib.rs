@@ -219,6 +219,7 @@ pub fn run() {
             commands::fs_create_dir,
             commands::fs_delete,
             commands::fs_dir_exists,
+            commands::webview_runtime_version,
             commands::fs_rename,
             commands::fs_move,
             commands::fs_list_dirs,
