@@ -561,6 +561,12 @@ export const zh: I18n = {
     ghImageCdn: '链接方式',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora / Word 风格",
+    keysTyporaBody: "{bold} 加粗,{up} / {down} / {para} 调整标题级别,{word} 选中单词,{live} 切换源码 / 实时编辑——共 {count} 处改动,包括把被 AMD 驱动或微软拼音占用的快捷键全部移开。整体界面缩放保留菜单入口。",
+    keysTyporaApply: "套用 Typora / Word 风格",
+    keysTyporaUndo: "恢复被它改动的默认快捷键",
+    keysTyporaApplied: "已套用 Typora / Word 风格,改动了 {count} 个快捷键。",
+    keysTyporaSkipped: "有 {count} 项保持不变,因为对应的键已被你分配给其他命令。",
   },
   tabMenu: {
     allTabs: '所有打开的标签',
@@ -630,6 +636,7 @@ export const zh: I18n = {
     uploadingProgress: '正在上传 {done}/{total}…',
     uploadedCount: '已上传 {n} 张图片',
     noLocalImages: '没有可上传的本地图片',
+    nothingToReopen: "没有可以恢复的已关闭标签页",
   },
   imageUrlDialog: {
     title: '插入网络图片',
@@ -1819,6 +1826,11 @@ export const zh: I18n = {
     formatChange: "修改快捷键",
   },
   cmd: {
+    heading: {
+      promote: "提升标题级别",
+      demote: "降低标题级别",
+      paragraph: "转为普通段落",
+    },
     fmt: {
       bold: "加粗",
       italic: "斜体",
@@ -1893,6 +1905,12 @@ export const zh: I18n = {
       toggleFocusMode: '视图:切换专注模式',
       toggleTypewriter: '视图:切换打字机模式',
       slideshow: '开始幻灯片演示',
+      zoomUiIn: "整体界面：放大",
+      zoomUiOut: "整体界面：缩小",
+      zoomUiReset: "整体界面：复位",
+      zoomEditorIn: "编辑器：放大字号",
+      zoomEditorOut: "编辑器：缩小字号",
+      zoomEditorReset: "编辑器：复位字号",
     },
     type: {
       create: '类型:新建类型…',
@@ -1930,6 +1948,10 @@ export const zh: I18n = {
       find: '在笔记中查找/替换…',
       insertImage: '插入图片…',
       insertImageUrl: '从 URL 插入图片…',
+      selectWord: "选中单词",
+      deleteWord: "删除单词",
+      selectLine: "选中整行",
+      jumpToSelection: "跳转到选区",
     },
     image: {
       uploadLocalImages: '上传本地图片到图床…',
@@ -2006,6 +2028,7 @@ export const zh: I18n = {
     tab: {
       prev: "上一个标签页",
       next: "下一个标签页",
+      reopenClosed: "恢复关闭的标签页",
     },
     settings: {
       open: "设置",

@@ -560,6 +560,12 @@ export const ko: I18n = {
     ghImageCdn: '링크 방식',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora / Word 스타일",
+    keysTyporaBody: "{bold}로 굵게, {up} / {down} / {para}로 제목 수준 변경, {word}로 단어 선택, {live}로 소스/실시간 편집 전환 — AMD Software나 Microsoft Pinyin이 가로채는 단축키 이동을 포함해 모두 {count}개를 바꿉니다. UI 확대/축소는 메뉴에 남습니다.",
+    keysTyporaApply: "Typora / Word 스타일 적용",
+    keysTyporaUndo: "바꾼 단축키를 기본값으로 되돌리기",
+    keysTyporaApplied: "Typora / Word 스타일을 적용했습니다 — {count}개 변경.",
+    keysTyporaSkipped: "{count}개는 해당 키를 이미 다른 명령에 지정해 두어서 그대로 두었습니다.",
   },
   tabMenu: {
     allTabs: '열린 탭 모두 보기',
@@ -629,6 +635,7 @@ export const ko: I18n = {
     uploadingProgress: '업로드 중 {done}/{total}…',
     uploadedCount: '이미지 {n}개를 업로드했습니다',
     noLocalImages: '업로드할 로컬 이미지가 없습니다',
+    nothingToReopen: "다시 열 수 있는 닫은 탭이 없습니다",
   },
   imageUrlDialog: {
     title: 'URL에서 이미지 삽입',
@@ -1815,6 +1822,11 @@ export const ko: I18n = {
     formatChange: "단축키 변경",
   },
   cmd: {
+    heading: {
+      promote: "제목 수준 올리기",
+      demote: "제목 수준 내리기",
+      paragraph: "일반 단락으로 변환",
+    },
     fmt: {
       bold: "굵게",
       italic: "기울임꼴",
@@ -1889,6 +1901,12 @@ export const ko: I18n = {
       toggleFocusMode: '보기: 집중 모드 토글',
       toggleTypewriter: '보기: 타자기 모드 토글',
       slideshow: '슬라이드쇼 시작',
+      zoomUiIn: "UI: 확대",
+      zoomUiOut: "UI: 축소",
+      zoomUiReset: "UI: 확대/축소 재설정",
+      zoomEditorIn: "편집기: 확대",
+      zoomEditorOut: "편집기: 축소",
+      zoomEditorReset: "편집기: 확대/축소 재설정",
     },
     type: {
       create: '타입: 새 타입…',
@@ -1926,6 +1944,10 @@ export const ko: I18n = {
       find: '노트에서 찾기 / 바꾸기…',
       insertImage: '이미지 삽입…',
       insertImageUrl: 'URL에서 이미지…',
+      selectWord: "단어 선택",
+      deleteWord: "단어 삭제",
+      selectLine: "줄 선택",
+      jumpToSelection: "선택 영역으로 이동",
     },
     image: {
       uploadLocalImages: '로컬 이미지를 이미지 호스트에 업로드…',
@@ -2002,6 +2024,7 @@ export const ko: I18n = {
     tab: {
       prev: "이전 탭",
       next: "다음 탭",
+      reopenClosed: "닫은 탭 다시 열기",
     },
     settings: {
       open: "설정",

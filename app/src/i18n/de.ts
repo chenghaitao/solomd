@@ -560,6 +560,12 @@ export const de: I18n = {
     ghImageCdn: 'Verlinken über',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora-/Word-Stil",
+    keysTyporaBody: "{bold} formatiert fett, {up} / {down} / {para} ändern die Überschriftenebene, {word} wählt ein Wort aus und {live} wechselt zwischen Quelltext und Live-Bearbeitung – insgesamt {count} Kürzel, einschließlich aller, die AMD Software oder Microsoft Pinyin abfangen. Der UI-Zoom bleibt im Menü erhalten.",
+    keysTyporaApply: "Typora-/Word-Stil übernehmen",
+    keysTyporaUndo: "Geänderte Kürzel auf Standard zurücksetzen",
+    keysTyporaApplied: "Typora-/Word-Stil aktiv – {count} Kürzel geändert.",
+    keysTyporaSkipped: "{count} blieben unverändert, weil du diese Tasten bereits anderen Befehlen zugewiesen hast.",
   },
   tabMenu: {
     allTabs: 'Alle geöffneten Tabs',
@@ -629,6 +635,7 @@ export const de: I18n = {
     uploadingProgress: 'Wird hochgeladen {done}/{total}…',
     uploadedCount: '{n} Bild(er) hochgeladen',
     noLocalImages: 'Keine lokalen Bilder zum Hochladen',
+    nothingToReopen: "Kein kürzlich geschlossener Tab zum Wiederöffnen",
   },
   imageUrlDialog: {
     title: 'Bild aus URL einfügen',
@@ -1815,6 +1822,11 @@ export const de: I18n = {
     formatChange: "Tastenkürzel ändern",
   },
   cmd: {
+    heading: {
+      promote: "Überschriftenebene erhöhen",
+      demote: "Überschriftenebene verringern",
+      paragraph: "In Absatz umwandeln",
+    },
     fmt: {
       bold: "Fett",
       italic: "Kursiv",
@@ -1889,6 +1901,12 @@ export const de: I18n = {
       toggleFocusMode: 'Ansicht: Fokusmodus umschalten',
       toggleTypewriter: 'Ansicht: Schreibmaschinenmodus umschalten',
       slideshow: 'Diashow präsentieren',
+      zoomUiIn: "UI: Vergrößern",
+      zoomUiOut: "UI: Verkleinern",
+      zoomUiReset: "UI: Zoom zurücksetzen",
+      zoomEditorIn: "Editor: Vergrößern",
+      zoomEditorOut: "Editor: Verkleinern",
+      zoomEditorReset: "Editor: Zoom zurücksetzen",
     },
     type: {
       create: 'Typen: Neuer Typ…',
@@ -1926,6 +1944,10 @@ export const de: I18n = {
       find: 'In Notiz suchen / ersetzen…',
       insertImage: 'Bild einfügen…',
       insertImageUrl: 'Bild von URL…',
+      selectWord: "Wort auswählen",
+      deleteWord: "Wort löschen",
+      selectLine: "Zeile auswählen",
+      jumpToSelection: "Zur Auswahl springen",
     },
     image: {
       uploadLocalImages: 'Lokale Bilder zum Bildhoster hochladen…',
@@ -2002,6 +2024,7 @@ export const de: I18n = {
     tab: {
       prev: "Vorheriger Tab",
       next: "Nächster Tab",
+      reopenClosed: "Geschlossenen Tab wieder öffnen",
     },
     settings: {
       open: "Einstellungen",

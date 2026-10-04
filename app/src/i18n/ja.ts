@@ -560,6 +560,12 @@ export const ja: I18n = {
     ghImageCdn: 'リンク方法',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora / Word 風",
+    keysTyporaBody: "{bold} で太字、{up} / {down} / {para} で見出しレベルの変更、{word} で単語選択、{live} でソース／ライブ編集の切り替え——AMD Software や Microsoft Pinyin に奪われるキーの移動も含め、計 {count} 件のショートカットを変更します。UI のズームはメニューに残ります。",
+    keysTyporaApply: "Typora / Word 風を適用",
+    keysTyporaUndo: "変更したショートカットを既定に戻す",
+    keysTyporaApplied: "Typora / Word 風を適用しました（{count} 件変更）。",
+    keysTyporaSkipped: "{count} 件は、そのキーを既に別のコマンドに割り当てているため変更しませんでした。",
   },
   tabMenu: {
     allTabs: '開いているすべてのタブ',
@@ -629,6 +635,7 @@ export const ja: I18n = {
     uploadingProgress: 'アップロード中 {done}/{total}…',
     uploadedCount: '{n} 枚の画像をアップロードしました',
     noLocalImages: 'アップロードできるローカル画像がありません',
+    nothingToReopen: "再度開ける閉じたタブはありません",
   },
   imageUrlDialog: {
     title: 'URL から画像を挿入',
@@ -1815,6 +1822,11 @@ export const ja: I18n = {
     formatChange: "ショートカットを変更",
   },
   cmd: {
+    heading: {
+      promote: "見出しレベルを上げる",
+      demote: "見出しレベルを下げる",
+      paragraph: "標準の段落に戻す",
+    },
     fmt: {
       bold: "太字",
       italic: "斜体",
@@ -1889,6 +1901,12 @@ export const ja: I18n = {
       toggleFocusMode: '表示: フォーカスモードを切り替え',
       toggleTypewriter: '表示: タイプライターモードを切り替え',
       slideshow: 'スライドショーを開始',
+      zoomUiIn: "UI: 拡大",
+      zoomUiOut: "UI: 縮小",
+      zoomUiReset: "UI: ズームをリセット",
+      zoomEditorIn: "エディタ: 拡大",
+      zoomEditorOut: "エディタ: 縮小",
+      zoomEditorReset: "エディタ: ズームをリセット",
     },
     type: {
       create: 'タイプ: 新規タイプ…',
@@ -1926,6 +1944,10 @@ export const ja: I18n = {
       find: 'ノート内を検索 / 置換…',
       insertImage: '画像を挿入…',
       insertImageUrl: 'URL から画像…',
+      selectWord: "単語を選択",
+      deleteWord: "単語を削除",
+      selectLine: "行を選択",
+      jumpToSelection: "選択範囲へ移動",
     },
     image: {
       uploadLocalImages: 'ローカル画像を画像ホスティングにアップロード…',
@@ -2002,6 +2024,7 @@ export const ja: I18n = {
     tab: {
       prev: "前のタブ",
       next: "次のタブ",
+      reopenClosed: "閉じたタブを再度開く",
     },
     settings: {
       open: "設定",

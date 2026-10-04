@@ -560,6 +560,12 @@ export const sv: I18n = {
     ghImageCdn: 'Länka via',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora/Word-stil",
+    keysTyporaBody: "{bold} gör fet stil, {up} / {down} / {para} ändrar rubriknivån, {word} markerar ett ord och {live} växlar mellan källkod och liveredigering – totalt {count} kortkommandon, inklusive att flytta dem som AMD Software eller Microsoft Pinyin fångar upp. Zoomning av gränssnittet finns kvar i menyn.",
+    keysTyporaApply: "Använd Typora/Word-stil",
+    keysTyporaUndo: "Återställ de kortkommandon den ändrade",
+    keysTyporaApplied: "Typora/Word-stil är på – {count} kortkommandon ändrade.",
+    keysTyporaSkipped: "{count} lämnades orörda eftersom du redan gett de tangenterna till andra kommandon.",
   },
   tabMenu: {
     allTabs: 'Alla öppna flikar',
@@ -629,6 +635,7 @@ export const sv: I18n = {
     uploadingProgress: 'Laddar upp {done}/{total}…',
     uploadedCount: '{n} bild(er) uppladdade',
     noLocalImages: 'Inga lokala bilder att ladda upp',
+    nothingToReopen: "Ingen nyligen stängd flik att öppna igen",
   },
   imageUrlDialog: {
     title: 'Infoga bild från URL',
@@ -1832,6 +1839,11 @@ export const sv: I18n = {
     formatChange: "Ändra kortkommandon",
   },
   cmd: {
+    heading: {
+      promote: "Höj rubriknivå",
+      demote: "Sänk rubriknivå",
+      paragraph: "Gör om till stycke",
+    },
     fmt: {
       bold: "Fet",
       italic: "Kursiv",
@@ -1906,6 +1918,12 @@ export const sv: I18n = {
       toggleFocusMode: 'Vy: Växla fokusläge',
       toggleTypewriter: 'Vy: Växla skrivmaskinsläge',
       slideshow: 'Presentera bildspel',
+      zoomUiIn: "UI: zooma in",
+      zoomUiOut: "UI: zooma ut",
+      zoomUiReset: "UI: återställ zoom",
+      zoomEditorIn: "Redigerare: zooma in",
+      zoomEditorOut: "Redigerare: zooma ut",
+      zoomEditorReset: "Redigerare: återställ zoom",
     },
     type: {
       create: 'Typer: Ny typ…',
@@ -1943,6 +1961,10 @@ export const sv: I18n = {
       find: 'Sök / ersätt i anteckningen…',
       insertImage: 'Infoga bild…',
       insertImageUrl: 'Bild från URL…',
+      selectWord: "Markera ord",
+      deleteWord: "Ta bort ord",
+      selectLine: "Markera rad",
+      jumpToSelection: "Gå till markeringen",
     },
     image: {
       uploadLocalImages: 'Ladda upp lokala bilder till bildvärd…',
@@ -2019,6 +2041,7 @@ export const sv: I18n = {
     tab: {
       prev: "Föregående flik",
       next: "Nästa flik",
+      reopenClosed: "Öppna stängd flik igen",
     },
     settings: {
       open: "Inställningar",

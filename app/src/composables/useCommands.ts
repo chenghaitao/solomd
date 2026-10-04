@@ -176,6 +176,7 @@ export function useCommands(): Command[] {
       run: () => files.openFolder(),
     },
     { id: 'file.closeTab', title: 'Close Tab', shortcut: kb('file.closeTab'), run: () => tabs.activeId && files.closeTabSafe(tabs.activeId) },
+    { id: 'tab.reopenClosed', title: 'Reopen Closed Tab', shortcut: kb('tab.reopenClosed'), run: () => void files.reopenClosedTab() },
 
     // v4.0.3 — Open active document in system default editor
     {
@@ -226,9 +227,15 @@ export function useCommands(): Command[] {
     { id: 'view.toggleTheme', title: 'View: Toggle Theme', run: () => settings.toggleTheme() },
     { id: 'view.toggleLivePreview', title: 'View: Toggle Live Preview / Raw Source (Markdown)', run: () => settings.toggleLivePreview() },
     { id: 'view.toggleSpellCheck', title: 'View: Toggle Spell Check', run: () => settings.toggleSpellCheck() },
-    { id: 'view.toggleFocusMode', title: 'View: Toggle Focus Mode', run: () => settings.toggleFocusMode() },
+    { id: 'view.toggleFocusMode', title: 'View: Toggle Focus Mode', shortcut: kb('view.toggleFocusMode'), run: () => settings.toggleFocusMode() },
     { id: 'view.toggleToolbar', title: 'View: Show / Hide Toolbar Buttons', shortcut: kb('view.toggleToolbar'), run: () => settings.toggleToolbarHidden() },
-    { id: 'view.toggleTypewriter', title: 'View: Toggle Typewriter Mode', run: () => settings.toggleTypewriterMode() },
+    { id: 'view.toggleTypewriter', title: 'View: Toggle Typewriter Mode', shortcut: kb('view.toggleTypewriter'), run: () => settings.toggleTypewriterMode() },
+    { id: 'view.zoomUiIn', title: 'UI: Zoom In', shortcut: kb('view.zoomUiIn'), run: () => settings.zoomIn() },
+    { id: 'view.zoomUiOut', title: 'UI: Zoom Out', shortcut: kb('view.zoomUiOut'), run: () => settings.zoomOut() },
+    { id: 'view.zoomUiReset', title: 'UI: Reset Zoom', shortcut: kb('view.zoomUiReset'), run: () => settings.resetZoom() },
+    { id: 'view.zoomEditorIn', title: 'Editor: Zoom In', shortcut: kb('view.zoomEditorIn'), run: () => settings.editorFontIn() },
+    { id: 'view.zoomEditorOut', title: 'Editor: Zoom Out', shortcut: kb('view.zoomEditorOut'), run: () => settings.editorFontOut() },
+    { id: 'view.zoomEditorReset', title: 'Editor: Reset Zoom', shortcut: kb('view.zoomEditorReset'), run: () => settings.resetEditorFontSize() },
     // bug/C2 — these four lost their toolbar buttons (reading-mode button,
     // fit-width toggle, the pomodoro chevron, the gear), so the palette has
     // to carry them. Settings / reading mode also have a chord.
@@ -443,6 +450,24 @@ export function useCommands(): Command[] {
       shortcut: kb('editor.caseCycle'),
       run: () => window.dispatchEvent(new CustomEvent('solomd:transform-case', { detail: { mode: 'cycle' } })),
     },
+    // B4 — Typora-style selection and heading commands. Editor.vue applies
+    // them on whichever of its three editors the active pane runs.
+    ...(
+      [
+        ['editor.selectWord', 'Select Word', 'selectWord'],
+        ['editor.deleteWord', 'Delete Word', 'deleteWord'],
+        ['editor.selectLine', 'Select Line', 'selectLine'],
+        ['editor.jumpToSelection', 'Jump to Selection', 'jumpToSelection'],
+        ['heading.promote', 'Increase Heading Level', 'headingPromote'],
+        ['heading.demote', 'Decrease Heading Level', 'headingDemote'],
+        ['heading.paragraph', 'Convert to Paragraph', 'headingParagraph'],
+      ] as const
+    ).map(([id, title, cmd]) => ({
+      id,
+      title,
+      shortcut: kb(id),
+      run: () => window.dispatchEvent(new CustomEvent('solomd:editor-command', { detail: { cmd } })),
+    })),
     {
       id: 'editor.caseUpper',
       title: 'UPPERCASE',

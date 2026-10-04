@@ -560,6 +560,12 @@ export const fr: I18n = {
     ghImageCdn: 'Lien via',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Style Typora / Word",
+    keysTyporaBody: "{bold} met en gras, {up} / {down} / {para} changent le niveau de titre, {word} sélectionne un mot et {live} bascule entre source et édition en direct — {count} raccourcis au total, y compris le déplacement de ceux qu’interceptent AMD Software ou Microsoft Pinyin. Le zoom de l’interface reste dans le menu.",
+    keysTyporaApply: "Appliquer le style Typora / Word",
+    keysTyporaUndo: "Rétablir les raccourcis par défaut modifiés",
+    keysTyporaApplied: "Style Typora / Word activé — {count} raccourcis modifiés.",
+    keysTyporaSkipped: "{count} n’ont pas été modifiés : ces touches sont déjà attribuées à d’autres commandes.",
   },
   tabMenu: {
     allTabs: 'Tous les onglets ouverts',
@@ -629,6 +635,7 @@ export const fr: I18n = {
     uploadingProgress: 'Téléversement {done}/{total}…',
     uploadedCount: '{n} image(s) téléversée(s)',
     noLocalImages: 'Aucune image locale à téléverser',
+    nothingToReopen: "Aucun onglet récemment fermé à rouvrir",
   },
   imageUrlDialog: {
     title: 'Insérer une image depuis une URL',
@@ -1815,6 +1822,11 @@ export const fr: I18n = {
     formatChange: "Modifier les raccourcis",
   },
   cmd: {
+    heading: {
+      promote: "Augmenter le niveau de titre",
+      demote: "Diminuer le niveau de titre",
+      paragraph: "Convertir en paragraphe",
+    },
     fmt: {
       bold: "Gras",
       italic: "Italique",
@@ -1889,6 +1901,12 @@ export const fr: I18n = {
       toggleFocusMode: 'Affichage : Activer/désactiver le mode focus',
       toggleTypewriter: 'Affichage : Activer/désactiver le mode machine à écrire',
       slideshow: 'Présenter le diaporama',
+      zoomUiIn: "UI : zoom avant",
+      zoomUiOut: "UI : zoom arrière",
+      zoomUiReset: "UI : réinitialiser le zoom",
+      zoomEditorIn: "Éditeur : zoom avant",
+      zoomEditorOut: "Éditeur : zoom arrière",
+      zoomEditorReset: "Éditeur : réinitialiser le zoom",
     },
     type: {
       create: 'Types : Nouveau type…',
@@ -1926,6 +1944,10 @@ export const fr: I18n = {
       find: 'Rechercher / remplacer dans la note…',
       insertImage: 'Insérer une image…',
       insertImageUrl: 'Image depuis une URL…',
+      selectWord: "Sélectionner le mot",
+      deleteWord: "Supprimer le mot",
+      selectLine: "Sélectionner la ligne",
+      jumpToSelection: "Aller à la sélection",
     },
     image: {
       uploadLocalImages: 'Téléverser les images locales vers l\'hébergeur d\'images…',
@@ -2002,6 +2024,7 @@ export const fr: I18n = {
     tab: {
       prev: "Onglet précédent",
       next: "Onglet suivant",
+      reopenClosed: "Rouvrir l’onglet fermé",
     },
     settings: {
       open: "Réglages",

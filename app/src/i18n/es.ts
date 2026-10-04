@@ -560,6 +560,12 @@ export const es: I18n = {
     ghImageCdn: 'Enlazar mediante',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Estilo Typora / Word",
+    keysTyporaBody: "{bold} pone negrita, {up} / {down} / {para} cambian el nivel de encabezado, {word} selecciona una palabra y {live} alterna entre código y edición en vivo: {count} atajos en total, incluido mover los que interceptan AMD Software o Microsoft Pinyin. El zoom de la interfaz sigue en el menú.",
+    keysTyporaApply: "Aplicar estilo Typora / Word",
+    keysTyporaUndo: "Restaurar los atajos predeterminados que cambió",
+    keysTyporaApplied: "Estilo Typora / Word activado: {count} atajos cambiados.",
+    keysTyporaSkipped: "{count} no se cambiaron porque ya asignaste esas teclas a otros comandos.",
   },
   tabMenu: {
     allTabs: 'Todas las pestañas abiertas',
@@ -629,6 +635,7 @@ export const es: I18n = {
     uploadingProgress: 'Subiendo {done}/{total}…',
     uploadedCount: '{n} imagen(es) subida(s)',
     noLocalImages: 'No hay imágenes locales para subir',
+    nothingToReopen: "No hay pestañas cerradas recientemente",
   },
   imageUrlDialog: {
     title: 'Insertar imagen desde URL',
@@ -1815,6 +1822,11 @@ export const es: I18n = {
     formatChange: "Cambiar atajos",
   },
   cmd: {
+    heading: {
+      promote: "Subir nivel de encabezado",
+      demote: "Bajar nivel de encabezado",
+      paragraph: "Convertir en párrafo",
+    },
     fmt: {
       bold: "Negrita",
       italic: "Cursiva",
@@ -1889,6 +1901,12 @@ export const es: I18n = {
       toggleFocusMode: 'Vista: Alternar modo de enfoque',
       toggleTypewriter: 'Vista: Alternar modo máquina de escribir',
       slideshow: 'Presentar diapositivas',
+      zoomUiIn: "UI: acercar",
+      zoomUiOut: "UI: alejar",
+      zoomUiReset: "UI: restablecer zoom",
+      zoomEditorIn: "Editor: acercar",
+      zoomEditorOut: "Editor: alejar",
+      zoomEditorReset: "Editor: restablecer zoom",
     },
     type: {
       create: 'Tipos: Nuevo tipo…',
@@ -1926,6 +1944,10 @@ export const es: I18n = {
       find: 'Buscar / reemplazar en la nota…',
       insertImage: 'Insertar imagen…',
       insertImageUrl: 'Imagen desde URL…',
+      selectWord: "Seleccionar palabra",
+      deleteWord: "Eliminar palabra",
+      selectLine: "Seleccionar línea",
+      jumpToSelection: "Ir a la selección",
     },
     image: {
       uploadLocalImages: 'Subir imágenes locales al alojamiento de imágenes…',
@@ -2002,6 +2024,7 @@ export const es: I18n = {
     tab: {
       prev: "Pestaña anterior",
       next: "Pestaña siguiente",
+      reopenClosed: "Reabrir pestaña cerrada",
     },
     settings: {
       open: "Ajustes",

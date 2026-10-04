@@ -560,6 +560,12 @@ export const tr: I18n = {
     ghImageCdn: 'Bağlantı yöntemi',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora / Word stili",
+    keysTyporaBody: "{bold} kalın yapar, {up} / {down} / {para} başlık düzeyini değiştirir, {word} kelimeyi seçer, {live} kaynak ile canlı düzenleme arasında geçiş yapar — AMD Software veya Microsoft Pinyin'in yakaladığı kısayolların taşınması dahil toplam {count} kısayol. Arayüz yakınlaştırması menüde kalır.",
+    keysTyporaApply: "Typora / Word stilini uygula",
+    keysTyporaUndo: "Değiştirdiği kısayolları varsayılana döndür",
+    keysTyporaApplied: "Typora / Word stili açık — {count} kısayol değişti.",
+    keysTyporaSkipped: "{count} tanesine dokunulmadı; bu tuşları zaten başka komutlara atamıştınız.",
   },
   tabMenu: {
     allTabs: 'Tüm açık sekmeler',
@@ -629,6 +635,7 @@ export const tr: I18n = {
     uploadingProgress: 'Yükleniyor {done}/{total}…',
     uploadedCount: '{n} görsel yüklendi',
     noLocalImages: 'Yüklenecek yerel görsel yok',
+    nothingToReopen: "Yeniden açılacak kapatılmış sekme yok",
   },
   imageUrlDialog: {
     title: 'URL\'den görsel ekle',
@@ -1832,6 +1839,11 @@ export const tr: I18n = {
     formatChange: "Kısayolları değiştir",
   },
   cmd: {
+    heading: {
+      promote: "Başlık düzeyini yükselt",
+      demote: "Başlık düzeyini düşür",
+      paragraph: "Paragrafa dönüştür",
+    },
     fmt: {
       bold: "Kalın",
       italic: "İtalik",
@@ -1906,6 +1918,12 @@ export const tr: I18n = {
       toggleFocusMode: 'Görünüm: Odak Modunu Aç/Kapat',
       toggleTypewriter: 'Görünüm: Daktilo Modunu Aç/Kapat',
       slideshow: 'Slayt Gösterisini Başlat',
+      zoomUiIn: "UI: yakınlaştır",
+      zoomUiOut: "UI: uzaklaştır",
+      zoomUiReset: "UI: yakınlaştırmayı sıfırla",
+      zoomEditorIn: "Düzenleyici: yakınlaştır",
+      zoomEditorOut: "Düzenleyici: uzaklaştır",
+      zoomEditorReset: "Düzenleyici: yakınlaştırmayı sıfırla",
     },
     type: {
       create: 'Türler: Yeni Tür…',
@@ -1943,6 +1961,10 @@ export const tr: I18n = {
       find: 'Notta Bul / Değiştir…',
       insertImage: 'Görsel ekle…',
       insertImageUrl: 'URL\'den görsel…',
+      selectWord: "Kelimeyi seç",
+      deleteWord: "Kelimeyi sil",
+      selectLine: "Satırı seç",
+      jumpToSelection: "Seçime git",
     },
     image: {
       uploadLocalImages: 'Yerel görselleri görsel barındırıcıya yükle…',
@@ -2019,6 +2041,7 @@ export const tr: I18n = {
     tab: {
       prev: "Önceki sekme",
       next: "Sonraki sekme",
+      reopenClosed: "Kapatılan sekmeyi yeniden aç",
     },
     settings: {
       open: "Ayarlar",

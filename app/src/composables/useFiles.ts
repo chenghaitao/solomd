@@ -84,6 +84,29 @@ export function useFiles() {
     tabs.newTab();
   }
 
+  /**
+   * B4 — reopen the most recently closed tab (Typora ⌘⇧T). A saved file is
+   * re-read from disk; an unsaved note that was discarded comes back with its
+   * text as a new, unsaved tab. A file that is already open again is just
+   * focused, and the next record down is not consumed for it.
+   */
+  async function reopenClosedTab(): Promise<boolean> {
+    const rec = tabs.popClosedTab();
+    if (!rec) {
+      toasts.info(t('toast.nothingToReopen'));
+      return false;
+    }
+    if (rec.filePath) {
+      const open = tabs.tabs.find((x) => x.filePath === rec.filePath);
+      if (open) tabs.activate(open.id);
+      else await openPath(rec.filePath, { bypassNewWindow: true });
+      return true;
+    }
+    const tab = tabs.newTab({ fileName: rec.fileName, language: rec.language });
+    tabs.setContent(tab.id, rec.content);
+    return true;
+  }
+
   async function newTextFile() {
     tabs.newTab({ fileName: 'Untitled.txt', language: 'plaintext' });
   }
@@ -981,6 +1004,7 @@ export function useFiles() {
     saveTab,
     autoSaveDirtyTabs,
     closeTabSafe,
+    reopenClosedTab,
     spawnAuxWindow,
   };
 }

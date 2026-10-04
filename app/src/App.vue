@@ -402,41 +402,20 @@ function onWheelZoom(e: WheelEvent): void {
 
 // Esc closes the topmost modal
 function onZoomShortcut(e: KeyboardEvent): boolean {
-  // Three independent zoom axes (v4.3.0 issue #72 + PR #74 yzcj105):
-  //   ⌘= / ⌘- / ⌘0           → globalZoom (whole app, CSS zoom)
-  //   ⌘⇧= / ⌘⇧- / ⌘⇧0        → editor font size only
-  //   ⌃⌘= / ⌃⌘- / ⌃⌘0        → preview font size only
-  // On macOS the same shortcuts are also exposed via native View menu
-  // accelerators (runner.rs) — this JS handler covers Linux/Windows and
-  // catches keys before the WebView's built-in browser zoom intercepts them.
-  const cmd = e.metaKey;          // macOS Cmd
-  const ctrlOnly = e.ctrlKey && !e.metaKey; // Linux/Win Ctrl (no Cmd present)
-  if (!cmd && !ctrlOnly) return false;
-  if (e.altKey) return false;
-
-  // Identify axis: Shift = editor; Cmd+Ctrl (both) = preview; otherwise UI.
-  let axis: 'ui' | 'editor' | 'preview' = 'ui';
-  if (e.shiftKey && !(e.metaKey && e.ctrlKey)) axis = 'editor';
-  else if (e.metaKey && e.ctrlKey) axis = 'preview';
-
+  // Three independent zoom axes (v4.3.0 issue #72 + PR #74 yzcj105). The UI
+  // (⌘= / ⌘- / ⌘0) and editor (⌘⇧= / ⌘⇧- / ⌘⇧0) axes are rebindable actions
+  // now (lib/keybindings.ts — the Typora / Word preset hands ⌘= / ⌘- / ⌘0 to
+  // the heading-level commands). Only the preview axis stays here: it is
+  // ⌃⌘ on macOS, which the "Mod" binding grammar cannot express.
+  if (!(e.metaKey && e.ctrlKey) || e.altKey) return false;
   const isIn = e.key === '=' || e.key === '+';
   const isOut = e.key === '-' || e.key === '_';
   const isReset = e.key === '0';
   if (!isIn && !isOut && !isReset) return false;
   e.preventDefault();
-  if (axis === 'editor') {
-    if (isIn) settings.editorFontIn();
-    else if (isOut) settings.editorFontOut();
-    else settings.resetEditorFontSize();
-  } else if (axis === 'preview') {
-    if (isIn) settings.previewFontIn();
-    else if (isOut) settings.previewFontOut();
-    else settings.resetPreviewFontSize();
-  } else {
-    if (isIn) settings.zoomIn();
-    else if (isOut) settings.zoomOut();
-    else settings.resetZoom();
-  }
+  if (isIn) settings.previewFontIn();
+  else if (isOut) settings.previewFontOut();
+  else settings.resetPreviewFontSize();
   return true;
 }
 

@@ -358,8 +358,9 @@ interface Settings {
   spellcheckLang: string;
   smartQuotes: boolean;
   /** #180 — per-action shortcut overrides. Only what the user changed is
-   *  stored; a `null` value means they unbound the action entirely. */
-  keybindings: Record<string, string | null>;
+   *  stored; a `null` value means they unbound the action entirely, and a
+   *  list keeps several chords (the Typora / Word preset uses one). */
+  keybindings: Record<string, string | string[] | null>;
   // #251 — `c4ca303` (#216) flipped the *default* to false, but `load()` does
   // `{...defaults(), ...parsed}`, so every install that already had `true`
   // saved kept it. Those users went on seeing U+2019 drawn fullwidth by a CJK
@@ -794,6 +795,9 @@ function load(): Settings {
       if (parsed.keybindings && typeof parsed.keybindings === 'object') {
         for (const [k, v] of Object.entries(parsed.keybindings)) {
           if (v === null || typeof v === 'string') merged.keybindings[k] = v;
+          else if (Array.isArray(v) && v.length && v.every((c) => typeof c === 'string')) {
+            merged.keybindings[k] = v as string[];
+          }
         }
       }
       // One-time v4.0 upgrade: any saved settings blob written before
@@ -995,7 +999,7 @@ export const useSettingsStore = defineStore('settings', {
     /** #180 — `combo` sets an override, `null` unbinds, `undefined` restores
      *  the default (we delete the key so future default changes reach the
      *  user instead of being pinned to whatever shipped today). */
-    setKeybinding(actionId: string, combo: string | null | undefined) {
+    setKeybinding(actionId: string, combo: string | string[] | null | undefined) {
       if (combo === undefined) delete this.keybindings[actionId];
       else this.keybindings[actionId] = combo;
       this.persist();

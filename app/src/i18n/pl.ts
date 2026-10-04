@@ -560,6 +560,12 @@ export const pl: I18n = {
     ghImageCdn: 'Linkuj przez',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Styl Typora / Word",
+    keysTyporaBody: "{bold} pogrubia, {up} / {down} / {para} zmieniają poziom nagłówka, {word} zaznacza słowo, a {live} przełącza źródło i edycję na żywo — łącznie {count} skrótów, w tym przeniesienie tych, które przechwytuje AMD Software lub Microsoft Pinyin. Powiększenie interfejsu zostaje w menu.",
+    keysTyporaApply: "Zastosuj styl Typora / Word",
+    keysTyporaUndo: "Przywróć zmienione skróty domyślne",
+    keysTyporaApplied: "Włączono styl Typora / Word — zmieniono {count} skrótów.",
+    keysTyporaSkipped: "{count} pozostawiono bez zmian, bo te klawisze przypisano już innym poleceniom.",
   },
   tabMenu: {
     allTabs: 'Wszystkie otwarte karty',
@@ -629,6 +635,7 @@ export const pl: I18n = {
     uploadingProgress: 'Przesyłanie {done}/{total}…',
     uploadedCount: 'Przesłano {n} obraz(ów)',
     noLocalImages: 'Brak lokalnych obrazów do przesłania',
+    nothingToReopen: "Brak ostatnio zamkniętych kart",
   },
   imageUrlDialog: {
     title: 'Wstaw obraz z adresu URL',
@@ -1832,6 +1839,11 @@ export const pl: I18n = {
     formatChange: "Zmień skróty",
   },
   cmd: {
+    heading: {
+      promote: "Podnieś poziom nagłówka",
+      demote: "Obniż poziom nagłówka",
+      paragraph: "Zamień na akapit",
+    },
     fmt: {
       bold: "Pogrubienie",
       italic: "Kursywa",
@@ -1906,6 +1918,12 @@ export const pl: I18n = {
       toggleFocusMode: 'Widok: Przełącz tryb skupienia',
       toggleTypewriter: 'Widok: Przełącz tryb maszyny do pisania',
       slideshow: 'Rozpocznij pokaz slajdów',
+      zoomUiIn: "UI: powiększ",
+      zoomUiOut: "UI: pomniejsz",
+      zoomUiReset: "UI: resetuj powiększenie",
+      zoomEditorIn: "Edytor: powiększ",
+      zoomEditorOut: "Edytor: pomniejsz",
+      zoomEditorReset: "Edytor: resetuj powiększenie",
     },
     type: {
       create: 'Typy: Nowy typ…',
@@ -1943,6 +1961,10 @@ export const pl: I18n = {
       find: 'Znajdź / zamień w notatce…',
       insertImage: 'Wstaw obraz…',
       insertImageUrl: 'Obraz z adresu URL…',
+      selectWord: "Zaznacz słowo",
+      deleteWord: "Usuń słowo",
+      selectLine: "Zaznacz wiersz",
+      jumpToSelection: "Przejdź do zaznaczenia",
     },
     image: {
       uploadLocalImages: 'Prześlij lokalne obrazy do hostingu obrazów…',
@@ -2019,6 +2041,7 @@ export const pl: I18n = {
     tab: {
       prev: "Poprzednia karta",
       next: "Następna karta",
+      reopenClosed: "Przywróć zamkniętą kartę",
     },
     settings: {
       open: "Ustawienia",

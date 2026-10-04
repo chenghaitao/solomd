@@ -560,6 +560,12 @@ export const uk: I18n = {
     ghImageCdn: 'Посилання через',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Стиль Typora / Word",
+    keysTyporaBody: "{bold} — жирний, {up} / {down} / {para} змінюють рівень заголовка, {word} виділяє слово, {live} перемикає код і живе редагування — усього {count} скорочень, зокрема перенесення тих, що їх перехоплюють AMD Software або Microsoft Pinyin. Масштаб інтерфейсу лишається в меню.",
+    keysTyporaApply: "Застосувати стиль Typora / Word",
+    keysTyporaUndo: "Повернути змінені скорочення до типових",
+    keysTyporaApplied: "Стиль Typora / Word увімкнено — змінено {count} скорочень.",
+    keysTyporaSkipped: "{count} залишено без змін, бо ці клавіші вже призначено іншим командам.",
   },
   tabMenu: {
     allTabs: 'Усі відкриті вкладки',
@@ -629,6 +635,7 @@ export const uk: I18n = {
     uploadingProgress: 'Завантаження {done}/{total}…',
     uploadedCount: 'Завантажено {n} зображень',
     noLocalImages: 'Немає локальних зображень для завантаження',
+    nothingToReopen: "Немає нещодавно закритих вкладок",
   },
   imageUrlDialog: {
     title: 'Вставити зображення з URL',
@@ -1832,6 +1839,11 @@ export const uk: I18n = {
     formatChange: "Змінити скорочення",
   },
   cmd: {
+    heading: {
+      promote: "Підвищити рівень заголовка",
+      demote: "Знизити рівень заголовка",
+      paragraph: "Перетворити на абзац",
+    },
     fmt: {
       bold: "Жирний",
       italic: "Курсив",
@@ -1906,6 +1918,12 @@ export const uk: I18n = {
       toggleFocusMode: 'Вигляд: Перемкнути режим фокусування',
       toggleTypewriter: 'Вигляд: Перемкнути режим друкарської машинки',
       slideshow: 'Почати слайдшоу',
+      zoomUiIn: "UI: збільшити",
+      zoomUiOut: "UI: зменшити",
+      zoomUiReset: "UI: скинути масштаб",
+      zoomEditorIn: "Редактор: збільшити",
+      zoomEditorOut: "Редактор: зменшити",
+      zoomEditorReset: "Редактор: скинути масштаб",
     },
     type: {
       create: 'Типи: Новий тип…',
@@ -1943,6 +1961,10 @@ export const uk: I18n = {
       find: 'Знайти / замінити в нотатці…',
       insertImage: 'Вставити зображення…',
       insertImageUrl: 'Зображення з URL…',
+      selectWord: "Виділити слово",
+      deleteWord: "Видалити слово",
+      selectLine: "Виділити рядок",
+      jumpToSelection: "Перейти до виділення",
     },
     image: {
       uploadLocalImages: 'Завантажити локальні зображення на хостинг зображень…',
@@ -2019,6 +2041,7 @@ export const uk: I18n = {
     tab: {
       prev: "Попередня вкладка",
       next: "Наступна вкладка",
+      reopenClosed: "Відновити закриту вкладку",
     },
     settings: {
       open: "Налаштування",

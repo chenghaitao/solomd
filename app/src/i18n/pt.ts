@@ -562,6 +562,12 @@ export const pt: I18n = {
     ghImageCdn: 'Vincular via',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Estilo Typora / Word",
+    keysTyporaBody: "{bold} aplica negrito, {up} / {down} / {para} mudam o nível do título, {word} seleciona uma palavra e {live} alterna entre código e edição ao vivo — {count} atalhos no total, incluindo mover os que o AMD Software ou o Microsoft Pinyin interceptam. O zoom da interface continua no menu.",
+    keysTyporaApply: "Aplicar estilo Typora / Word",
+    keysTyporaUndo: "Restaurar os atalhos padrão alterados",
+    keysTyporaApplied: "Estilo Typora / Word ativado — {count} atalhos alterados.",
+    keysTyporaSkipped: "{count} não foram alterados porque você já atribuiu essas teclas a outros comandos.",
   },
   tabMenu: {
     allTabs: 'Todas as abas abertas',
@@ -631,6 +637,7 @@ export const pt: I18n = {
     uploadingProgress: 'Enviando {done}/{total}…',
     uploadedCount: '{n} imagem(ns) enviada(s)',
     noLocalImages: 'Nenhuma imagem local para enviar',
+    nothingToReopen: "Nenhuma aba fechada recentemente para reabrir",
   },
   imageUrlDialog: {
     title: 'Inserir imagem de URL',
@@ -1817,6 +1824,11 @@ export const pt: I18n = {
     formatChange: "Alterar atalhos",
   },
   cmd: {
+    heading: {
+      promote: "Aumentar nível do título",
+      demote: "Diminuir nível do título",
+      paragraph: "Converter em parágrafo",
+    },
     fmt: {
       bold: "Negrito",
       italic: "Itálico",
@@ -1891,6 +1903,12 @@ export const pt: I18n = {
       toggleFocusMode: 'Exibir: Alternar modo foco',
       toggleTypewriter: 'Exibir: Alternar modo máquina de escrever',
       slideshow: 'Apresentar slides',
+      zoomUiIn: "UI: ampliar",
+      zoomUiOut: "UI: reduzir",
+      zoomUiReset: "UI: redefinir zoom",
+      zoomEditorIn: "Editor: ampliar",
+      zoomEditorOut: "Editor: reduzir",
+      zoomEditorReset: "Editor: redefinir zoom",
     },
     type: {
       create: 'Tipos: Novo tipo…',
@@ -1928,6 +1946,10 @@ export const pt: I18n = {
       find: 'Localizar / substituir na nota…',
       insertImage: 'Inserir imagem…',
       insertImageUrl: 'Imagem a partir de URL…',
+      selectWord: "Selecionar palavra",
+      deleteWord: "Excluir palavra",
+      selectLine: "Selecionar linha",
+      jumpToSelection: "Ir para a seleção",
     },
     image: {
       uploadLocalImages: 'Enviar imagens locais para o host de imagens…',
@@ -2004,6 +2026,7 @@ export const pt: I18n = {
     tab: {
       prev: "Separador anterior",
       next: "Separador seguinte",
+      reopenClosed: "Reabrir aba fechada",
     },
     settings: {
       open: "Definições",

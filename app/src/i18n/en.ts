@@ -563,6 +563,12 @@ export const en = {
     ghImageCdn: 'Link via',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora / Word style",
+    keysTyporaBody: "{bold} makes text bold, {up} / {down} / {para} change the heading level, {word} selects a word and {live} switches source and live edit — {count} shortcuts in all, including moving every chord AMD Software or Microsoft Pinyin intercepts. UI zoom keeps its menu entries.",
+    keysTyporaApply: "Apply Typora / Word style",
+    keysTyporaUndo: "Restore the default shortcuts it changed",
+    keysTyporaApplied: "Typora / Word style is on — {count} shortcuts changed.",
+    keysTyporaSkipped: "{count} were left alone because you had already given those keys to other commands.",
   },
   tabMenu: {
     allTabs: 'All open tabs',
@@ -635,6 +641,7 @@ export const en = {
     uploadingProgress: 'Uploading {done}/{total}…',
     uploadedCount: 'Uploaded {n} image(s)',
     noLocalImages: 'No local images to upload',
+    nothingToReopen: "No recently closed tab to reopen",
   },
   imageUrlDialog: {
     title: 'Insert image from URL',
@@ -1844,6 +1851,11 @@ export const en = {
     formatChange: "Change shortcuts",
   },
   cmd: {
+    heading: {
+      promote: "Increase Heading Level",
+      demote: "Decrease Heading Level",
+      paragraph: "Convert to Paragraph",
+    },
     fmt: {
       bold: "Bold",
       italic: "Italic",
@@ -1918,6 +1930,12 @@ export const en = {
       toggleFocusMode: 'View: Toggle Focus Mode',
       toggleTypewriter: 'View: Toggle Typewriter Mode',
       slideshow: 'Present Slideshow',
+      zoomUiIn: "UI: Zoom In",
+      zoomUiOut: "UI: Zoom Out",
+      zoomUiReset: "UI: Reset Zoom",
+      zoomEditorIn: "Editor: Zoom In",
+      zoomEditorOut: "Editor: Zoom Out",
+      zoomEditorReset: "Editor: Reset Zoom",
     },
     type: {
       create: 'Types: New Type…',
@@ -1955,6 +1973,10 @@ export const en = {
       find: 'Find / Replace in note…',
       insertImage: 'Insert image…',
       insertImageUrl: 'Image from URL…',
+      selectWord: "Select Word",
+      deleteWord: "Delete Word",
+      selectLine: "Select Line",
+      jumpToSelection: "Jump to Selection",
     },
     image: {
       uploadLocalImages: 'Upload local images to image host…',
@@ -2031,6 +2053,7 @@ export const en = {
     tab: {
       prev: "Previous Tab",
       next: "Next Tab",
+      reopenClosed: "Reopen Closed Tab",
     },
     settings: {
       open: "Settings",

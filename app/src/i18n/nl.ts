@@ -560,6 +560,12 @@ export const nl: I18n = {
     ghImageCdn: 'Koppelen via',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Typora/Word-stijl",
+    keysTyporaBody: "{bold} maakt vet, {up} / {down} / {para} wijzigen het kopniveau, {word} selecteert een woord en {live} wisselt tussen bron en live bewerken — {count} sneltoetsen in totaal, inclusief het verplaatsen van toetsen die AMD Software of Microsoft Pinyin onderscheppen. Zoomen van de interface blijft in het menu.",
+    keysTyporaApply: "Typora/Word-stijl toepassen",
+    keysTyporaUndo: "Gewijzigde sneltoetsen terugzetten",
+    keysTyporaApplied: "Typora/Word-stijl actief — {count} sneltoetsen gewijzigd.",
+    keysTyporaSkipped: "{count} bleven ongewijzigd omdat je die toetsen al aan andere opdrachten had gegeven.",
   },
   tabMenu: {
     allTabs: 'Alle geopende tabbladen',
@@ -629,6 +635,7 @@ export const nl: I18n = {
     uploadingProgress: 'Uploaden {done}/{total}…',
     uploadedCount: '{n} afbeelding(en) geüpload',
     noLocalImages: 'Geen lokale afbeeldingen om te uploaden',
+    nothingToReopen: "Geen recent gesloten tabblad om te heropenen",
   },
   imageUrlDialog: {
     title: 'Afbeelding van URL invoegen',
@@ -1832,6 +1839,11 @@ export const nl: I18n = {
     formatChange: "Sneltoetsen wijzigen",
   },
   cmd: {
+    heading: {
+      promote: "Kopniveau verhogen",
+      demote: "Kopniveau verlagen",
+      paragraph: "Omzetten naar alinea",
+    },
     fmt: {
       bold: "Vet",
       italic: "Cursief",
@@ -1906,6 +1918,12 @@ export const nl: I18n = {
       toggleFocusMode: 'Weergave: Focusmodus in-/uitschakelen',
       toggleTypewriter: 'Weergave: Typemachinemodus in-/uitschakelen',
       slideshow: 'Diavoorstelling presenteren',
+      zoomUiIn: "UI: inzoomen",
+      zoomUiOut: "UI: uitzoomen",
+      zoomUiReset: "UI: zoom herstellen",
+      zoomEditorIn: "Editor: inzoomen",
+      zoomEditorOut: "Editor: uitzoomen",
+      zoomEditorReset: "Editor: zoom herstellen",
     },
     type: {
       create: 'Typen: Nieuw type…',
@@ -1943,6 +1961,10 @@ export const nl: I18n = {
       find: 'Zoeken / vervangen in notitie…',
       insertImage: 'Afbeelding invoegen…',
       insertImageUrl: 'Afbeelding via URL…',
+      selectWord: "Woord selecteren",
+      deleteWord: "Woord verwijderen",
+      selectLine: "Regel selecteren",
+      jumpToSelection: "Naar selectie springen",
     },
     image: {
       uploadLocalImages: 'Lokale afbeeldingen uploaden naar afbeeldingshost…',
@@ -2019,6 +2041,7 @@ export const nl: I18n = {
     tab: {
       prev: "Vorig tabblad",
       next: "Volgend tabblad",
+      reopenClosed: "Gesloten tabblad heropenen",
     },
     settings: {
       open: "Instellingen",

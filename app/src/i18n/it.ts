@@ -560,6 +560,12 @@ export const it: I18n = {
     ghImageCdn: 'Collega tramite',
     ghImageCdnRaw: 'raw.githubusercontent.com',
     ghImageCdnJsdelivr: 'jsDelivr CDN',
+    keysTyporaTitle: "Stile Typora / Word",
+    keysTyporaBody: "{bold} applica il grassetto, {up} / {down} / {para} cambiano il livello del titolo, {word} seleziona una parola e {live} alterna sorgente e modifica dal vivo: {count} scorciatoie in tutto, compreso lo spostamento di quelle intercettate da AMD Software o Microsoft Pinyin. Lo zoom dell’interfaccia resta nel menu.",
+    keysTyporaApply: "Applica stile Typora / Word",
+    keysTyporaUndo: "Ripristina le scorciatoie predefinite modificate",
+    keysTyporaApplied: "Stile Typora / Word attivo: {count} scorciatoie modificate.",
+    keysTyporaSkipped: "{count} non sono state modificate perché hai già assegnato quei tasti ad altri comandi.",
   },
   tabMenu: {
     allTabs: 'Tutte le schede aperte',
@@ -629,6 +635,7 @@ export const it: I18n = {
     uploadingProgress: 'Caricamento {done}/{total}…',
     uploadedCount: '{n} immagine/i caricata/e',
     noLocalImages: 'Nessuna immagine locale da caricare',
+    nothingToReopen: "Nessuna scheda chiusa di recente da riaprire",
   },
   imageUrlDialog: {
     title: 'Inserisci immagine da URL',
@@ -1815,6 +1822,11 @@ export const it: I18n = {
     formatChange: "Modifica scorciatoie",
   },
   cmd: {
+    heading: {
+      promote: "Aumenta livello titolo",
+      demote: "Diminuisci livello titolo",
+      paragraph: "Converti in paragrafo",
+    },
     fmt: {
       bold: "Grassetto",
       italic: "Corsivo",
@@ -1889,6 +1901,12 @@ export const it: I18n = {
       toggleFocusMode: 'Vista: Attiva/disattiva modalità focus',
       toggleTypewriter: 'Vista: Attiva/disattiva modalità macchina da scrivere',
       slideshow: 'Presenta slideshow',
+      zoomUiIn: "UI: ingrandisci",
+      zoomUiOut: "UI: riduci",
+      zoomUiReset: "UI: reimposta zoom",
+      zoomEditorIn: "Editor: ingrandisci",
+      zoomEditorOut: "Editor: riduci",
+      zoomEditorReset: "Editor: reimposta zoom",
     },
     type: {
       create: 'Tipi: Nuovo tipo…',
@@ -1926,6 +1944,10 @@ export const it: I18n = {
       find: 'Trova / sostituisci nella nota…',
       insertImage: 'Inserisci immagine…',
       insertImageUrl: 'Immagine da URL…',
+      selectWord: "Seleziona parola",
+      deleteWord: "Elimina parola",
+      selectLine: "Seleziona riga",
+      jumpToSelection: "Vai alla selezione",
     },
     image: {
       uploadLocalImages: 'Carica immagini locali sull\'hosting di immagini…',
@@ -2002,6 +2024,7 @@ export const it: I18n = {
     tab: {
       prev: "Scheda precedente",
       next: "Scheda successiva",
+      reopenClosed: "Riapri scheda chiusa",
     },
     settings: {
       open: "Impostazioni",
