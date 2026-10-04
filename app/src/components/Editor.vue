@@ -5301,9 +5301,13 @@ const cls = computed(() => ({
   border-radius: 6px;
 }
 .plain-block__render :deep(.katex-display) {
+  /* KaTeX draws tall delimiters, limits and \dfrac a few px past the formula
+     box; overflow-x:auto forces overflow-y to clip, which cut their bottoms
+     off. Padding gives them room inside the box (margin reduced to match). */
   overflow-x: auto;
   overflow-y: hidden;
-  margin: 1em 0;
+  padding: 0.5em 0;
+  margin: 0.5em 0;
   text-align: center;
 }
 .plain-block__render :deep(.plain-mermaid-block),

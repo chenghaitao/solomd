@@ -83,7 +83,7 @@ const IMAGE_CSS = `
   .img-page img { max-width: 100%; border-radius: 6px; margin: 1em 0; }
   .img-page .mermaid-block { display: flex; justify-content: center; margin: 1.5em 0; }
   .img-page .mermaid-block svg { max-width: 100%; height: auto; }
-  .img-page .katex-display { overflow-x: auto; margin: 1em 0; }
+  .img-page .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; margin: 0.5em 0; }
 
   /* Watermark / branding — rendered when settings.imageExportBranding
      is on (default ON in v3.6). Toggleable in Settings → Export so

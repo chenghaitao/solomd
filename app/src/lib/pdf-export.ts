@@ -179,7 +179,8 @@ const PDF_CSS = `
   .pdf-page .katex-display {
     overflow-x: auto;
     overflow-y: hidden;
-    margin: 1em 0;
+    padding: 0.5em 0;
+    margin: 0.5em 0;
   }
 `;
 

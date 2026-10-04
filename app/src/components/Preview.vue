@@ -900,9 +900,13 @@ defineExpose({ scrollToLine, openSearch });
   font-style: italic;
 }
 :where(.preview-content) .katex-display {
+  /* KaTeX draws tall delimiters, limits and \dfrac a few px past the formula
+     box; overflow-x:auto forces overflow-y to clip, which cut their bottoms
+     off. Padding gives them room inside the box (margin reduced to match). */
   overflow-x: auto;
   overflow-y: hidden;
-  margin: 1em 0;
+  padding: 0.5em 0;
+  margin: 0.5em 0;
 }
 /* Wikilinks (F1, v2.0) */
 .preview-content .md-wikilink {

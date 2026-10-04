@@ -162,7 +162,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
     margin: 1.2em 0;
     box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
   }
-  .katex-display { overflow-x: auto; overflow-y: hidden; margin: 1.2em 0; }
+  .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; margin: 0.7em 0; }
   .mermaid-block, .plantuml-block { display: flex; justify-content: center; margin: 1.5em 0; }
   .mermaid-block svg, .plantuml-block svg { max-width: 100%; height: auto; }
   .plantuml-block img { box-shadow: none; border-radius: 0; margin: 0; }
