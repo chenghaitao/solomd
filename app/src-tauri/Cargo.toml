@@ -167,6 +167,10 @@ tauri-plugin-global-shortcut = "2"
 # #112 — fs_delete moves to the OS trash (Finder 废纸篓 / recycle bin) instead
 # of permanently unlinking; desktop only (mobile has no user-visible trash).
 trash = "5"
+# bug/C1 — the native menu is built from a spec the frontend sends; its
+# accelerator strings are validated with the parser Tauri itself uses (muda,
+# already in the tree via tauri — same version, no new download).
+muda = { version = "0.17", default-features = false }
 
 # v2.2 AutoGit per-note history + v3.0 GitHub sync: libgit2 bindings for
 # cross-platform git access (no shelling out). `vendored-libgit2` ships the

@@ -68,13 +68,17 @@ import { useWindowsStore, isAuxLabel } from './stores/windows';
 import { useTilesStore } from './stores/tiles';
 import { usePomodoroStore } from './stores/pomodoro';
 import { useFiles } from './composables/useFiles';
-import { useExport } from './composables/useExport';
 import { useShortcuts } from './composables/useShortcuts';
 import { useFileWatcher } from './composables/useFileWatcher';
 import { loadCustomTheme } from './lib/custom-theme';
-import { isIOS, isMacOS, isAndroid, isMobile } from './lib/platform';
+import { isIOS, isMacOS, isAndroid, isMobile, isWindowsDesktop } from './lib/platform';
 import { useViewport } from './composables/useViewport';
-import { nativeMenuAccelerators } from './lib/keybindings';
+import { toNativeSpec } from './lib/app-menu';
+import { themeFamily } from './lib/themes';
+import type { Theme, ViewMode } from './types';
+import { useAppMenu } from './composables/useAppMenu';
+import { useUpdateCheck } from './composables/useUpdateCheck';
+import { useCommands } from './composables/useCommands';
 import { useI18n } from './i18n';
 import { quickCaptureError } from './lib/quick-capture-status';
 import { tableEditor, closeTableEditor } from './lib/table-editor-bus';
@@ -99,7 +103,6 @@ const settings = useSettingsStore();
 const windowsStore = useWindowsStore();
 const tiles = useTilesStore();
 const files = useFiles();
-const exporter = useExport();
 const workspace = useWorkspaceStore();
 
 // #148 / #151 — Android real-folder vault picking. useFiles.openFolder()
@@ -349,7 +352,7 @@ function onFileChangedAction(action: 'reload' | 'overwrite' | 'cancel') {
   }
 }
 
-useShortcuts({
+const shortcuts = useShortcuts({
   openPalette: () => (paletteOpen.value = true),
   openSettings: () => (settingsOpen.value = true),
   openHelp: () => openHelpAt('syntax'),
@@ -402,41 +405,20 @@ function onWheelZoom(e: WheelEvent): void {
 
 // Esc closes the topmost modal
 function onZoomShortcut(e: KeyboardEvent): boolean {
-  // Three independent zoom axes (v4.3.0 issue #72 + PR #74 yzcj105):
-  //   ⌘= / ⌘- / ⌘0           → globalZoom (whole app, CSS zoom)
-  //   ⌘⇧= / ⌘⇧- / ⌘⇧0        → editor font size only
-  //   ⌃⌘= / ⌃⌘- / ⌃⌘0        → preview font size only
-  // On macOS the same shortcuts are also exposed via native View menu
-  // accelerators (runner.rs) — this JS handler covers Linux/Windows and
-  // catches keys before the WebView's built-in browser zoom intercepts them.
-  const cmd = e.metaKey;          // macOS Cmd
-  const ctrlOnly = e.ctrlKey && !e.metaKey; // Linux/Win Ctrl (no Cmd present)
-  if (!cmd && !ctrlOnly) return false;
-  if (e.altKey) return false;
-
-  // Identify axis: Shift = editor; Cmd+Ctrl (both) = preview; otherwise UI.
-  let axis: 'ui' | 'editor' | 'preview' = 'ui';
-  if (e.shiftKey && !(e.metaKey && e.ctrlKey)) axis = 'editor';
-  else if (e.metaKey && e.ctrlKey) axis = 'preview';
-
+  // Three independent zoom axes (v4.3.0 issue #72 + PR #74 yzcj105). The UI
+  // (⌘= / ⌘- / ⌘0) and editor (⌘⇧= / ⌘⇧- / ⌘⇧0) axes are rebindable actions
+  // now (lib/keybindings.ts — the Typora / Word preset hands ⌘= / ⌘- / ⌘0 to
+  // the heading-level commands). Only the preview axis stays here: it is
+  // ⌃⌘ on macOS, which the "Mod" binding grammar cannot express.
+  if (!(e.metaKey && e.ctrlKey) || e.altKey) return false;
   const isIn = e.key === '=' || e.key === '+';
   const isOut = e.key === '-' || e.key === '_';
   const isReset = e.key === '0';
   if (!isIn && !isOut && !isReset) return false;
   e.preventDefault();
-  if (axis === 'editor') {
-    if (isIn) settings.editorFontIn();
-    else if (isOut) settings.editorFontOut();
-    else settings.resetEditorFontSize();
-  } else if (axis === 'preview') {
-    if (isIn) settings.previewFontIn();
-    else if (isOut) settings.previewFontOut();
-    else settings.resetPreviewFontSize();
-  } else {
-    if (isIn) settings.zoomIn();
-    else if (isOut) settings.zoomOut();
-    else settings.resetZoom();
-  }
+  if (isIn) settings.previewFontIn();
+  else if (isOut) settings.previewFontOut();
+  else settings.resetPreviewFontSize();
   return true;
 }
 
@@ -651,19 +633,24 @@ watchEffect(() => {
   }
 });
 
-// Sync native menu bar language — and, since #180, the accelerators too:
-// a rebound action must lose its old chord from the native menu, or macOS
-// keeps firing the original and the rebind only ever adds a second key.
+// bug/C1 — the native menu (macOS menubar, Linux window menu) is built from
+// the same tree as the Windows title-bar menubar (lib/app-menu.ts): labels in
+// the UI language, accelerators = the bindings in effect (#180: a rebound
+// action must lose its old chord from the native menu, or macOS keeps firing
+// it and the rebind only ever adds a second key), check marks = live state.
+// Windows has no native menu bar; mobile has none at all.
+const appMenu = useAppMenu();
+const nativeMenuPlatform = '__TAURI_INTERNALS__' in window && !isMobile() && !isWindowsDesktop()
+  ? (isMacOS() ? 'mac' : 'linux')
+  : null;
 watchEffect(() => {
-  // Spread rather than passing the reactive object straight through: reading
-  // it with `hasOwnProperty` (as nativeMenuAccelerators does) does not register
-  // a dependency on a key that does not exist yet, so the first rebind of an
-  // action never re-ran this effect and the native menu kept the old chord.
-  const overrides = { ...settings.keybindings };
-  invoke('set_menu_config', {
-    lang: settings.language,
-    accels: nativeMenuAccelerators(overrides),
-  }).catch(() => {});
+  if (!nativeMenuPlatform) return;
+  const menus = appMenu.menuFor(nativeMenuPlatform);
+  invoke('set_menu_spec', {
+    menus: toNativeSpec(menus, { overrides: { ...settings.keybindings } }),
+  }).catch((e) => console.warn('[menu] set_menu_spec failed', e));
+});
+watchEffect(() => {
   invoke('save_language_preference', { lang: settings.language }).catch(() => {});
 });
 
@@ -851,38 +838,61 @@ async function openExternalFile() {
   }
 }
 
+const menuCommands = useCommands();
+const updateCheck = useUpdateCheck();
+
+/** Insert-menu snippets (`$|$` marks where the caret lands) — the same
+ *  templates the toolbar's Insert menu uses. */
+const INSERT_SNIPPETS: Record<string, string> = {
+  'insert.mathBlock': '\n$$\n$|$\n$$\n',
+  'insert.mathInline': '$$|$$',
+  'insert.table': '\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n',
+  'insert.mermaid': '\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n',
+  'insert.hr': '\n---\n',
+};
+
+/**
+ * Every menu click — native (`solomd://menu`) and the Windows title-bar
+ * menubar (`solomd:menu-action`) — lands here. Ids are the bindable action ids
+ * wherever one exists, so a menu item runs exactly what its shortcut runs
+ * (`shortcuts.runAction`); then palette commands by id; the rest are the
+ * menu-only entries below.
+ */
 function dispatchMenuAction(id: string) {
+  if (id.startsWith('recent.open:')) {
+    const path = workspace.recentFiles[Number(id.slice('recent.open:'.length))];
+    if (path) void files.openPath(path);
+    return;
+  }
+  if (id.startsWith('view.mode:')) {
+    settings.setViewMode(id.slice('view.mode:'.length) as ViewMode);
+    return;
+  }
+  if (id.startsWith('theme.set:')) {
+    settings.setTheme(id.slice('theme.set:'.length) as Theme);
+    return;
+  }
+  if (INSERT_SNIPPETS[id]) {
+    window.dispatchEvent(
+      new CustomEvent('solomd:insert-markdown', {
+        detail: { snippet: INSERT_SNIPPETS[id], paneId: tiles.focusedPaneId },
+      }),
+    );
+    return;
+  }
   switch (id) {
-    case 'file.new':
-      files.newFile();
-      break;
-    case 'file.newText':
-      files.newTextFile();
-      break;
-    case 'file.open':
-      files.openFile();
-      break;
     case 'file.openFolder':
       files.openFolder();
-      break;
-    case 'file.import':
-      void files.importDocuments();
-      break;
-    case 'file.save':
-      files.saveActive();
-      break;
-    case 'file.saveAs':
-      files.saveActiveAs();
-      break;
+      return;
     case 'file.openExternal':
       openExternalFile();
-      break;
-    case 'file.print':
-      exporter.exportPdfPrint();
-      break;
-    case 'file.closeTab':
-      if (tabs.activeId) files.closeTabSafe(tabs.activeId);
-      break;
+      return;
+    case 'file.autoSave':
+      settings.toggleAutoSaveOnBlur();
+      return;
+    case 'recent.clear':
+      workspace.clearRecent();
+      return;
     case 'window.new':
       // #280 — this used to dispatch a `solomd:new-window` event that nothing
       // listened for, so the menu item did nothing at all.
@@ -891,71 +901,45 @@ function dispatchMenuAction(id: string) {
         const toasts = (await import('./stores/toasts')).useToastsStore();
         toasts.warning(t('toast.newWindowFailed'));
       });
-      break;
+      return;
     case 'file.exit':
-      // #221 — the Windows in-app menubar dropped the native menu's 退出 item.
-      // Routes through Tauri's close-requested flow → unsaved-tabs confirm,
-      // same as the caption ✕ button.
+      // #221 — routes through Tauri's close-requested flow → unsaved-tabs
+      // confirm, same as the caption ✕ button.
       void getCurrentWindow().close();
-      break;
-    case 'view.toggleTheme':
-      settings.toggleTheme();
-      break;
-    case 'view.toggleFileTree':
-      settings.toggleFileTree();
-      break;
-    case 'view.toggleOutline':
-      if (tabs.activeId) tabs.toggleOutline(tabs.activeId);
-      break;
-    case 'view.cycleView':
-      settings.cycleViewMode();
-      break;
-    // v4.3.0 PR #74 — 3-axis zoom from the native View menu.
-    case 'view.zoomUiIn':
-      settings.zoomIn();
-      break;
-    case 'view.zoomUiOut':
-      settings.zoomOut();
-      break;
-    case 'view.zoomUiReset':
-      settings.resetZoom();
-      break;
-    case 'view.zoomEditorIn':
-      settings.editorFontIn();
-      break;
-    case 'view.zoomEditorOut':
-      settings.editorFontOut();
-      break;
-    case 'view.zoomEditorReset':
-      settings.resetEditorFontSize();
-      break;
+      return;
+    case 'view.darkMode':
+      settings.setTheme(themeFamily(settings.theme) === 'dark' ? 'light' : 'dark');
+      return;
+    // v4.3.0 PR #74 — the preview zoom axis is menu/⌃⌘ only.
     case 'view.zoomPreviewIn':
       settings.previewFontIn();
-      break;
+      return;
     case 'view.zoomPreviewOut':
       settings.previewFontOut();
-      break;
+      return;
     case 'view.zoomPreviewReset':
       settings.resetPreviewFontSize();
-      break;
-    case 'view.cmdPalette':
-      paletteOpen.value = true;
-      break;
-    case 'view.settings':
-      settingsOpen.value = true;
-      break;
-    case 'search.global':
-      toggleGlobalSearch();
-      break;
+      return;
     case 'help.markdown':
       openHelpAt('syntax');
-      break;
+      return;
     case 'help.shortcuts':
       openHelpAt('shortcuts');
-      break;
+      return;
     case 'help.cli':
       openHelpAt('cli');
-      break;
+      return;
+    case 'help.checkUpdate':
+      void updateCheck.manualCheckUpdate();
+      return;
+    case 'help.about':
+      aboutOpen.value = true;
+      return;
+    // AI rewrite reads the selection the way the toolbar button does (it
+    // handles the plain editor, AI-off and empty-selection cases).
+    case 'editor.aiRewrite':
+      window.dispatchEvent(new CustomEvent('solomd:toolbar-ai-rewrite'));
+      return;
     // Same routing as the Ctrl+F shortcut: preview has its own find, every
     // editor mode opens the editor's find/replace bar.
     case 'edit.find':
@@ -964,28 +948,25 @@ function dispatchMenuAction(id: string) {
       } else {
         window.dispatchEvent(new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId } }));
       }
-      break;
-    case 'help.about':
-      aboutOpen.value = true;
-      break;
+      return;
     // Windows unified title bar — the in-app Edit menu (Toolbar.vue). The
-    // native menu used PredefinedMenuItems here; in-app we drive the focused
+    // native menu uses PredefinedMenuItems here; in-app we drive the focused
     // editor directly. `execCommand` covers the Windows editors (plain
     // textarea + contenteditable live blocks); the menubar buttons use
     // `mousedown.prevent` so focus never leaves the editor. (CodeMirror —
     // Vim mode on Windows — keeps its own keyboard-driven undo history.)
     case 'edit.undo':
       document.execCommand('undo');
-      break;
+      return;
     case 'edit.redo':
       document.execCommand('redo');
-      break;
+      return;
     case 'edit.cut':
       document.execCommand('cut');
-      break;
+      return;
     case 'edit.copy':
       document.execCommand('copy');
-      break;
+      return;
     case 'edit.paste':
       // execCommand('paste') is blocked in modern engines; read the clipboard
       // through the Tauri plugin and insert as text at the selection.
@@ -994,13 +975,21 @@ function dispatchMenuAction(id: string) {
           if (text) document.execCommand('insertText', false, text);
         })
         .catch(() => {});
-      break;
+      return;
     case 'edit.selectAll':
       document.execCommand('selectAll');
-      break;
-    default:
-      console.warn('unknown menu action', id);
+      return;
   }
+  // A bindable action: exactly what its shortcut does. `false` means it
+  // declined (e.g. formatting while a settings field has focus) — that is an
+  // answer, not a reason to try something else.
+  if (shortcuts.runAction(id) !== null) return;
+  const cmd = menuCommands.find((c) => c.id === id);
+  if (cmd) {
+    void cmd.run();
+    return;
+  }
+  console.warn('unknown menu action', id);
 }
 
 /**

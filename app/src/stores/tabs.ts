@@ -163,6 +163,21 @@ function loadPersisted(): PersistedState {
   return { tabs: [], activeId: '' };
 }
 
+/**
+ * B4 — "reopen closed tab" (Typora ⌘⇧T). What a closed tab needs to come
+ * back: its path (re-read from disk, so it is never stale), or — for a note
+ * that was never saved and was discarded on close — its text. Kept in memory
+ * only, per window, like a browser's; capped so it cannot grow without bound.
+ */
+export interface ClosedTabRecord {
+  filePath?: string;
+  fileName: string;
+  content: string;
+  language: Language;
+}
+const CLOSED_TAB_LIMIT = 20;
+const closedTabs: ClosedTabRecord[] = [];
+
 export const useTabsStore = defineStore('tabs', {
   state: (): PersistedState => loadPersisted(),
   getters: {
@@ -336,6 +351,16 @@ export const useTabsStore = defineStore('tabs', {
       const idx = this.tabs.findIndex((t) => t.id === id);
       if (idx === -1) return;
       const closed = this.tabs[idx];
+      // A blank untitled tab has nothing worth bringing back.
+      if (closed && (closed.filePath || closed.content.trim())) {
+        closedTabs.push({
+          filePath: closed.filePath,
+          fileName: closed.fileName,
+          content: closed.content,
+          language: closed.language,
+        });
+        if (closedTabs.length > CLOSED_TAB_LIMIT) closedTabs.shift();
+      }
       this.tabs.splice(idx, 1);
       if (this.activeId === id) {
         this.activeId = this.tabs[idx]?.id ?? this.tabs[idx - 1]?.id ?? '';
@@ -356,6 +381,13 @@ export const useTabsStore = defineStore('tabs', {
     },
     activate(id: string) {
       this.activeId = id;
+    },
+    /** The most recently closed tab, removed from the reopen stack. */
+    popClosedTab(): ClosedTabRecord | undefined {
+      return closedTabs.pop();
+    },
+    hasClosedTabs(): boolean {
+      return closedTabs.length > 0;
     },
     /** #86 — move tab `tabId` to `intendedIndex` (the position in the list
      *  where the user wants it dropped). Handles the shift caused by removing

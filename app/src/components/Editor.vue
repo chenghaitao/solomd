@@ -35,6 +35,15 @@ import {
   type FoldAnchor,
   type HeadingSpan,
 } from '../lib/heading-fold';
+import {
+  EDITOR_COMMANDS,
+  MARKDOWN_ONLY_COMMANDS,
+  deleteWord as deleteWordEdit,
+  selectLine as selectLineRange,
+  selectWord as selectWordRange,
+  shiftHeading,
+  type EditorCommand,
+} from '../lib/editor-commands';
 import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights, offsetAtPoint } from '../lib/textarea-metrics';
 import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
@@ -58,7 +67,7 @@ import { tagAutocompleteExtension, tagComplete } from '../lib/cm-tag-autocomplet
 import { citationsExtension, citationCompleteSource } from '../lib/cm-citations';
 import { autocompletion } from '@codemirror/autocomplete';
 import { aiRewriteExtension } from '../lib/cm-ai-rewrite';
-import { combosFor, toCodeMirrorKey, eventToCombo, resolveBindings } from '../lib/keybindings';
+import { cmKeyOwnedByApp, combosFor, toCodeMirrorKey, eventToCombo, resolveBindings } from '../lib/keybindings';
 import {
   docParagraphStarts,
   nextParagraphStart,
@@ -210,6 +219,19 @@ const activeLineCompartment = new Compartment();
 const fontSizeCompartment = new Compartment();
 // #180 — the AI-rewrite chord is user-bindable; keep it reconfigurable.
 const aiKeyCompartment = new Compartment();
+// B4 — CodeMirror's own default/search keymap, minus every chord an app-level
+// shortcut owns (see `cmKeyOwnedByApp`). Reconfigured when bindings change.
+const baseKeymapCompartment = new Compartment();
+function baseKeymap() {
+  const overrides = { ...settings.keybindings };
+  return keymap.of(
+    [...defaultKeymap, ...searchKeymap].filter(
+      // #296 — Mod-i is CodeMirror's selectParentSyntax; it would widen the
+      // selection to the whole paragraph before Italic ran.
+      (b) => b.key !== 'Mod-i' && !cmKeyOwnedByApp(b, overrides),
+    ),
+  );
+}
 const richCompartment = new Compartment();
 const spellCheckCompartment = new Compartment();
 const focusCompartment = new Compartment();
@@ -3627,10 +3649,10 @@ function buildExtensions() {
           incrementalFindScroll,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ]),
-    // #296 — Mod-i is CodeMirror's selectParentSyntax. The app-level Italic
-    // shortcut listens on window, so CodeMirror would run first and widen the
-    // selection to the whole paragraph before it got italicised.
-    keymap.of([...defaultKeymap.filter((b) => b.key !== 'Mod-i'), ...historyKeymap, ...searchKeymap, indentWithTab]),
+    // App-owned chords are filtered out of CodeMirror's keymap (baseKeymap):
+    // the app shortcut listens on window, after CodeMirror has already acted.
+    baseKeymapCompartment.of(baseKeymap()),
+    keymap.of([...historyKeymap, indentWithTab]),
     lineNumCompartment.of(settings.showLineNumbers ? lineNumbers() : []),
     wrapCompartment.of(settings.wordWrap ? EditorView.lineWrapping : []),
     langCompartment.of(
@@ -3747,9 +3769,11 @@ onMounted(() => {
   // the first attempt silently no-op on the plain editors.)
   window.addEventListener('solomd:transform-case', onTransformCase as EventListener);
   window.addEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
+  window.addEventListener('solomd:editor-command', onEditorCommand as EventListener);
   cleanupTransformCase = () => {
     window.removeEventListener('solomd:transform-case', onTransformCase as EventListener);
     window.removeEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
+    window.removeEventListener('solomd:editor-command', onEditorCommand as EventListener);
   };
 
   if (usePlainWindowsEditor) {
@@ -3942,6 +3966,75 @@ function onFormatMarkdown(e: Event) {
     el.scrollTop = keepScroll;
     emitPlainCursorAndSelection();
   });
+}
+
+/**
+ * B4 — the Typora-style commands: select word / line, delete word, jump to
+ * selection, heading level up / down / to paragraph.
+ *
+ * Same shape as `onFormatMarkdown`: lib/editor-commands.ts decides the range
+ * or the edit from the text and the selection, and each of the three editors
+ * only reads its selection and applies the result. The plain editors work in
+ * whole-document offsets (`plainAbsoluteSelection` / `selectPlainRange`), so
+ * the block and flat textareas share one branch.
+ */
+function onEditorCommand(e: Event) {
+  const cmd = ((e as CustomEvent).detail || {}).cmd as EditorCommand;
+  if (!EDITOR_COMMANDS.includes(cmd)) return;
+  if (props.tab.id !== tabs.activeId) return;
+  if (MARKDOWN_ONLY_COMMANDS.has(cmd) && props.tab.language !== 'markdown') return;
+
+  const headingMode = (c: EditorCommand) =>
+    c === 'headingPromote' ? 'promote' : c === 'headingDemote' ? 'demote' : 'paragraph';
+
+  if (!usePlainWindowsEditor) {
+    if (!view) return;
+    const v = view;
+    const doc = v.state.doc.toString();
+    const sel = v.state.selection.main;
+    if (cmd === 'jumpToSelection') {
+      v.dispatch({ effects: EditorView.scrollIntoView(sel, { y: 'center' }) });
+    } else if (cmd === 'selectWord' || cmd === 'selectLine') {
+      const r = cmd === 'selectWord' ? selectWordRange(doc, sel.from, sel.to) : selectLineRange(doc, sel.from, sel.to);
+      if (r) v.dispatch({ selection: { anchor: r.from, head: r.to }, scrollIntoView: true, userEvent: 'select' });
+    } else {
+      const edit = cmd === 'deleteWord'
+        ? deleteWordEdit(doc, sel.from, sel.to)
+        : shiftHeading(doc, sel.from, sel.to, headingMode(cmd));
+      if (edit) {
+        v.dispatch({
+          changes: { from: edit.from, to: edit.to, insert: edit.insert },
+          selection: { anchor: edit.selFrom, head: edit.selTo },
+          scrollIntoView: true,
+          userEvent: cmd === 'deleteWord' ? 'delete' : 'input.format',
+        });
+      }
+    }
+    v.focus();
+    return;
+  }
+
+  const sel = plainAbsoluteSelection();
+  if (!sel) return;
+  // The flat textarea is the document; in live edit the blocks are slices of
+  // plainText, which every block edit keeps current.
+  const doc = plainLiveEnabled.value ? plainText.value || '' : plainEditor.value?.value ?? plainText.value ?? '';
+  if (cmd === 'jumpToSelection') {
+    selectPlainRange(sel.from, sel.to, true);
+    return;
+  }
+  if (cmd === 'selectWord' || cmd === 'selectLine') {
+    const r = cmd === 'selectWord' ? selectWordRange(doc, sel.from, sel.to) : selectLineRange(doc, sel.from, sel.to);
+    if (r) selectPlainRange(r.from, r.to, true);
+    return;
+  }
+  const edit = cmd === 'deleteWord'
+    ? deleteWordEdit(doc, sel.from, sel.to)
+    : shiftHeading(doc, sel.from, sel.to, headingMode(cmd));
+  if (!edit) return;
+  recordPlainHistory();
+  applyPlainContent(doc.slice(0, edit.from) + edit.insert + doc.slice(edit.to), edit.selTo);
+  nextTick(() => selectPlainRange(edit.selFrom, edit.selTo, true));
 }
 
 /**
@@ -4303,6 +4396,13 @@ watch(
   (key) => {
     if (IS_APP_STORE_BUILD) return;
     view?.dispatch({ effects: aiKeyCompartment.reconfigure(aiRewriteExtension(key)) });
+  },
+);
+
+watch(
+  () => JSON.stringify(settings.keybindings),
+  () => {
+    view?.dispatch({ effects: baseKeymapCompartment.reconfigure(baseKeymap()) });
   },
 );
 
