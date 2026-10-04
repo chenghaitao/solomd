@@ -785,7 +785,10 @@ const liveEditTheme = EditorView.theme({
   // readable through the highlight. (The same fix already lives in
   // cm-live-preview.ts — the earlier patches only covered that mode, not
   // this one, which is the WYSIWYG "live edit" the reporters actually use.)
-  '.cm-selectionLayer': { zIndex: '2 !important' },
+  // #368 — raised above the text, the selection rectangles would intercept
+  // clicks inside the selection (CodeMirror never sees the mousedown, so a
+  // click can't collapse it — fatal after Select All). Keep it click-through.
+  '.cm-selectionLayer': { zIndex: '2 !important', pointerEvents: 'none' },
   '.cm-selectionBackground': {
     backgroundColor: 'rgba(255,159,64,0.45) !important',
   },
