@@ -329,6 +329,9 @@ interface Settings {
   // (the default). Off, the two panes are independent — no scroll sync, and
   // the preview only re-renders from what was last saved to disk.
   splitLiveSync: boolean;
+  // #367: editor share of the split view, in percent (the preview gets the
+  // rest). Dragging the divider sets it; double-click resets to 50.
+  splitRatio: number;
   // #282: show only these file extensions in the Explorer tree (lower-case,
   // no dot; '' is the no-extension bucket). Empty = show everything. It
   // persists, so the tree carries a permanent banner whenever it is set —
@@ -685,6 +688,7 @@ function defaults(): Settings {
     explorerSortByFolder: {} as Record<string, TreeSortMode>,
     distinctSplitPanes: false,
     splitLiveSync: true,
+    splitRatio: 50,
     markdownHardBreaks: true,
     spellcheckLang: 'en_US',
     smartQuotes: false,
@@ -756,6 +760,14 @@ function mergePdfDefaults(saved: unknown): PdfDefaults {
   };
 }
 
+/** #367 — keep either side of the split at least a fifth of the width. */
+export const SPLIT_RATIO_MIN = 20;
+export const SPLIT_RATIO_MAX = 80;
+export function clampSplitRatio(n: unknown): number {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 50;
+  return Math.round(Math.max(SPLIT_RATIO_MIN, Math.min(SPLIT_RATIO_MAX, v)) * 10) / 10;
+}
+
 function load(): Settings {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -775,6 +787,7 @@ function load(): Settings {
           if (isTreeSortMode(v)) merged.explorerSortByFolder[k] = v;
         }
       }
+      merged.splitRatio = clampSplitRatio(merged.splitRatio);
       merged.keybindings = {};
       if (parsed.keybindings && typeof parsed.keybindings === 'object') {
         for (const [k, v] of Object.entries(parsed.keybindings)) {
@@ -1452,6 +1465,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleSplitLiveSync() {
       this.splitLiveSync = !this.splitLiveSync;
+      this.persist();
+    },
+    setSplitRatio(n: number) {
+      this.splitRatio = clampSplitRatio(n);
       this.persist();
     },
     toggleDistinctSplitPanes() {

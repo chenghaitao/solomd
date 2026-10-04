@@ -2,7 +2,8 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import Editor from './Editor.vue';
 import Preview from './Preview.vue';
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore, clampSplitRatio, SPLIT_RATIO_MIN, SPLIT_RATIO_MAX } from '../stores/settings';
+import { useI18n } from '../i18n';
 import { useTilesStore } from '../stores/tiles';
 import type { Tab } from '../types';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
@@ -19,6 +20,7 @@ const emit = defineEmits<{
 
 const settings = useSettingsStore();
 const tiles = useTilesStore();
+const { t } = useI18n();
 
 const editorRef = ref<InstanceType<typeof Editor> | null>(null);
 const previewRef = ref<InstanceType<typeof Preview> | null>(null);
@@ -79,10 +81,93 @@ function gotoLine(line: number) {
   }
 }
 
+// ---- #367 split divider ----
+// Editor and preview both on screen → the divider between them is live and
+// the editor takes `splitRatio`% of the width. Pointer events, not HTML5 DnD:
+// the webview's native drag-drop handler swallows `draggable` drags.
+const isSplit = computed(() => showEditor.value && showPreview.value);
+const contentEl = ref<HTMLElement | null>(null);
+// Live value while dragging; committed (and persisted) on pointerup so a drag
+// writes localStorage once instead of on every pointermove.
+const dragRatio = ref<number | null>(null);
+const effectiveRatio = computed(() => dragRatio.value ?? settings.splitRatio);
+const editorPaneStyle = computed(() =>
+  isSplit.value ? { flex: `0 0 ${effectiveRatio.value}%` } : undefined,
+);
+
+function relayoutAfterResize() {
+  window.dispatchEvent(new CustomEvent('solomd:relayout'));
+}
+
+// Ends the drag in progress, if any (also called on unmount).
+let endDividerDrag: (() => void) | null = null;
+
+function onDividerPointerDown(e: PointerEvent) {
+  if (e.button !== 0 || !contentEl.value) return;
+  e.preventDefault();
+  endDividerDrag?.();
+  const handle = e.currentTarget as HTMLElement;
+  const rect = contentEl.value.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  try { handle.setPointerCapture(e.pointerId); } catch {}
+  handle.focus({ preventScroll: true });
+  dragRatio.value = settings.splitRatio;
+  document.body.classList.add('split-divider--dragging');
+
+  const onMove = (ev: PointerEvent) => {
+    if (ev.pointerId !== e.pointerId) return;
+    dragRatio.value = clampSplitRatio(((ev.clientX - rect.left) / rect.width) * 100);
+  };
+  // Listen on window, not just the captured handle, and treat a lost capture
+  // as the end too: dragging past the clamp onto the file tree, Chrome was
+  // seen dropping the capture right before pointerup and delivering the up to
+  // the tree — a handle-only listener then left the drag stuck on.
+  const onEnd = () => {
+    endDividerDrag = null;
+    window.removeEventListener('pointermove', onMove, true);
+    window.removeEventListener('pointerup', onEnd, true);
+    window.removeEventListener('pointercancel', onEnd, true);
+    handle.removeEventListener('lostpointercapture', onEnd);
+    document.body.classList.remove('split-divider--dragging');
+    const final = dragRatio.value;
+    dragRatio.value = null;
+    if (final != null && final !== settings.splitRatio) settings.setSplitRatio(final);
+    relayoutAfterResize();
+  };
+  endDividerDrag = onEnd;
+  window.addEventListener('pointermove', onMove, true);
+  window.addEventListener('pointerup', onEnd, true);
+  window.addEventListener('pointercancel', onEnd, true);
+  handle.addEventListener('lostpointercapture', onEnd);
+}
+
+function resetSplitRatio() {
+  settings.setSplitRatio(50);
+  relayoutAfterResize();
+}
+
+function onDividerKeydown(e: KeyboardEvent) {
+  const step = e.shiftKey ? 10 : 2;
+  let next: number | null = null;
+  if (e.key === 'ArrowLeft') next = settings.splitRatio - step;
+  else if (e.key === 'ArrowRight') next = settings.splitRatio + step;
+  else if (e.key === 'Home') next = SPLIT_RATIO_MIN;
+  else if (e.key === 'End') next = SPLIT_RATIO_MAX;
+  else if (e.key === 'Enter') next = 50;
+  if (next == null) return;
+  e.preventDefault();
+  settings.setSplitRatio(next);
+  relayoutAfterResize();
+}
+
 // ---- Pane-scoped scroll sync ----
 let syncEditorScroll: (() => void) | null = null;
 let syncPreviewScroll: (() => void) | null = null;
 let syncGuard = false;
+// Pane width changes (divider drag, sidebar resize, window resize) reflow both
+// panes, so the line <-> pixel mapping the last scroll established is stale.
+// Re-run the editor -> preview sync once per frame while the size changes.
+let resizeObserver: ResizeObserver | null = null;
 
 function getPreviewElementsByLine(preview: HTMLElement): Array<{ line: number; el: HTMLElement }> {
   const nodes = preview.querySelectorAll<HTMLElement>('[data-source-line]');
@@ -127,6 +212,8 @@ function bindScrollSync() {
   if (syncPreviewScroll) syncPreviewScroll();
   syncEditorScroll = null;
   syncPreviewScroll = null;
+  resizeObserver?.disconnect();
+  resizeObserver = null;
 
   if (settings.viewMode !== 'split' || !settings.splitLiveSync) return;
 
@@ -254,6 +341,31 @@ function bindScrollSync() {
 
   editor.addEventListener('scroll', onEditorScroll, { passive: true });
   preview.addEventListener('scroll', onPreviewScroll, { passive: true });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    let raf = 0;
+    let first = true;
+    resizeObserver = new ResizeObserver(() => {
+      // The initial callback fires on observe(); nothing has reflowed yet.
+      if (first) { first = false; return; }
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (activePane) return;
+        // At the very top the anchor math lands on the first heading, not on
+        // the preview's own top padding — keep both panes flush instead.
+        if (editor.scrollTop <= 0) {
+          syncGuard = true;
+          preview.scrollTop = 0;
+          requestAnimationFrame(() => { syncGuard = false; });
+          return;
+        }
+        onEditorScroll();
+      });
+    });
+    resizeObserver.observe(editor);
+    resizeObserver.observe(preview);
+  }
   syncEditorScroll = () => {
     editor.removeEventListener('scroll', onEditorScroll);
     for (const ev of intentEvents) editor.removeEventListener(ev, editorIntent);
@@ -344,6 +456,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   syncEditorScroll?.();
   syncPreviewScroll?.();
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  document.body.classList.remove('split-divider--dragging');
   window.removeEventListener('solomd:outline-goto', onOutlineGotoEvent);
   window.removeEventListener('solomd:insert-markdown', onInsertMarkdownEvent);
   window.removeEventListener('solomd:insert-image-path', onInsertImagePathEvent);
@@ -452,12 +567,13 @@ function onPreviewSearchEvent(e: Event) {
        the preview a shade; it only applies when BOTH panes are on screen,
        because there is nothing to tell apart otherwise. -->
   <div
+    ref="contentEl"
     class="pane-content"
     :class="{
       'pane-content--distinct': settings.distinctSplitPanes && showEditor && showPreview,
     }"
   >
-    <div class="pane pane--editor" v-if="showEditor && tab">
+    <div class="pane pane--editor" v-if="showEditor && tab" :style="editorPaneStyle">
       <Editor
         :key="editorImplementationKey"
         ref="editorRef"
@@ -469,6 +585,23 @@ function onPreviewSearchEvent(e: Event) {
         @selection="onSelection"
       />
     </div>
+    <!-- #367 — draggable divider between editor and preview. -->
+    <div
+      v-if="isSplit && tab"
+      class="split-divider"
+      :class="{ 'split-divider--active': dragRatio != null }"
+      role="separator"
+      aria-orientation="vertical"
+      tabindex="0"
+      :aria-label="t('settings.splitDividerLabel')"
+      :aria-valuenow="Math.round(effectiveRatio)"
+      :aria-valuemin="SPLIT_RATIO_MIN"
+      :aria-valuemax="SPLIT_RATIO_MAX"
+      :title="t('rightSidebar.dragToResize')"
+      @pointerdown="onDividerPointerDown"
+      @dblclick="resetSplitRatio"
+      @keydown="onDividerKeydown"
+    />
     <div class="pane pane--preview" v-if="showPreview && tab">
       <Preview
         ref="previewRef"
@@ -498,5 +631,53 @@ function onPreviewSearchEvent(e: Event) {
 }
 .pane--editor + .pane--preview {
   border-left: 1px solid var(--border);
+}
+/* The divider is the line between the panes now; without this the preview
+   host's own left border doubles it. */
+.split-divider + .pane--preview :deep(.preview-host) {
+  border-left: none;
+}
+/* #367 — 1px of layout (the line between the panes) with a 9px invisible
+   hit zone over it, so the editor's `splitRatio`% stays exact. */
+.split-divider {
+  flex: 0 0 1px;
+  position: relative;
+  z-index: 6;
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+  transition: background 0.15s;
+}
+.split-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+.split-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.split-divider:hover,
+.split-divider:focus-visible,
+.split-divider--active {
+  background: var(--accent);
+}
+.split-divider:hover::after,
+.split-divider:focus-visible::after,
+.split-divider--active::after {
+  opacity: 0.9;
 }
 </style>

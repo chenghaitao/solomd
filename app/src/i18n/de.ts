@@ -359,6 +359,7 @@ export const de: I18n = {
     distinctSplitPanesHint: 'Gibt der Vorschau in der geteilten Ansicht einen leicht anderen Hintergrund, damit die beiden Bereiche nicht wie eine einzige breite Spalte wirken.',
     splitLiveSync: 'Geteilte Ansicht synchron halten',
     splitLiveSyncHint: 'An: Die Vorschau aktualisiert sich beim Tippen und scrollt mit dem Editor. Aus: Beide Bereiche scrollen unabhängig, und die Vorschau wird erst beim Speichern aktualisiert.',
+    splitDividerLabel: 'Breite von Editor und Vorschau anpassen',
     markdownHardBreaks: 'Einzelne Zeilenumbrüche als Umbruch rendern',
     markdownHardBreaksHint: 'Wie Typora: Einmal Enter erzeugt in Vorschau und allen Exporten einen Zeilenumbruch. Aus = striktes Markdown (einzelne Umbrüche werden zu einem Absatz zusammengefasst; Leerzeile trennt Absätze).',
     smartQuotes: 'Typografische Anführungszeichen',

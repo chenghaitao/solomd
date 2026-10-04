@@ -361,6 +361,7 @@ export const zh: I18n = {
     distinctSplitPanesHint: '分栏时给预览区一个略微不同的底色，两边不再长得一模一样、连成一整片。',
     splitLiveSync: '双栏实时同步',
     splitLiveSyncHint: '开启：预览随输入实时更新，并与编辑区同步滚动。关闭：两栏各自滚动，保存后预览才刷新。',
+    splitDividerLabel: '调整编辑区和预览区的宽度',
     markdownHardBreaks: '单个换行渲染为换行',
     markdownHardBreaksHint: '与 Typora 一致:按一次回车,预览和所有导出都换行。关闭 = 严格 Markdown(单个换行并入同一段落,需空行分段)。',
     smartQuotes: '智能引号',

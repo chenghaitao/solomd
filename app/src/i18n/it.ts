@@ -359,6 +359,7 @@ export const it: I18n = {
     distinctSplitPanesHint: 'Nella vista divisa dà all’anteprima uno sfondo leggermente diverso, così i due riquadri non sembrano un’unica colonna.',
     splitLiveSync: 'Mantieni sincronizzata la vista divisa',
     splitLiveSyncHint: 'Attivo: l’anteprima si aggiorna mentre scrivi e scorre con l’editor. Disattivo: i due riquadri scorrono in modo indipendente e l’anteprima si aggiorna solo al salvataggio.',
+    splitDividerLabel: 'Ridimensiona editor e anteprima',
     markdownHardBreaks: 'Renderizza i singoli a capo come interruzioni di riga',
     markdownHardBreaksHint: 'Come Typora: un solo Invio crea un a capo nell\'anteprima e in tutte le esportazioni. Disattivato = Markdown rigoroso (gli a capo singoli si fondono nel paragrafo; una riga vuota separa).',
     smartQuotes: 'Virgolette tipografiche',
