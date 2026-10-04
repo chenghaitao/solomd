@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue';
-import { EditorState, Compartment } from '@codemirror/state';
+import { EditorState, Compartment, Prec } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, search, openSearchPanel, getSearchQuery, setSearchQuery } from '@codemirror/search';
@@ -244,6 +244,19 @@ if (!(globalThis as { __solomdVimEx?: boolean }).__solomdVimEx) {
   // `:q` / `:quit` — close the tab (unsaved changes trigger the confirm dialog).
   Vim.defineEx('quit', 'q', () => menu('file.closeTab'));
 }
+
+// #373 — Vim must see keys before every other keymap. The markdown keymap
+// (Enter → insertNewlineContinueMarkup) sits at Prec.high and defaultKeymap
+// (Enter → insertNewlineAndIndent) ran ahead of vim() too, so Enter in Normal
+// mode inserted a newline instead of moving to the next line's first
+// non-blank. codemirror-vim's README requires it to come first; Prec.highest
+// does that regardless of where the compartment sits. In Insert mode Vim
+// declines keys it has no mapping for (Enter, Tab, Mod-*), so list
+// continuation, indentation, autocomplete and app shortcuts still run.
+function vimExtension() {
+  return Prec.highest(vim());
+}
+
 // `?forcePlain` query flag forces the Windows plain-textarea editor on any OS —
 // a dev/test hook so the Windows-only path can be exercised on macOS/Linux. It
 // can only be set programmatically (the Tauri shell has no URL bar), so it is
@@ -3241,7 +3254,7 @@ function buildExtensions() {
       windowsImeSafeMode ? [] : richExtensionsFor(props.tab),
     ),
     themeCompartment.of(cmThemeFor(settings.theme, !!settings.customCssPath)),
-    vimCompartment.of(settings.vimMode ? vim() : []),
+    vimCompartment.of(settings.vimMode ? vimExtension() : []),
     fontSizeCompartment.of(fontSizeTheme(settings.fontSize, settings.fontFamily)),
     spellCheckCompartment.of(spellCheckExt(props.spellCheck)),
     focusCompartment.of(props.focusMode ? focusModeExtension() : []),
@@ -3975,7 +3988,7 @@ watch(
 watch(
   () => settings.vimMode,
   (v) => {
-    view?.dispatch({ effects: vimCompartment.reconfigure(v ? vim() : []) });
+    view?.dispatch({ effects: vimCompartment.reconfigure(v ? vimExtension() : []) });
   }
 );
 
