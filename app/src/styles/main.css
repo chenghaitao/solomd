@@ -951,6 +951,18 @@ mark {
   body.solomd-printing .solomd-print-content {
     overflow-wrap: break-word;
   }
+  /* #370 — and for table cells. `break-word` above doesn't help there: it
+   * leaves a cell's min-content width at its longest unbreakable run, so an
+   * auto-layout table holding a long number / identifier / URL grows past
+   * the paper and the right side is cut off. `anywhere` (and the older
+   * `word-break: break-word` for WebKit) lets such a run break, so the table
+   * fits the page. Text with normal break points is laid out as before, and
+   * short cells keep `.cell-nowrap` (#271). */
+  body.solomd-printing .solomd-print-content th,
+  body.solomd-printing .solomd-print-content td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   /* #178: paper can't scroll — always wrap code lines in print/PDF so
    * anything wider than the page isn't silently cut off. Applies
    * regardless of the on-screen codeBlockWrap setting. */
