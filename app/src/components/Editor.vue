@@ -58,7 +58,14 @@ import { tagAutocompleteExtension, tagComplete } from '../lib/cm-tag-autocomplet
 import { citationsExtension, citationCompleteSource } from '../lib/cm-citations';
 import { autocompletion } from '@codemirror/autocomplete';
 import { aiRewriteExtension } from '../lib/cm-ai-rewrite';
-import { combosFor, toCodeMirrorKey } from '../lib/keybindings';
+import { combosFor, toCodeMirrorKey, eventToCombo, resolveBindings } from '../lib/keybindings';
+import {
+  docParagraphStarts,
+  nextParagraphStart,
+  paragraphRangeInBlock,
+  prevParagraphStart,
+  selectionEnds,
+} from '../lib/plain-nav';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { slashCommandsExtension } from '../lib/cm-slash-commands';
 import { useI18n } from '../i18n';
@@ -2177,6 +2184,7 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
   if (plainComposing.value) return;
   if (handleAutocompleteKeydown(event)) return;
   if (handlePlainKeydownShared(event)) return;
+  if (handlePlainCrossBlockNav(event)) return;
   // Block-boundary arrow navigation (#155). Each block is its own <textarea>,
   // so the native caret dead-ends at the block edge — ↑/↓/←/→ can't cross into
   // the neighbouring block and the cursor appears stuck. Detect the edge and
@@ -2241,11 +2249,13 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
   // experience as Backspace/Delete "时灵时不灵". We fold the deletion onto the
   // full source instead: deleting the single separator char before/after the
   // block transparently removes a blank line or joins two paragraphs, exactly
-  // as a single whole-document <textarea> would. (Plain key only — let the
-  // browser keep word-delete / selection-delete.)
+  // as a single whole-document <textarea> would. Ctrl+Backspace / Ctrl+Delete
+  // (word delete) take the same step at the boundary, where the block has no
+  // word left to delete; inside the block, and for a selection, the browser
+  // keeps its own word-delete / selection-delete.
   if (
     (event.key === 'Backspace' || event.key === 'Delete') &&
-    !event.ctrlKey && !event.metaKey && !event.altKey
+    !event.metaKey && !event.altKey
   ) {
     const el = event.target as HTMLTextAreaElement;
     const block = plainBlocks.value[index];
@@ -2652,9 +2662,13 @@ let plainSwallowClick = false;
 
 function onPlainLiveHostMouseDown(event: MouseEvent) {
   const host = plainLiveHost.value;
-  if (!host || event.button !== 0 || event.shiftKey || plainSelectAll.value) return;
+  if (!host || event.button !== 0) return;
   const target = event.target as HTMLElement | null;
   if (target?.closest('button, input, .plain-find')) return;
+  const clicks = plainClickCount(event);
+  if (maybeSelectPlainParagraph(event, clicks)) return;
+  if (maybeExtendPlainSelectionByClick(event)) return;
+  if (event.shiftKey || plainSelectAll.value) return;
   const start = plainDocOffsetAtPoint(event.clientX, event.clientY);
   const onGap = target === host;
   if (start) {
@@ -2852,6 +2866,199 @@ function enterPlainRangeSelection(anchor: number, head: number) {
     plainSelectAllPending = false;
     emitPlainCursorAndSelection();
   });
+}
+
+// ── Cross-block keyboard navigation (Windows live editor) ────────────────
+// Each block is its own <textarea>, so the browser's Ctrl+Home/End and
+// Ctrl+↑/↓ (and their Shift forms) stopped at the edge of the current block.
+// They are done here against document offsets instead: a caret move lands in
+// whichever block holds the target, and a selection that leaves the block
+// moves into the merged single-textarea view that select-all and cross-block
+// drags use (enterPlainRangeSelection), where every edit command works.
+
+/** The document as blocks, whatever the view (the merged view is one block). */
+function plainDocBlocks() {
+  return splitPlainMarkdownBlocks(plainText.value || '');
+}
+
+/** A block start inside a folded section is not a place the caret can go. */
+function plainOffsetFolded(abs: number): boolean {
+  return plainFoldRanges.value.some((r) => abs > r.from && abs < r.to);
+}
+
+/** The visible document's first and last caret positions. */
+function plainDocEdges(): { start: number; end: number } {
+  const blocks = plainDocBlocks();
+  let end = (plainText.value || '').length;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (plainOffsetFolded(b.start)) continue;
+    end = b.start + b.text.length;
+    break;
+  }
+  return { start: 0, end };
+}
+
+function plainParagraphStarts(): number[] {
+  return docParagraphStarts(plainDocBlocks()).filter((s) => !plainOffsetFolded(s));
+}
+
+/** The active textarea's selection as document offsets. */
+function plainAbsSelectionEnds(): { anchor: number; head: number } | null {
+  const el = plainBlockEditors.value[plainActiveBlock.value];
+  const block = plainBlocks.value[plainActiveBlock.value];
+  if (!el || !block) return null;
+  const { anchor, head } = selectionEnds(el.selectionStart ?? 0, el.selectionEnd ?? 0, el.selectionDirection);
+  return { anchor: block.start + anchor, head: block.start + head };
+}
+
+/** Scroll the live host just enough to show document offset `abs`. */
+function plainRevealAbs(abs: number) {
+  const host = plainLiveHost.value;
+  const el = plainBlockEditors.value[plainActiveBlock.value];
+  const block = plainBlocks.value[plainActiveBlock.value];
+  if (!host || !el || !block) return;
+  autoSizePlainBlock(el);
+  const local = Math.max(0, Math.min(abs - block.start, el.value.length));
+  let caretY: number;
+  try {
+    caretY = caretTopPx(el, el.value, local);
+  } catch {
+    caretY = 0;
+  }
+  const y = el.getBoundingClientRect().top - host.getBoundingClientRect().top + plainPaddingTopPx(el) + caretY;
+  const lh = plainLineHeightPx();
+  const margin = Math.min(lh * 2, host.clientHeight / 4);
+  if (y < margin) host.scrollTop = Math.max(0, host.scrollTop + y - margin);
+  else if (y + lh > host.clientHeight - margin) host.scrollTop += y + lh - host.clientHeight + margin;
+}
+
+/** Collapse the caret at document offset `abs`, in whichever block holds it. */
+function plainMoveCaretAbs(abs: number) {
+  if (plainSelectAll.value) {
+    const el = plainBlockEditors.value[plainActiveBlock.value];
+    if (!el) return;
+    el.setSelectionRange(abs, abs);
+    maybeExitPlainSelectAll();
+  } else {
+    plainSetCaret(abs);
+  }
+  // After the activation's own nextTick has placed the caret.
+  nextTick(() => {
+    plainRevealAbs(abs);
+    emitPlainCursorAndSelection();
+  });
+}
+
+/** Select `anchor`→`head` (document offsets), across blocks if need be. */
+function plainSelectAbs(anchor: number, head: number) {
+  const el = plainBlockEditors.value[plainActiveBlock.value];
+  const block = plainBlocks.value[plainActiveBlock.value];
+  if (!el || !block) return;
+  if (anchor === head) {
+    plainMoveCaretAbs(head);
+    return;
+  }
+  const lo = block.start;
+  const hi = block.start + el.value.length;
+  if (anchor >= lo && anchor <= hi && head >= lo && head <= hi) {
+    el.setSelectionRange(Math.min(anchor, head) - lo, Math.max(anchor, head) - lo, head < anchor ? 'backward' : 'forward');
+    plainRevealAbs(head);
+    emitPlainCursorAndSelection();
+    return;
+  }
+  enterPlainRangeSelection(anchor, head);
+  nextTick(() => plainRevealAbs(head));
+}
+
+/**
+ * Ctrl+Home/End, Ctrl+↑/↓ and their Shift forms across blocks. Declines (so
+ * the global handler runs instead) when the user has bound the chord to an
+ * action of their own (#180).
+ */
+function handlePlainCrossBlockNav(event: KeyboardEvent): boolean {
+  if (!event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (event.isComposing || event.keyCode === 229) return false;
+  const key = event.key;
+  if (key !== 'Home' && key !== 'End' && key !== 'ArrowUp' && key !== 'ArrowDown') return false;
+  const combo = eventToCombo(event);
+  if (combo && resolveBindings(settings.keybindings).has(combo)) return false;
+  const sel = plainAbsSelectionEnds();
+  if (!sel) return false;
+  event.preventDefault();
+  const edges = plainDocEdges();
+  const from = event.shiftKey
+    ? sel.head
+    : key === 'ArrowUp' || key === 'Home'
+      ? Math.min(sel.anchor, sel.head)
+      : Math.max(sel.anchor, sel.head);
+  let target: number;
+  if (key === 'Home') target = edges.start;
+  else if (key === 'End') target = edges.end;
+  else if (key === 'ArrowUp') target = prevParagraphStart(plainParagraphStarts(), from);
+  else target = nextParagraphStart(plainParagraphStarts(), from, edges.end);
+  if (event.shiftKey) plainSelectAbs(sel.anchor, target);
+  else plainMoveCaretAbs(target);
+  return true;
+}
+
+/**
+ * Triple-click in the active textarea selects the paragraph (block, list item,
+ * or one line of code) rather than whatever the browser calls a line — in a
+ * soft-wrapped paragraph that was a single visual row. The first click turns a
+ * rendered block into a textarea, which can reset the browser's click count,
+ * so the count is kept here too.
+ */
+let plainClickTrail: Array<{ t: number; x: number; y: number }> = [];
+function plainClickCount(event: MouseEvent): number {
+  const now = event.timeStamp || performance.now();
+  const last = plainClickTrail[plainClickTrail.length - 1];
+  if (!last || now - last.t > 500 || Math.abs(event.clientX - last.x) + Math.abs(event.clientY - last.y) > 8) {
+    plainClickTrail = [];
+  }
+  plainClickTrail.push({ t: now, x: event.clientX, y: event.clientY });
+  return Math.max(plainClickTrail.length, event.detail || 0);
+}
+
+function maybeSelectPlainParagraph(event: MouseEvent, clicks: number): boolean {
+  if (clicks !== 3 || event.shiftKey) return false;
+  const el = plainBlockEditors.value[plainActiveBlock.value];
+  if (!el || event.target !== el) return false;
+  const block = plainBlocks.value[plainActiveBlock.value];
+  if (!block) return false;
+  const abs = block.start + offsetAtPoint(el, el.value, event.clientX, event.clientY);
+  // The paragraph comes from the real block structure — in the merged view the
+  // textarea holds the whole document.
+  const owner = plainDocBlocks().find((b) => abs >= b.start && abs <= b.start + b.text.length);
+  if (!owner) return false;
+  const r = paragraphRangeInBlock(owner.text, abs - owner.start);
+  event.preventDefault();
+  el.focus({ preventScroll: true });
+  el.setSelectionRange(owner.start + r.from - block.start, owner.start + r.to - block.start);
+  emitPlainCursorAndSelection();
+  return true;
+}
+
+/**
+ * Shift+click in another block extends the selection from the caret to the
+ * click point, through the merged view. Within the active block the textarea
+ * does it natively.
+ */
+function maybeExtendPlainSelectionByClick(event: MouseEvent): boolean {
+  if (!event.shiftKey || plainSelectAll.value) return false;
+  const sel = plainAbsSelectionEnds();
+  const point = plainDocOffsetAtPoint(event.clientX, event.clientY);
+  if (!sel || !point || point.block === plainActiveBlock.value) return false;
+  event.preventDefault();
+  // The click that follows must not activate the clicked block.
+  plainSwallowClick = true;
+  const release = () => {
+    window.removeEventListener('mouseup', release);
+    setTimeout(() => { plainSwallowClick = false; }, 0);
+  };
+  window.addEventListener('mouseup', release);
+  enterPlainRangeSelection(sel.anchor, point.abs);
+  return true;
 }
 
 // ── Editor right-click menu (#210) ─────────────────────────────────────────
