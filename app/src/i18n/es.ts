@@ -156,6 +156,17 @@ export const es: I18n = {
     settings: 'Ajustes',
     help: 'Ayuda',
     insertNetworkImage: 'Imagen desde URL…',
+    open: "Abrir",
+    viewMode: "Modo de vista",
+    viewSource: "Código fuente",
+    viewSplit: "Dividido",
+    viewLive: "Edición en vivo",
+    viewPreview: "Vista previa",
+    viewReading: "Lectura",
+    aiMenu: "Más acciones de IA",
+    cleanAiMarks: "Quitar las marcas de formato generadas por IA",
+    livePreviewToggle: "Vista previa en vivo en el editor",
+    fitWidth: "Ajustar la vista previa al ancho de la ventana",
   },
   palette: {
     placeholder: 'Escribe un comando…',
@@ -1874,6 +1885,7 @@ export const es: I18n = {
       toggleTheme: 'Vista: Alternar tema',
       toggleLivePreview: 'Vista: Alternar vista previa en vivo / código fuente (Markdown)',
       toggleSpellCheck: 'Vista: Alternar corrector ortográfico',
+      toggleFitWidth: "Vista: alternar ajuste de ancho de la vista previa",
       toggleFocusMode: 'Vista: Alternar modo de enfoque',
       toggleTypewriter: 'Vista: Alternar modo máquina de escribir',
       slideshow: 'Presentar diapositivas',
@@ -1996,6 +2008,7 @@ export const es: I18n = {
     },
     pomodoro: {
       startLast: "Iniciar sesión de escritura",
+      open: "Sesión de escritura (Pomodoro)…",
     },
   },
 };

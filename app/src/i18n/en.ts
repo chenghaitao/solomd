@@ -156,6 +156,17 @@ export const en = {
     settings: 'Settings',
     help: 'Help',
     insertNetworkImage: 'Image from URL…',
+    open: "Open",
+    viewMode: "View mode",
+    viewSource: "Source",
+    viewSplit: "Split",
+    viewLive: "Live edit",
+    viewPreview: "Preview",
+    viewReading: "Reading",
+    aiMenu: "More AI actions",
+    cleanAiMarks: "Clear AI-generated formatting marks",
+    livePreviewToggle: "Live preview in the editor",
+    fitWidth: "Fit preview to window width",
   },
   palette: {
     placeholder: 'Type a command…',
@@ -1903,6 +1914,7 @@ export const en = {
       toggleTheme: 'View: Toggle Theme',
       toggleLivePreview: 'View: Toggle Live Preview / Raw Source (Markdown)',
       toggleSpellCheck: 'View: Toggle Spell Check',
+      toggleFitWidth: "View: Toggle Preview Fit Width",
       toggleFocusMode: 'View: Toggle Focus Mode',
       toggleTypewriter: 'View: Toggle Typewriter Mode',
       slideshow: 'Present Slideshow',
@@ -2025,6 +2037,7 @@ export const en = {
     },
     pomodoro: {
       startLast: "Start Writing Session (Zen)",
+      open: "Writing Session (Pomodoro)…",
     },
   },
 };

@@ -156,6 +156,17 @@ export const ko: I18n = {
     settings: '설정',
     help: '도움말',
     insertNetworkImage: 'URL에서 이미지…',
+    open: "열기",
+    viewMode: "보기 모드",
+    viewSource: "소스",
+    viewSplit: "분할",
+    viewLive: "실시간 편집",
+    viewPreview: "미리보기",
+    viewReading: "읽기 모드",
+    aiMenu: "AI 작업 더 보기",
+    cleanAiMarks: "AI가 생성한 서식 기호 지우기",
+    livePreviewToggle: "편집기에서 실시간 미리보기",
+    fitWidth: "미리보기를 창 너비에 맞추기",
   },
   palette: {
     placeholder: '명령어 입력…',
@@ -1874,6 +1885,7 @@ export const ko: I18n = {
       toggleTheme: '보기: 테마 전환',
       toggleLivePreview: '보기: 라이브 미리보기 / 원본 소스 전환 (Markdown)',
       toggleSpellCheck: '보기: 맞춤법 검사 토글',
+      toggleFitWidth: "보기: 미리보기 너비 맞춤 전환",
       toggleFocusMode: '보기: 집중 모드 토글',
       toggleTypewriter: '보기: 타자기 모드 토글',
       slideshow: '슬라이드쇼 시작',
@@ -1996,6 +2008,7 @@ export const ko: I18n = {
     },
     pomodoro: {
       startLast: "글쓰기 세션 시작",
+      open: "집중 세션(뽀모도로)…",
     },
   },
 };

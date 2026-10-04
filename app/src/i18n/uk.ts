@@ -156,6 +156,17 @@ export const uk: I18n = {
     settings: 'Налаштування',
     help: 'Довідка',
     insertNetworkImage: 'Зображення з URL…',
+    open: "Відкрити",
+    viewMode: "Режим перегляду",
+    viewSource: "Джерело",
+    viewSplit: "Розділений",
+    viewLive: "Редагування наживо",
+    viewPreview: "Попередній перегляд",
+    viewReading: "Читання",
+    aiMenu: "Інші дії ШІ",
+    cleanAiMarks: "Прибрати позначки форматування, згенеровані ШІ",
+    livePreviewToggle: "Попередній перегляд наживо в редакторі",
+    fitWidth: "Підігнати попередній перегляд під ширину вікна",
   },
   palette: {
     placeholder: 'Введіть команду…',
@@ -1891,6 +1902,7 @@ export const uk: I18n = {
       toggleTheme: 'Вигляд: Змінити тему',
       toggleLivePreview: 'Вигляд: Перемкнути живий перегляд / вихідний код (Markdown)',
       toggleSpellCheck: 'Вигляд: Перемкнути перевірку правопису',
+      toggleFitWidth: "Вигляд: перемкнути підгонку попереднього перегляду за шириною",
       toggleFocusMode: 'Вигляд: Перемкнути режим фокусування',
       toggleTypewriter: 'Вигляд: Перемкнути режим друкарської машинки',
       slideshow: 'Почати слайдшоу',
@@ -2013,6 +2025,7 @@ export const uk: I18n = {
     },
     pomodoro: {
       startLast: "Почати сеанс письма",
+      open: "Сеанс письма (Pomodoro)…",
     },
   },
 };

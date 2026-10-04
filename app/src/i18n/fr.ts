@@ -156,6 +156,17 @@ export const fr: I18n = {
     settings: 'Paramètres',
     help: 'Aide',
     insertNetworkImage: 'Image depuis une URL…',
+    open: "Ouvrir",
+    viewMode: "Mode d’affichage",
+    viewSource: "Source",
+    viewSplit: "Partagé",
+    viewLive: "Édition en direct",
+    viewPreview: "Aperçu",
+    viewReading: "Lecture",
+    aiMenu: "Autres actions IA",
+    cleanAiMarks: "Supprimer les marques de mise en forme générées par l’IA",
+    livePreviewToggle: "Aperçu en direct dans l’éditeur",
+    fitWidth: "Ajuster l’aperçu à la largeur de la fenêtre",
   },
   palette: {
     placeholder: 'Tapez une commande…',
@@ -1874,6 +1885,7 @@ export const fr: I18n = {
       toggleTheme: 'Affichage : Changer de thème',
       toggleLivePreview: 'Affichage : Basculer aperçu en direct / source brute (Markdown)',
       toggleSpellCheck: 'Affichage : Activer/désactiver la vérification orthographique',
+      toggleFitWidth: "Affichage : ajuster l’aperçu à la largeur",
       toggleFocusMode: 'Affichage : Activer/désactiver le mode focus',
       toggleTypewriter: 'Affichage : Activer/désactiver le mode machine à écrire',
       slideshow: 'Présenter le diaporama',
@@ -1996,6 +2008,7 @@ export const fr: I18n = {
     },
     pomodoro: {
       startLast: "Démarrer une session d’écriture",
+      open: "Session d’écriture (Pomodoro)…",
     },
   },
 };

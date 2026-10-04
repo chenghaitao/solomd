@@ -1978,17 +1978,9 @@ function onSelectPdfFont(v: string) {
           <h3 style="font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px;">
             {{ t('pomodoro.settingsHeading') }}
           </h3>
-          <label>
-            <input
-              type="checkbox"
-              :checked="settings.pomodoroShowControls"
-              @change="settings.togglePomodoroShowControls()"
-            />
-            {{ t('pomodoro.showControls') }}
-          </label>
-          <p style="font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.5;">
-            {{ withChord('pomodoro.showControlsHint', 'pomodoro.startLast') }}
-          </p>
+          <!-- bug/C2 — the "show controls in toolbar" switch went with the
+               toolbar chevron it controlled; sessions now start from the
+               command palette ("Writing Session (Pomodoro)…") or the chord. -->
           <label>
             <input
               type="checkbox"

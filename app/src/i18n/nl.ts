@@ -156,6 +156,17 @@ export const nl: I18n = {
     settings: 'Instellingen',
     help: 'Hulp',
     insertNetworkImage: 'Afbeelding van URL…',
+    open: "Openen",
+    viewMode: "Weergavemodus",
+    viewSource: "Bron",
+    viewSplit: "Gesplitst",
+    viewLive: "Live bewerken",
+    viewPreview: "Voorbeeld",
+    viewReading: "Lezen",
+    aiMenu: "Meer AI-acties",
+    cleanAiMarks: "Door AI gegenereerde opmaaktekens wissen",
+    livePreviewToggle: "Livevoorbeeld in de editor",
+    fitWidth: "Voorbeeld aanpassen aan vensterbreedte",
   },
   palette: {
     placeholder: 'Typ een opdracht…',
@@ -1891,6 +1902,7 @@ export const nl: I18n = {
       toggleTheme: 'Weergave: Thema wisselen',
       toggleLivePreview: 'Weergave: Livevoorbeeld / broncode wisselen (Markdown)',
       toggleSpellCheck: 'Weergave: Spellingcontrole in-/uitschakelen',
+      toggleFitWidth: "Weergave: voorbeeldbreedte aanpassen in-/uitschakelen",
       toggleFocusMode: 'Weergave: Focusmodus in-/uitschakelen',
       toggleTypewriter: 'Weergave: Typemachinemodus in-/uitschakelen',
       slideshow: 'Diavoorstelling presenteren',
@@ -2013,6 +2025,7 @@ export const nl: I18n = {
     },
     pomodoro: {
       startLast: "Schrijfsessie starten",
+      open: "Schrijfsessie (Pomodoro)…",
     },
   },
 };

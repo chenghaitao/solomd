@@ -156,6 +156,17 @@ export const sv: I18n = {
     settings: 'Inställningar',
     help: 'Hjälp',
     insertNetworkImage: 'Bild från URL…',
+    open: "Öppna",
+    viewMode: "Visningsläge",
+    viewSource: "Källa",
+    viewSplit: "Delad",
+    viewLive: "Liveredigering",
+    viewPreview: "Förhandsvisning",
+    viewReading: "Läsläge",
+    aiMenu: "Fler AI-åtgärder",
+    cleanAiMarks: "Rensa AI-genererade formateringstecken",
+    livePreviewToggle: "Liveförhandsvisning i redigeraren",
+    fitWidth: "Anpassa förhandsvisningen till fönsterbredden",
   },
   palette: {
     placeholder: 'Skriv ett kommando…',
@@ -1891,6 +1902,7 @@ export const sv: I18n = {
       toggleTheme: 'Vy: Växla tema',
       toggleLivePreview: 'Vy: Växla liveförhandsvisning / råkälla (Markdown)',
       toggleSpellCheck: 'Vy: Växla stavningskontroll',
+      toggleFitWidth: "Vy: växla förhandsvisning i fönsterbredd",
       toggleFocusMode: 'Vy: Växla fokusläge',
       toggleTypewriter: 'Vy: Växla skrivmaskinsläge',
       slideshow: 'Presentera bildspel',
@@ -2013,6 +2025,7 @@ export const sv: I18n = {
     },
     pomodoro: {
       startLast: "Starta skrivpass",
+      open: "Skrivpass (Pomodoro)…",
     },
   },
 };

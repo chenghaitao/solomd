@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue';
 import Icon from './Icons.vue';
 import BrandMark from './BrandMark.vue';
 import PomodoroPopover from './PomodoroPopover.vue';
@@ -21,7 +21,7 @@ import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { forceWinChromePreview, isIOS, isMacOS, isWindowsDesktop } from '../lib/platform';
+import { forceWinChromePreview, isIOS, isMacOS, isMobile, isWindowsDesktop } from '../lib/platform';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { EditorView } from '@codemirror/view';
 
@@ -72,6 +72,9 @@ function onToolbarActivate(e: Event): void {
   if (!sheetOpen.value || !isNarrow.value) return;
   const el = e.target as HTMLElement | null;
   if (el?.closest('[data-phone-more]')) return;
+  // A menu trigger: collapsing would move it out from under the menu it
+  // just anchored. The menu's own items are teleported, outside this bar.
+  if (el?.closest('[aria-haspopup]')) return;
   if (el?.closest('button, [role="menuitem"], a')) sheetOpen.value = false;
 }
 
@@ -102,8 +105,17 @@ function measureOverflow(): void {
   // and removing it only ever frees space — it cannot oscillate.
   barOverflows.value = el.scrollWidth > el.clientWidth + 1;
 }
-/** The phone layout always offers it; wider windows only when it's needed. */
-const showMore = computed(() => isNarrow.value || barOverflows.value);
+// bug/C2 — the desktop strip leaves Save As, Open externally, Focus,
+// Typewriter, Spell check, CJK proofread, Help, Settings and the theme switch
+// to the menu bar (plus the palette and their shortcuts). iOS and Android have
+// no menu bar and an iPhone no keyboard, so there those buttons stay, folded
+// into the "⋯" sheet. `?forceNoMenubar` previews that in a desktop dev build.
+const noMenuBar =
+  isMobile() ||
+  (import.meta.env.DEV && typeof location !== 'undefined' && location.search.includes('forceNoMenubar'));
+/** The phone layout always offers it; so does a build with no menu bar (the
+ *  sheet is where its extra buttons live); wider windows only when needed. */
+const showMore = computed(() => isNarrow.value || noMenuBar || barOverflows.value);
 const workspace = useWorkspaceStore();
 const tiles = useTilesStore();
 const files = useFiles();
@@ -119,7 +131,10 @@ const isMarkdown = computed(() => tabs.activeTab?.language === 'markdown');
 // make the bar background draggable. Windows / Linux keep native decorations
 // and get neither the pad nor the drag region. Computed once at module init
 // (platform doesn't change at runtime).
-const macTitleBar = isMacOS();
+// The `?forceWinChrome` dev preview drops the macOS 72px traffic-light
+// reserve: a real Windows window never has both, and with both the preview
+// measured ~60px wider than the Windows bar it is meant to reproduce.
+const macTitleBar = isMacOS() && !(import.meta.env.DEV && forceWinChromePreview());
 
 // Windows unified title bar. The Windows build is frameless (`decorations:
 // false` in tauri.windows.conf.json), so the toolbar row also hosts the
@@ -322,16 +337,60 @@ async function onOpenExternal() {
   }
 }
 
-const recentOpen = ref(false);
+const openOpen = ref(false);
 const exportOpen = ref(false);
 const newOpen = ref(false);
 const insertOpen = ref(false);
+const aiOpen = ref(false);
+const viewOpen = ref(false);
 const pomoOpen = ref(false);
 
 const newBtnRef = ref<HTMLElement | null>(null);
-const recentBtnRef = ref<HTMLElement | null>(null);
+const openBtnRef = ref<HTMLElement | null>(null);
 const exportBtnRef = ref<HTMLElement | null>(null);
 const insertBtnRef = ref<HTMLElement | null>(null);
+const aiBtnRef = ref<HTMLElement | null>(null);
+const viewBtnRef = ref<HTMLElement | null>(null);
+
+/** AI rewrite exists in this build and is switched on — otherwise the AI
+ *  control is just "clean AI artifacts" (see the template). */
+const aiRewriteAvailable = computed(() => !IS_APP_STORE_BUILD && settings.aiEnabled);
+
+type ViewModeId = 'edit' | 'split' | 'liveEdit' | 'preview' | 'reading';
+// Names follow the menu plan (bug/C1 视图 › 视图模式): 源码 / 分栏 / 实时编辑 /
+// 预览模式 / 阅读模式. Only Reading has a direct chord of its own.
+const viewModes: Array<{ mode: ViewModeId; icon: string; label: string; action?: string }> = [
+  { mode: 'edit', icon: 'view-edit', label: 'toolbar.viewSource' },
+  { mode: 'split', icon: 'view-split', label: 'toolbar.viewSplit' },
+  { mode: 'liveEdit', icon: 'view-live', label: 'toolbar.viewLive' },
+  { mode: 'preview', icon: 'view-preview', label: 'toolbar.viewPreview' },
+  { mode: 'reading', icon: 'view-reading', label: 'toolbar.viewReading', action: 'view.toggleReading' },
+];
+const currentView = computed(() => viewModes.find((m) => m.mode === settings.viewMode) ?? viewModes[0]);
+const currentViewIcon = computed(() => currentView.value.icon);
+const currentViewLabel = computed(() => t(currentView.value.label));
+// The two toggles that used to sit beside the five mode buttons, shown in the
+// same modes they were shown in then.
+const showLivePreviewToggle = computed(
+  () => settings.viewMode !== 'preview' && settings.viewMode !== 'liveEdit' && settings.viewMode !== 'reading',
+);
+const showFitWidthToggle = computed(
+  () => settings.viewMode === 'split' || settings.viewMode === 'preview' || settings.viewMode === 'reading',
+);
+function pickViewMode(mode: ViewModeId) {
+  viewOpen.value = false;
+  settings.setViewMode(mode);
+  track('view_mode', { mode });
+}
+function toggleLivePreviewFromMenu() {
+  viewOpen.value = false;
+  settings.toggleLivePreview();
+  track('live_preview_toggled', { on: settings.livePreview ? 1 : 0 });
+}
+
+const formatItems: Array<{ kind: string; label: string; action: string }> = [
+  'bold', 'italic', 'strike', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'task',
+].map((kind) => ({ kind, label: `cmd.fmt.${kind}`, action: `fmt.${kind}` }));
 const menuPos = ref<{ top: number; left?: number; right?: number } | null>(null);
 const floatStyle = computed<Record<string, string | number> | undefined>(() => {
   if (!menuPos.value) return undefined;
@@ -346,7 +405,9 @@ const floatStyle = computed<Record<string, string | number> | undefined>(() => {
     maxHeight: `calc(100vh - ${menuPos.value.top}px - 8px)`,
   };
   if (menuPos.value.left !== undefined) s.left = `${menuPos.value.left}px`;
-  if (menuPos.value.right !== undefined) s.right = `${menuPos.value.right}px`;
+  // `.dropdown__menu` carries `left: 0` from its stylesheet; a right-anchored
+  // menu must clear it or it stretches across the whole window.
+  if (menuPos.value.right !== undefined) { s.right = `${menuPos.value.right}px`; s.left = 'auto'; }
   return s;
 });
 function positionMenuFromButton(btn: HTMLElement | null, align: 'left' | 'right' = 'left') {
@@ -359,10 +420,22 @@ function positionMenuFromButton(btn: HTMLElement | null, align: 'left' | 'right'
   }
 }
 
-function togglePomo() {
-  // Mirror the same exclusive-open behaviour as the other dropdowns.
+// Pomodoro popover, opened from the palette. Anchored under the right end of
+// the bar (the popover itself is `position:absolute; left:0` in its anchor).
+const pomoAnchorStyle = ref<Record<string, string | number>>({});
+function openPomodoro() {
   closeAllDropdowns();
-  pomoOpen.value = !pomoOpen.value;
+  const r = toolbarRef.value?.getBoundingClientRect();
+  const top = r && r.height > 0 ? r.bottom + 4 : 44;
+  pomoAnchorStyle.value = {
+    position: 'fixed',
+    top: `${top}px`,
+    right: '12px',
+    width: '260px',
+    height: '0',
+    zIndex: 1000,
+  };
+  pomoOpen.value = true;
 }
 
 /** #296 — formatting from the Insert menu runs the same toggle the shortcut
@@ -416,9 +489,11 @@ function shortPath(p: string) {
 // More reliable than @blur which doesn't fire consistently across browsers.
 function closeAllDropdowns() {
   newOpen.value = false;
-  recentOpen.value = false;
+  openOpen.value = false;
   exportOpen.value = false;
   insertOpen.value = false;
+  aiOpen.value = false;
+  viewOpen.value = false;
   pomoOpen.value = false;
   menubarOpen.value = null;
 }
@@ -677,19 +752,94 @@ onBeforeUnmount(() => {
   }
 });
 // Exclusive open: opening one dropdown closes others.
-function toggleDropdown(name: 'new' | 'recent' | 'export' | 'insert') {
-  const isOpen =
-    (name === 'new' && newOpen.value) ||
-    (name === 'recent' && recentOpen.value) ||
-    (name === 'export' && exportOpen.value) ||
-    (name === 'insert' && insertOpen.value);
+type DropdownName = 'new' | 'open' | 'export' | 'insert' | 'ai' | 'view';
+const dropdowns: Record<DropdownName, { open: typeof newOpen; btn: typeof newBtnRef; align: 'left' | 'right' }> = {
+  new: { open: newOpen, btn: newBtnRef, align: 'left' },
+  open: { open: openOpen, btn: openBtnRef, align: 'left' },
+  export: { open: exportOpen, btn: exportBtnRef, align: 'left' },
+  insert: { open: insertOpen, btn: insertBtnRef, align: 'left' },
+  ai: { open: aiOpen, btn: aiBtnRef, align: 'left' },
+  // The view menu's trigger sits at the right end of the bar.
+  view: { open: viewOpen, btn: viewBtnRef, align: 'right' },
+};
+/** The trigger of the menu that is open now, so Escape can hand focus back. */
+let lastTrigger: HTMLElement | null = null;
+function toggleDropdown(name: DropdownName, e?: MouseEvent) {
+  const d = dropdowns[name];
+  const wasOpen = d.open.value;
   closeAllDropdowns();
-  if (!isOpen) {
-    if (name === 'new') { positionMenuFromButton(newBtnRef.value); newOpen.value = true; }
-    else if (name === 'recent') { positionMenuFromButton(recentBtnRef.value); recentOpen.value = true; }
-    else if (name === 'export') { positionMenuFromButton(exportBtnRef.value); exportOpen.value = true; }
-    else if (name === 'insert') { positionMenuFromButton(insertBtnRef.value); insertOpen.value = true; }
+  if (wasOpen) return;
+  positionMenuFromButton(d.btn.value, d.align);
+  d.open.value = true;
+  lastTrigger = d.btn.value;
+  // `detail === 0` — the click came from Enter/Space on the focused trigger,
+  // not a mouse: move focus into the menu so the arrow keys work.
+  if (e && e.detail === 0) void focusMenuItem('first');
+}
+function openByKey(name: DropdownName) {
+  if (!dropdowns[name].open.value) toggleDropdown(name);
+  void focusMenuItem('first');
+}
+const anyToolbarMenuOpen = computed(
+  () => newOpen.value || openOpen.value || exportOpen.value || insertOpen.value || aiOpen.value || viewOpen.value,
+);
+
+// ── Keyboard access for the toolbar menus ────────────────────────────────────
+// Items act on `mousedown.prevent` so a mouse click never steals focus (and
+// the selection) from the editor — Insert and AI rewrite depend on it. The
+// keyboard path reuses that exact handler by synthesising the mousedown, so
+// there is one action per item, not a click and a mousedown to keep in step.
+const MENU_ITEM_SEL = '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]';
+async function focusMenuItem(which: 'first' | 'last') {
+  await nextTick();
+  const menu = document.querySelector<HTMLElement>('.dropdown__menu[data-tb-menu]');
+  const items = Array.from(menu?.querySelectorAll<HTMLElement>(MENU_ITEM_SEL) ?? []);
+  const el = which === 'first' ? items[0] : items[items.length - 1];
+  el?.focus();
+}
+function onMenuKeydown(e: KeyboardEvent) {
+  const menu = e.currentTarget as HTMLElement;
+  const items = Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM_SEL));
+  if (!items.length) return;
+  const idx = items.indexOf(document.activeElement as HTMLElement);
+  const move = (i: number) => items[(i + items.length) % items.length].focus();
+  switch (e.key) {
+    case 'ArrowDown': e.preventDefault(); move(idx < 0 ? 0 : idx + 1); break;
+    case 'ArrowUp': e.preventDefault(); move(idx < 0 ? items.length - 1 : idx - 1); break;
+    case 'Home': e.preventDefault(); move(0); break;
+    case 'End': e.preventDefault(); move(items.length - 1); break;
+    case 'Enter':
+    case ' ': {
+      if (idx < 0) return;
+      e.preventDefault();
+      const trigger = lastTrigger;
+      items[idx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+      // An action that opened a dialog took focus itself; otherwise don't
+      // strand focus on <body> where the removed menu was.
+      void nextTick(() => {
+        if (!document.activeElement || document.activeElement === document.body) trigger?.focus();
+      });
+      break;
+    }
+    case 'Tab':
+      closeAllDropdowns();
+      break;
   }
+}
+// Escape closes whichever toolbar menu is open and returns focus to its
+// trigger. Capture phase, so the editor or a global handler doesn't also act
+// on an Escape that was only meant to dismiss the menu.
+function onEscapeKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  if (!anyToolbarMenuOpen.value && !menubarOpen.value) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const trigger = anyToolbarMenuOpen.value ? lastTrigger : null;
+  closeAllDropdowns();
+  trigger?.focus();
+}
+function onOpenPomodoroEvent() {
+  openPomodoro();
 }
 function onDocClick(e: MouseEvent) {
   // Menus are teleported to <body>, so `.closest('.dropdown')` from a menu
@@ -716,13 +866,17 @@ function onScrollAnywhere(e: Event) {
 }
 onMounted(() => {
   document.addEventListener('click', onDocClick, true);
+  document.addEventListener('keydown', onEscapeKey, true);
   window.addEventListener('resize', onViewportChange);
   window.addEventListener('scroll', onScrollAnywhere, true);
+  window.addEventListener('solomd:open-pomodoro', onOpenPomodoroEvent);
 });
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick, true);
+  document.removeEventListener('keydown', onEscapeKey, true);
   window.removeEventListener('resize', onViewportChange);
   window.removeEventListener('scroll', onScrollAnywhere, true);
+  window.removeEventListener('solomd:open-pomodoro', onOpenPomodoroEvent);
 });
 </script>
 
@@ -810,53 +964,75 @@ onBeforeUnmount(() => {
       :title="tabs.activeTab?.filePath || tabs.activeTab?.fileName"
     >{{ tabs.activeTab.fileName }}</span>
 
+    <!-- bug/C2 — one row, ~11 controls:
+         [New▾] [Open▾] [Save] [Export▾] | [Insert▾] [AI▾] | [Search] [Palette]  …  [View mode▾] [File tree] [Right sidebar]
+         Everything that left the strip lives in the menu bar, the command
+         palette and its shortcut; on iOS/Android (no menu bar) it stays in
+         the "⋯" sheet below — see `noMenuBar`. -->
     <div class="toolbar__group">
       <div class="dropdown">
         <button
           ref="newBtnRef"
           class="icon-btn"
-          @click="toggleDropdown('new')"
+          aria-haspopup="menu"
+          :aria-expanded="newOpen"
+          @click="toggleDropdown('new', $event)"
+          @keydown.down.prevent="openByKey('new')"
           :title="tip('toolbar.newFile', 'file.new')"
         >
           <Icon name="new" />
           <Icon name="chevron-down" :size="10" />
         </button>
         <Teleport to="body">
-          <div v-if="newOpen" class="dropdown__menu dropdown__menu--narrow" :style="floatStyle">
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="files.newFile(); newOpen = false">
+          <div v-if="newOpen" class="dropdown__menu dropdown__menu--narrow" role="menu" data-tb-menu :style="floatStyle" @keydown="onMenuKeydown">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="files.newFile(); newOpen = false">
               <Icon name="new" />
               <span class="dropdown__name">{{ t('toolbar.newMarkdown') }}</span>
-              <span class="dropdown__shortcut">Ctrl+N</span>
+              <span v-if="chord('file.new')" class="dropdown__shortcut">{{ chord('file.new') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="files.newTextFile(); newOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="files.newTextFile(); newOpen = false">
               <Icon name="new-text" />
               <span class="dropdown__name">{{ t('toolbar.newPlainText') }}</span>
-              <span class="dropdown__shortcut">Ctrl+Alt+N</span>
+              <span v-if="chord('file.newText')" class="dropdown__shortcut">{{ chord('file.newText') }}</span>
             </button>
           </div>
         </Teleport>
       </div>
-      <button class="icon-btn" @click="files.openFile" :title="tip('toolbar.openFileTooltip', 'file.open')">
-        <Icon name="open" />
-      </button>
+      <!-- Open file / open folder / recent files: three buttons became one menu. -->
       <div class="dropdown">
         <button
-          ref="recentBtnRef"
+          ref="openBtnRef"
           class="icon-btn"
-          @click="toggleDropdown('recent')"
-          :title="t('toolbar.recent')"
+          aria-haspopup="menu"
+          :aria-expanded="openOpen"
+          @click="toggleDropdown('open', $event)"
+          @keydown.down.prevent="openByKey('open')"
+          :title="tip('toolbar.open', 'file.open')"
         >
-          <Icon name="recent" />
+          <Icon name="open" />
           <Icon name="chevron-down" :size="10" />
         </button>
         <Teleport to="body">
-          <div v-if="recentOpen" class="dropdown__menu" :style="floatStyle">
+          <div v-if="openOpen" class="dropdown__menu" role="menu" data-tb-menu :style="floatStyle" @keydown="onMenuKeydown">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="openOpen = false; files.openFile()">
+              <Icon name="open" />
+              <span class="dropdown__name">{{ t('menubar.openFile') }}</span>
+              <span v-if="chord('file.open')" class="dropdown__shortcut">{{ chord('file.open') }}</span>
+            </button>
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="openOpen = false; files.openFolder()">
+              <Icon name="folder" />
+              <span class="dropdown__name">{{ t('menubar.openFolder') }}</span>
+            </button>
+            <div class="dropdown__sep"></div>
+            <div class="dropdown__heading">{{ t('toolbar.recent') }}</div>
             <div v-if="!workspace.recentFiles.length" class="dropdown__empty">{{ t('toolbar.noRecent') }}</div>
             <button
               v-for="p in workspace.recentFiles"
               :key="p"
               class="dropdown__item dropdown__item--recent"
-              @mousedown.prevent="files.openPath(p); recentOpen = false"
+              role="menuitem"
+              tabindex="-1"
+              @mousedown.prevent="files.openPath(p); openOpen = false"
               :title="p"
             >
               <span class="dropdown__name">{{ shortPath(p) }}</span>
@@ -874,39 +1050,35 @@ onBeforeUnmount(() => {
             <button
               v-if="workspace.recentFiles.length"
               class="dropdown__item dropdown__item--muted"
-              @mousedown.prevent="workspace.clearRecent(); recentOpen = false"
+              role="menuitem"
+              tabindex="-1"
+              @mousedown.prevent="workspace.clearRecent(); openOpen = false"
             >{{ t('toolbar.clearRecent') }}</button>
           </div>
         </Teleport>
       </div>
-      <button class="icon-btn" @click="files.openFolder" v-bind:title="t('toolbar.openFolder')">
-        <Icon name="folder" />
-      </button>
       <button class="icon-btn" data-phone-primary @click="files.saveActive" v-bind:title="tip('toolbar.save', 'file.save')">
         <Icon name="save" />
-      </button>
-      <button class="icon-btn" @click="files.saveActiveAs" :title="tip('toolbar.saveAsTooltip', 'file.saveAs')">
-        <Icon name="save-as" />
-      </button>
-      <button class="icon-btn" @click="onOpenExternal" :title="tip('toolbar.openExternalTooltip', 'file.openExternal')">
-        <Icon name="external" />
       </button>
       <div class="dropdown">
         <button
           ref="exportBtnRef"
           class="icon-btn"
-          @click="toggleDropdown('export')"
-          :title="tip('toolbar.exportTooltip', 'export.pdfPrint')"
+          aria-haspopup="menu"
+          :aria-expanded="exportOpen"
+          @click="toggleDropdown('export', $event)"
+          @keydown.down.prevent="openByKey('export')"
+          :title="t('toolbar.exportTooltip')"
         >
           <Icon name="export" />
           <Icon name="chevron-down" :size="10" />
         </button>
         <Teleport to="body">
-          <div v-if="exportOpen" class="dropdown__menu" :style="floatStyle">
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.exportHtml(); exportOpen = false">
+          <div v-if="exportOpen" class="dropdown__menu" role="menu" data-tb-menu :style="floatStyle" @keydown="onMenuKeydown">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.exportHtml(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.exportHtml') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.exportDocx(); exportOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.exportDocx(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.exportDocx') }}</span>
             </button>
             <!-- Gitee IK8QJQ — these two produce very different PDFs and the
@@ -917,28 +1089,33 @@ onBeforeUnmount(() => {
                  real vector text. Both are worth keeping — the raster path
                  saves straight to a file with no dialog — so label the
                  tradeoff rather than hide it, and lead with the text one. -->
-            <button class="dropdown__item" @mousedown.prevent="exporter.exportPdfPrint(); exportOpen = false">
-              <span class="dropdown__name">{{ t('toolbar.exportPdfPrint') }}</span>
+            <button class="dropdown__item" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.exportPdfPrint(); exportOpen = false">
+              <span class="dropdown__row">
+                <span class="dropdown__name">{{ t('toolbar.exportPdfPrint') }}</span>
+                <span v-if="chord('export.pdfPrint')" class="dropdown__shortcut">{{ chord('export.pdfPrint') }}</span>
+              </span>
               <span class="dropdown__path">{{ t('toolbar.exportPdfPrintHint') }}</span>
             </button>
-            <button class="dropdown__item" @mousedown.prevent="exporter.exportPdf(); exportOpen = false">
+            <button class="dropdown__item" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.exportPdf(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.exportPdf') }}</span>
               <span class="dropdown__path">{{ t('toolbar.exportPdfHint') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.exportImage(); exportOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.exportImage(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.exportImage') }}</span>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.copyAsHtml(); exportOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.copyAsHtml(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.copyHtml') }}</span>
+              <span v-if="chord('export.copyHtml')" class="dropdown__shortcut">{{ chord('export.copyHtml') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.copyAsPlainText(); exportOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.copyAsPlainText(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.copyPlain') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.copyAsMarkdown(); exportOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.copyAsMarkdown(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.copyMarkdown') }}</span>
+              <span v-if="chord('export.copyMd')" class="dropdown__shortcut">{{ chord('export.copyMd') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="exporter.copyAsImage(); exportOpen = false">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="exporter.copyAsImage(); exportOpen = false">
               <span class="dropdown__name">{{ t('toolbar.copyImage') }}</span>
             </button>
           </div>
@@ -949,137 +1126,121 @@ onBeforeUnmount(() => {
     <span class="toolbar__divider"></span>
 
     <div class="toolbar__group">
-      <button
-        class="icon-btn"
-        data-phone-primary
-        @click="settings.toggleFileTree"
-        :class="{ active: settings.showFileTree }"
-        :title="tip('toolbar.fileTreeTooltip', 'view.toggleFileTree')"
-      >
-        <Icon name="sidebar" />
-      </button>
-      <button
-        class="icon-btn"
-        @click="settings.toggleRightSidebar"
-        :class="{ active: !settings.rightSidebarHidden }"
-        :title="tip('toolbar.rightSidebarTooltip', 'view.toggleRightSidebar')"
-      >
-        <Icon name="sidebar-right" />
-      </button>
-    </div>
-
-    <div class="toolbar__group" v-if="isMarkdown">
-      <div class="dropdown">
+      <div class="dropdown" v-if="isMarkdown">
         <button
           ref="insertBtnRef"
           class="icon-btn"
-          @click="toggleDropdown('insert')"
+          aria-haspopup="menu"
+          :aria-expanded="insertOpen"
+          @click="toggleDropdown('insert', $event)"
+          @keydown.down.prevent="openByKey('insert')"
           :title="t('toolbar.insertTooltip')"
         >
           <Icon name="insert" />
           <Icon name="chevron-down" :size="10" />
         </button>
         <Teleport to="body">
-          <div v-if="insertOpen" class="dropdown__menu" :style="floatStyle">
+          <div v-if="insertOpen" class="dropdown__menu" role="menu" data-tb-menu :style="floatStyle" @keydown="onMenuKeydown">
             <!-- #296 — the formatting commands, with the chord beside each: the
                  menu is where a mouse user learns the key. These wrap the
                  selection; the snippet items below only insert. -->
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('bold')">
-              <span class="dropdown__name">{{ t('cmd.fmt.bold') }}</span>
-              <kbd v-if="chord('fmt.bold')" class="dropdown__kbd">{{ chord('fmt.bold') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('italic')">
-              <span class="dropdown__name">{{ t('cmd.fmt.italic') }}</span>
-              <kbd v-if="chord('fmt.italic')" class="dropdown__kbd">{{ chord('fmt.italic') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('strike')">
-              <span class="dropdown__name">{{ t('cmd.fmt.strike') }}</span>
-              <kbd v-if="chord('fmt.strike')" class="dropdown__kbd">{{ chord('fmt.strike') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h1')">
-              <span class="dropdown__name">{{ t('cmd.fmt.h1') }}</span>
-              <kbd v-if="chord('fmt.h1')" class="dropdown__kbd">{{ chord('fmt.h1') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h2')">
-              <span class="dropdown__name">{{ t('cmd.fmt.h2') }}</span>
-              <kbd v-if="chord('fmt.h2')" class="dropdown__kbd">{{ chord('fmt.h2') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h3')">
-              <span class="dropdown__name">{{ t('cmd.fmt.h3') }}</span>
-              <kbd v-if="chord('fmt.h3')" class="dropdown__kbd">{{ chord('fmt.h3') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h4')">
-              <span class="dropdown__name">{{ t('cmd.fmt.h4') }}</span>
-              <kbd v-if="chord('fmt.h4')" class="dropdown__kbd">{{ chord('fmt.h4') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h5')">
-              <span class="dropdown__name">{{ t('cmd.fmt.h5') }}</span>
-              <kbd v-if="chord('fmt.h5')" class="dropdown__kbd">{{ chord('fmt.h5') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('h6')">
-              <span class="dropdown__name">{{ t('cmd.fmt.h6') }}</span>
-              <kbd v-if="chord('fmt.h6')" class="dropdown__kbd">{{ chord('fmt.h6') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('ul')">
-              <span class="dropdown__name">{{ t('cmd.fmt.ul') }}</span>
-              <kbd v-if="chord('fmt.ul')" class="dropdown__kbd">{{ chord('fmt.ul') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('ol')">
-              <span class="dropdown__name">{{ t('cmd.fmt.ol') }}</span>
-              <kbd v-if="chord('fmt.ol')" class="dropdown__kbd">{{ chord('fmt.ol') }}</kbd>
-            </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('task')">
-              <span class="dropdown__name">{{ t('cmd.fmt.task') }}</span>
-              <kbd v-if="chord('fmt.task')" class="dropdown__kbd">{{ chord('fmt.task') }}</kbd>
+            <button
+              v-for="f in formatItems"
+              :key="f.kind"
+              class="dropdown__item dropdown__item--single dropdown__item--kbd"
+              role="menuitem"
+              tabindex="-1"
+              @mousedown.prevent="dispatchFormat(f.kind)"
+            >
+              <span class="dropdown__name">{{ t(f.label) }}</span>
+              <kbd v-if="chord(f.action)" class="dropdown__kbd">{{ chord(f.action) }}</kbd>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('codeblock')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchFormat('codeblock')">
               <span class="dropdown__name">{{ t('toolbar.insertCodeBlock') }}</span>
               <kbd v-if="chord('fmt.codeblock')" class="dropdown__kbd">{{ chord('fmt.codeblock') }}</kbd>
             </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('code')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchFormat('code')">
               <span class="dropdown__name">{{ t('toolbar.insertInlineCode') }}</span>
               <kbd v-if="chord('fmt.code')" class="dropdown__kbd">{{ chord('fmt.code') }}</kbd>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n$$\n$|$\n$$\n')">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n$$\n$|$\n$$\n')">
               <span class="dropdown__name">{{ t('toolbar.insertMathBlock') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('$$|$$')">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('$$|$$')">
               <span class="dropdown__name">{{ t('toolbar.insertMathInline') }}</span>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n')">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n')">
               <span class="dropdown__name">{{ t('toolbar.insertTable') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n')">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n')">
               <span class="dropdown__name">{{ t('toolbar.insertMermaid') }}</span>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('link')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchFormat('link')">
               <span class="dropdown__name">{{ t('toolbar.insertLink') }}</span>
               <kbd v-if="chord('fmt.link')" class="dropdown__kbd">{{ chord('fmt.link') }}</kbd>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="pickAndInsertImage()">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="pickAndInsertImage()">
               <span class="dropdown__name">{{ t('toolbar.insertImage') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="openImageUrlDialog()">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="openImageUrlDialog()">
               <span class="dropdown__name">{{ t('toolbar.insertNetworkImage') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" @mousedown.prevent="dispatchFormat('quote')">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchFormat('quote')">
               <span class="dropdown__name">{{ t('toolbar.insertQuote') }}</span>
               <kbd v-if="chord('fmt.quote')" class="dropdown__kbd">{{ chord('fmt.quote') }}</kbd>
             </button>
-            <button class="dropdown__item dropdown__item--single" @mousedown.prevent="dispatchInsert('\n---\n')">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n---\n')">
               <span class="dropdown__name">{{ t('toolbar.insertDivider') }}</span>
             </button>
           </div>
         </Teleport>
       </div>
-    </div>
 
-    <div class="toolbar__group">
+      <!-- AI▾ — a split button. The face runs the frequent action (rewrite the
+           selection); the arrow opens both AI actions. App Store builds ship no
+           AI rewrite, and with AI switched off the face could only ever say
+           "enable AI first" (#346) — in both cases what's left is the one
+           action that needs no model, so it's a plain button again. -->
+      <div v-if="aiRewriteAvailable" class="dropdown ai-split">
+        <button
+          class="icon-btn ai-rewrite-btn"
+          @mousedown.prevent
+          @click="onAIRewrite"
+          :title="tip('toolbar.aiRewriteTooltip', 'editor.aiRewrite')"
+        >
+          <span class="ai-rewrite-label">AI</span>
+          <span class="ai-rewrite-spark">✨</span>
+        </button>
+        <button
+          ref="aiBtnRef"
+          class="icon-btn ai-split__arrow"
+          aria-haspopup="menu"
+          :aria-expanded="aiOpen"
+          @mousedown.prevent
+          @click="toggleDropdown('ai', $event)"
+          @keydown.down.prevent="openByKey('ai')"
+          :title="t('toolbar.aiMenu')"
+        >
+          <Icon name="chevron-down" :size="10" />
+        </button>
+        <Teleport to="body">
+          <div v-if="aiOpen" class="dropdown__menu" role="menu" data-tb-menu :style="floatStyle" @keydown="onMenuKeydown">
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" role="menuitem" tabindex="-1" @mousedown.prevent="aiOpen = false; onAIRewrite()">
+              <span class="dropdown__name">{{ t('cmd.editor.aiRewrite') }}</span>
+              <kbd v-if="chord('editor.aiRewrite')" class="dropdown__kbd">{{ chord('editor.aiRewrite') }}</kbd>
+            </button>
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="aiOpen = false; onCleanAI()">
+              <span class="dropdown__name">{{ t('toolbar.cleanAiMarks') }}</span>
+            </button>
+          </div>
+        </Teleport>
+      </div>
       <button
+        v-else
         class="icon-btn clean-ai-btn"
         @click="onCleanAI"
         v-bind:title="t('toolbar.cleanAiTitle')"
@@ -1087,116 +1248,39 @@ onBeforeUnmount(() => {
         <span class="clean-ai-broom">🧹</span>
         <span class="clean-ai-label">AI</span>
       </button>
-      <!-- #346: hidden until AI is switched on in Settings. With AI off, the
-           button only ever answered "enable AI first". The command palette
-           entry stays, and so does the setting. -->
-      <button
-        v-if="!IS_APP_STORE_BUILD && settings.aiEnabled"
-        class="icon-btn ai-rewrite-btn"
-        @mousedown.prevent
-        @click="onAIRewrite"
-        :title="tip('toolbar.aiRewriteTooltip', 'editor.aiRewrite')"
-      >
-        <span class="ai-rewrite-label">AI</span>
-        <span class="ai-rewrite-spark">✨</span>
-      </button>
     </div>
 
-    <div class="toolbar__spacer"></div>
-
-    <div class="toolbar__group" v-if="isMarkdown">
-      <button
-        class="icon-btn"
-        data-phone-primary
-        @click="() => { settings.setViewMode('edit'); track('view_mode', { mode: 'edit' }); }"
-        :class="{ active: settings.viewMode === 'edit' }"
-        :title="t('toolbar.editOnly')"
-      >
-        <Icon name="view-edit" />
-      </button>
-      <button
-        class="icon-btn"
-        @click="() => { settings.setViewMode('split'); track('view_mode', { mode: 'split' }); }"
-        :class="{ active: settings.viewMode === 'split' }"
-        :title="tip('toolbar.splitPane', 'view.cycleView')"
-      >
-        <Icon name="view-split" />
-      </button>
-      <button
-        class="icon-btn"
-        data-phone-primary
-        @click="() => { settings.setViewMode('liveEdit'); track('view_mode', { mode: 'liveEdit' }); }"
-        :class="{ active: settings.viewMode === 'liveEdit' }"
-        :title="t('toolbar.liveEditMode')"
-      >
-        <Icon name="view-live" />
-      </button>
-      <button
-        class="icon-btn"
-        data-phone-primary
-        @click="() => { settings.setViewMode('preview'); track('view_mode', { mode: 'preview' }); }"
-        :class="{ active: settings.viewMode === 'preview' }"
-        :title="t('toolbar.previewOnly')"
-      >
-        <Icon name="view-preview" />
-      </button>
-      <button
-        class="icon-btn"
-        @click="() => { settings.setViewMode('reading'); track('view_mode', { mode: 'reading' }); }"
-        :class="{ active: settings.viewMode === 'reading' }"
-        :title="tip('toolbar.readingMode', 'view.toggleReading')"
-      >
-        <Icon name="view-reading" />
-      </button>
-      <span
-        class="toolbar__divider"
-        v-if="settings.viewMode !== 'preview' && settings.viewMode !== 'liveEdit'"
-      ></span>
-      <button
-        v-if="settings.viewMode !== 'preview' && settings.viewMode !== 'liveEdit'"
-        class="icon-btn"
-        @click="() => { settings.toggleLivePreview(); track('live_preview_toggled', { on: settings.livePreview ? 1 : 0 }); }"
-        :class="{ active: settings.livePreview }"
-        :title="settings.livePreview ? t('toolbar.livePreviewOn') : t('toolbar.livePreviewOff')"
-      >
-        <Icon :name="settings.livePreview ? 'live' : 'source'" />
-      </button>
-      <button
-        v-if="settings.viewMode === 'split' || settings.viewMode === 'preview' || settings.viewMode === 'reading'"
-        class="icon-btn"
-        @click="settings.togglePreviewFitWidth"
-        :class="{ active: settings.previewFitWidth }"
-        :title="t('toolbar.fitWidthTooltip')"
-      >
-        <Icon name="fit-width" />
-      </button>
-    </div>
-
-    <span v-if="isMarkdown" class="toolbar__divider"></span>
+    <span class="toolbar__divider"></span>
 
     <div class="toolbar__group">
-      <div class="dropdown focus-with-pomo">
-        <button
-          class="icon-btn"
-          :disabled="settings.viewMode === 'preview'"
-          @click="settings.toggleFocusMode"
-          :class="{ active: settings.focusMode }"
-          :title="t('toolbar.focusModeTooltip')"
-        >
-          <Icon name="focus" />
-        </button>
-        <button
-          v-if="settings.pomodoroShowControls"
-          class="icon-btn pomo-chevron"
-          @click="togglePomo"
-          :title="t('pomodoro.openMenu', { key: chord('pomodoro.startLast') || '—' })"
-          aria-haspopup="dialog"
-          :aria-expanded="pomoOpen"
-        >
-          <Icon name="chevron-down" :size="10" />
-        </button>
-        <PomodoroPopover :open="pomoOpen" @close="pomoOpen = false" />
-      </div>
+      <button class="icon-btn" data-phone-primary @click="$emit('open-search')" :title="tip('toolbar.searchTooltip', 'search.global')">
+        <Icon name="search" />
+      </button>
+      <button class="icon-btn" @click="$emit('open-palette')" :title="tip('toolbar.paletteTooltip', 'palette.open')">
+        <Icon name="palette" />
+      </button>
+    </div>
+
+    <!-- iOS / Android have no menu bar, and an iPhone has no keyboard, so the
+         buttons the desktop strip handed to the menus would simply vanish
+         there (Settings above all). They stay — folded into the "⋯" sheet,
+         which `noMenuBar` always offers. -->
+    <div v-if="noMenuBar" class="toolbar__group toolbar__group--extras">
+      <button class="icon-btn" @click="files.saveActiveAs" :title="tip('toolbar.saveAsTooltip', 'file.saveAs')">
+        <Icon name="save-as" />
+      </button>
+      <button class="icon-btn" @click="onOpenExternal" :title="tip('toolbar.openExternalTooltip', 'file.openExternal')">
+        <Icon name="external" />
+      </button>
+      <button
+        class="icon-btn"
+        :disabled="settings.viewMode === 'preview'"
+        @click="settings.toggleFocusMode"
+        :class="{ active: settings.focusMode }"
+        :title="t('toolbar.focusModeTooltip')"
+      >
+        <Icon name="focus" />
+      </button>
       <button
         class="icon-btn"
         :disabled="settings.viewMode === 'preview'"
@@ -1223,13 +1307,6 @@ onBeforeUnmount(() => {
       >
         <span class="cjk-proof-glyph">中</span>
       </button>
-      <span class="toolbar__divider"></span>
-      <button class="icon-btn" data-phone-primary @click="$emit('open-search')" :title="tip('toolbar.searchTooltip', 'search.global')">
-        <Icon name="search" />
-      </button>
-      <button class="icon-btn" @click="$emit('open-palette')" :title="tip('toolbar.paletteTooltip', 'palette.open')">
-        <Icon name="palette" />
-      </button>
       <button class="icon-btn" @click="$emit('open-help')" :title="tip('toolbar.helpTooltip', 'help.markdown')">
         <Icon name="help" />
       </button>
@@ -1244,6 +1321,101 @@ onBeforeUnmount(() => {
         <Icon :name="settings.theme === 'dark' ? 'theme-light' : 'theme-dark'" />
       </button>
     </div>
+
+    <div class="toolbar__spacer"></div>
+
+    <div class="toolbar__group">
+      <!-- View mode▾ — five buttons became one menu. The face shows the mode
+           you are in; the menu also carries the two per-mode toggles that
+           used to appear beside the five buttons only in some modes. -->
+      <div v-if="isMarkdown" class="dropdown" data-phone-primary>
+        <button
+          ref="viewBtnRef"
+          class="icon-btn"
+          aria-haspopup="menu"
+          :aria-expanded="viewOpen"
+          @click="toggleDropdown('view', $event)"
+          @keydown.down.prevent="openByKey('view')"
+          :title="`${t('toolbar.viewMode')}: ${currentViewLabel}`"
+        >
+          <Icon :name="currentViewIcon" />
+          <Icon name="chevron-down" :size="10" />
+        </button>
+        <Teleport to="body">
+          <div v-if="viewOpen" class="dropdown__menu dropdown__menu--narrow" role="menu" data-tb-menu :style="floatStyle" @keydown="onMenuKeydown">
+            <button
+              v-for="m in viewModes"
+              :key="m.mode"
+              class="dropdown__item dropdown__item--single dropdown__item--check"
+              :class="{ 'is-checked': settings.viewMode === m.mode }"
+              role="menuitemradio"
+              :aria-checked="settings.viewMode === m.mode"
+              tabindex="-1"
+              @mousedown.prevent="pickViewMode(m.mode)"
+            >
+              <span class="dropdown__check" aria-hidden="true">{{ settings.viewMode === m.mode ? '✓' : '' }}</span>
+              <Icon :name="m.icon" />
+              <span class="dropdown__name">{{ t(m.label) }}</span>
+              <span v-if="m.action && chord(m.action)" class="dropdown__shortcut">{{ chord(m.action) }}</span>
+            </button>
+            <template v-if="showLivePreviewToggle || showFitWidthToggle">
+              <div class="dropdown__sep"></div>
+              <button
+                v-if="showLivePreviewToggle"
+                class="dropdown__item dropdown__item--single dropdown__item--check"
+                role="menuitemcheckbox"
+                :aria-checked="settings.livePreview"
+                tabindex="-1"
+                @mousedown.prevent="toggleLivePreviewFromMenu()"
+              >
+                <span class="dropdown__check" aria-hidden="true">{{ settings.livePreview ? '✓' : '' }}</span>
+                <Icon name="live" />
+                <span class="dropdown__name">{{ t('toolbar.livePreviewToggle') }}</span>
+              </button>
+              <button
+                v-if="showFitWidthToggle"
+                class="dropdown__item dropdown__item--single dropdown__item--check"
+                role="menuitemcheckbox"
+                :aria-checked="settings.previewFitWidth"
+                tabindex="-1"
+                @mousedown.prevent="settings.togglePreviewFitWidth(); viewOpen = false"
+              >
+                <span class="dropdown__check" aria-hidden="true">{{ settings.previewFitWidth ? '✓' : '' }}</span>
+                <Icon name="fit-width" />
+                <span class="dropdown__name">{{ t('toolbar.fitWidth') }}</span>
+              </button>
+            </template>
+          </div>
+        </Teleport>
+      </div>
+      <button
+        class="icon-btn toolbar__panel-toggle"
+        data-phone-primary
+        @click="settings.toggleFileTree"
+        :class="{ active: settings.showFileTree }"
+        :title="tip('toolbar.fileTreeTooltip', 'view.toggleFileTree')"
+      >
+        <Icon name="sidebar" />
+      </button>
+      <button
+        class="icon-btn toolbar__panel-toggle"
+        @click="settings.toggleRightSidebar"
+        :class="{ active: !settings.rightSidebarHidden }"
+        :title="tip('toolbar.rightSidebarTooltip', 'view.toggleRightSidebar')"
+      >
+        <Icon name="sidebar-right" />
+      </button>
+    </div>
+
+    <!-- Writing-session presets (25/50/90/custom) used to hang off a chevron
+         beside the focus-mode button. With that button gone the popover opens
+         from the command palette ("solomd:open-pomodoro"), under the bar's
+         right end. -->
+    <Teleport to="body">
+      <div v-if="pomoOpen" class="dropdown pomo-anchor" :style="pomoAnchorStyle">
+        <PomodoroPopover :open="pomoOpen" @close="pomoOpen = false" />
+      </div>
+    </Teleport>
 
     <!-- #168 / #282 — expand the strip into a labelled sheet. Always offered
          on a phone; on wider windows only once the row actually overflows.
@@ -1561,16 +1733,66 @@ onBeforeUnmount(() => {
 .dropdown {
   position: relative;
 }
-.focus-with-pomo {
+/* AI▾ split button: the face and the arrow read as one bordered control. */
+.ai-split {
   display: inline-flex;
-  align-items: center;
-  gap: 0;
+  align-items: stretch;
 }
-.pomo-chevron {
-  padding: 5px 4px !important;
+.ai-split .ai-rewrite-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.ai-split__arrow {
+  border: 1px solid var(--border) !important;
+  border-left: none !important;
+  border-radius: 0 6px 6px 0;
+  padding: 3px 4px !important;
   color: var(--text-faint);
 }
-.pomo-chevron:hover { color: var(--text); }
+.ai-split__arrow:hover {
+  color: var(--accent);
+  border-color: var(--accent) !important;
+}
+/* bug/C2 — one row down to ~800px. The Windows bar also carries the 168px
+   menubar and 138px of caption buttons, so it runs out first: measured
+   ~960px of fixed content with the filename at its floor. Shed, in order,
+   what is already on screen or in the menus (601px+ only — the phone layout
+   below that has its own rules, and keeps the file-tree button):
+   1. the filename and brand mark — the filename is the active tab's name,
+      one row below;
+   2. the file-tree / right-sidebar toggles — View menu, ⌘B / ⌘⌥B (the
+      proposal's own "窄窗口" adjustment, section 七). */
+@media (min-width: 601px) and (max-width: 1023px) {
+  .toolbar--win .toolbar__title,
+  .toolbar--win .toolbar__brand {
+    display: none;
+  }
+}
+@media (min-width: 601px) and (max-width: 899px) {
+  .toolbar--win .toolbar__panel-toggle {
+    display: none;
+  }
+}
+@media (min-width: 601px) and (max-width: 719px) {
+  .toolbar__title {
+    display: none;
+  }
+}
+/* …but never inside the expanded sheet, which is where hidden things go. */
+:root .toolbar.toolbar--sheet .toolbar__panel-toggle {
+  display: inline-flex;
+}
+/* Buttons only a build without a menu bar keeps (iOS / Android): folded away
+   until the "⋯" sheet opens. */
+.toolbar__group--extras {
+  display: none;
+}
+.toolbar--sheet .toolbar__group--extras {
+  display: flex;
+}
+.pomo-anchor {
+  pointer-events: auto;
+}
 .dropdown__menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -1609,6 +1831,35 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 260px;
+}
+.dropdown__heading {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* A two-line item whose first line also carries a shortcut. */
+.dropdown__row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+.dropdown__check {
+  width: 12px;
+  flex: 0 0 12px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 11px;
+}
+.dropdown__item--check.is-checked .dropdown__name {
+  color: var(--accent);
+}
+.dropdown__item:focus-visible {
+  outline: none;
+  background: var(--bg-hover, var(--bg-active));
 }
 .dropdown__item--sub.active {
   background: var(--bg-hover);
