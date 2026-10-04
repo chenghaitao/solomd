@@ -22,6 +22,7 @@ onMounted(async () => {
 // hidden. Fetched once per session, only when the dialog is first opened.
 const sponsors = ref<string[]>([]);
 const promoters = ref<string[]>([]);
+const testers = ref<string[]>([]);
 let sponsorsLoaded = false;
 async function loadSponsors() {
   if (sponsorsLoaded) return;
@@ -38,6 +39,8 @@ async function loadSponsors() {
     sponsors.value = names(data?.sponsors);
     // People who wrote about SoloMD or recommended it (solomd.app/promote).
     promoters.value = names(data?.promoters);
+    // People who test SoloMD carefully and send detailed bug reports.
+    testers.value = names(data?.testers);
   } catch {
     /* offline or blocked — nothing to show */
   }
@@ -129,6 +132,10 @@ async function visit(url: string) {
       <div v-if="sponsors.length" class="about__sponsors">
         <div class="about__sponsors-title">Thanks to our sponsors / 感谢赞助者</div>
         <div class="about__sponsors-names">{{ sponsors.join(' · ') }}</div>
+      </div>
+      <div v-if="testers.length" class="about__sponsors">
+        <div class="about__sponsors-title">Thanks to our testers / 感谢测试者</div>
+        <div class="about__sponsors-names">{{ testers.join(' · ') }}</div>
       </div>
       <div v-if="promoters.length" class="about__sponsors">
         <div class="about__sponsors-title">Thanks to our promoters / 感谢推广者</div>
