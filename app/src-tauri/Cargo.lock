@@ -4959,6 +4959,7 @@ dependencies = [
  "htmd",
  "jni",
  "keyring",
+ "muda",
  "ndk-context",
  "notify",
  "notify-debouncer-mini",

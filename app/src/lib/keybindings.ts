@@ -101,8 +101,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'file.new', label: 'New Note', category: 'file', defaults: ['Mod+N', 'Mod+T'] },
   { id: 'file.newText', label: 'New Plain Text File', category: 'file', defaults: ['Mod+Alt+N'] },
   // #338 — a note in the folder selected in the file tree (or the selected
-  // file's folder). No native menu item carries it, so it needs no entry in
-  // MENU_ITEM_BY_ACTION.
+  // file's folder).
   { id: 'file.newInFolder', label: 'New Note in Selected Folder', category: 'file', defaults: ['Mod+Alt+Shift+N'] },
   { id: 'file.open', label: 'Open File…', category: 'file', defaults: ['Mod+O'] },
   { id: 'file.import', label: 'Import Documents…', category: 'file', defaults: ['Mod+Shift+L'] },
@@ -658,54 +657,9 @@ export function conflictFor(
   return null;
 }
 
-/**
- * Menu-item id → Tauri accelerator, for the native menu (#180).
- *
- * An empty string means "strip the accelerator": the action moved to a chord
- * the webview handles, so leaving the old one on the menu would keep firing
- * it and a rebind would only ever *add* a shortcut. Only ids the menu
- * actually carries appear here; `set_menu_config` keeps its built-in default
- * for anything absent.
- */
-export function nativeMenuAccelerators(
-  overrides: KeyOverrides = {},
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [actionId, menuId] of Object.entries(MENU_ITEM_BY_ACTION)) {
-    if (!Object.prototype.hasOwnProperty.call(overrides, actionId)) continue;
-    const combos = combosFor(actionId, overrides);
-    out[menuId] = combos.length ? toTauriAccelerator(combos[0]) : '';
-  }
-  return out;
-}
-
-/** Menu items whose accelerator mirrors a rebindable action. */
-const MENU_ITEM_BY_ACTION: Record<string, string> = {
-  'file.new': 'file.new',
-  'file.newText': 'file.newText',
-  'file.open': 'file.open',
-  'file.import': 'file.import',
-  'file.save': 'file.save',
-  'file.saveAs': 'file.saveAs',
-  'file.closeTab': 'file.closeTab',
-  'file.openExternal': 'file.openExternal',
-  'window.new': 'window.new',
-  'file.exit': 'file.exit',
-  'export.pdfPrint': 'file.print',
-  'view.toggleFileTree': 'view.toggleFileTree',
-  'view.toggleRightSidebar': 'view.toggleRightSidebar',
-  'view.toggleOutline': 'view.toggleOutline',
-  'view.cycleView': 'view.cycleView',
-  'search.global': 'search.global',
-  'settings.open': 'app.settings',
-  'help.markdown': 'help.markdown',
-  'view.zoomUiIn': 'view.zoomUiIn',
-  'view.zoomUiOut': 'view.zoomUiOut',
-  'view.zoomUiReset': 'view.zoomUiReset',
-  'view.zoomEditorIn': 'view.zoomEditorIn',
-  'view.zoomEditorOut': 'view.zoomEditorOut',
-  'view.zoomEditorReset': 'view.zoomEditorReset',
-};
+// The native menu's accelerators come from lib/app-menu.ts (`toNativeSpec`),
+// which reads the same bindings for every item — bug/C1 replaced the per-item
+// override table that used to live here.
 
 /** `Mod+Shift+K` → `CmdOrCtrl+Shift+K` (Tauri's accelerator grammar). */
 export function toTauriAccelerator(combo: KeyCombo): string {

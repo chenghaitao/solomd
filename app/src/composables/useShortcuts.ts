@@ -244,11 +244,12 @@ export function useShortcuts(hooks: Hooks = {}) {
   /**
    * Run a bindable action by id — the menus (native and the Windows menubar)
    * call this so a menu item and its shortcut can never do different things.
-   * Returns false for an unknown id or an action that declined.
+   * Returns null for an id that is not a bindable action, false when the
+   * action declined (e.g. formatting while a non-editor field has focus).
    */
-  function runAction(id: string): boolean {
+  function runAction(id: string): boolean | null {
     const run = actions[id];
-    if (!run) return false;
+    if (!run) return null;
     return run() !== false;
   }
 

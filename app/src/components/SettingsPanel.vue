@@ -28,7 +28,8 @@ import {
   type KeyActionDef,
 } from '../lib/keybindings';
 import { isMacOS } from '../lib/platform';
-import { checkForUpdate, openReleaseUrl, isMasBuild } from '../lib/check-update';
+import { isMasBuild } from '../lib/check-update';
+import { useUpdateCheck } from '../composables/useUpdateCheck';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { useFiles } from '../composables/useFiles';
 import AISettings from './AISettings.vue';
@@ -246,27 +247,8 @@ const categories: { id: SettingsCategory; icon: string; labelKey: string }[] = [
   { id: 'advanced', icon: '🛠️', labelKey: 'settings.catAdvanced' },
 ];
 
-const checkingUpdate = ref(false);
-async function manualCheckUpdate() {
-  checkingUpdate.value = true;
-  try {
-    const r = await checkForUpdate();
-    if (r.error) {
-      // Both solomd.app proxy + GitHub direct failed (offline / DNS / etc).
-      // Don't lie to the user with "up to date" — show a real error.
-      toasts.error(t('settings.updateCheckFailed'));
-    } else if (r.hasUpdate) {
-      toasts.success(t('settings.updateAvailable', { version: r.latest || '' }));
-      await openReleaseUrl(r.url);
-    } else {
-      toasts.info(t('settings.upToDate'));
-    }
-  } catch (e) {
-    toasts.error(String(e));
-  } finally {
-    checkingUpdate.value = false;
-  }
-}
+// Shared with Help → Check for Updates (composables/useUpdateCheck.ts).
+const { checking: checkingUpdate, manualCheckUpdate } = useUpdateCheck();
 
 const settingDefault = ref(false);
 
