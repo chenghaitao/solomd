@@ -156,6 +156,17 @@ export const ja: I18n = {
     settings: '設定',
     help: 'ヘルプ',
     insertNetworkImage: 'URL から画像…',
+    open: "開く",
+    viewMode: "表示モード",
+    viewSource: "ソース",
+    viewSplit: "分割",
+    viewLive: "ライブ編集",
+    viewPreview: "プレビュー",
+    viewReading: "読書モード",
+    aiMenu: "その他の AI 操作",
+    cleanAiMarks: "AI が生成した書式記号を除去",
+    livePreviewToggle: "エディタ内でライブプレビュー",
+    fitWidth: "プレビューをウィンドウ幅に合わせる",
   },
   palette: {
     placeholder: 'コマンドを入力…',
@@ -1874,6 +1885,7 @@ export const ja: I18n = {
       toggleTheme: '表示: テーマを切り替え',
       toggleLivePreview: '表示: ライブプレビュー / ソース表示を切り替え (Markdown)',
       toggleSpellCheck: '表示: スペルチェックを切り替え',
+      toggleFitWidth: "表示: プレビューの幅合わせを切り替え",
       toggleFocusMode: '表示: フォーカスモードを切り替え',
       toggleTypewriter: '表示: タイプライターモードを切り替え',
       slideshow: 'スライドショーを開始',
@@ -1996,6 +2008,7 @@ export const ja: I18n = {
     },
     pomodoro: {
       startLast: "執筆セッションを開始",
+      open: "執筆セッション（ポモドーロ）…",
     },
   },
 };

@@ -157,6 +157,17 @@ export const zh: I18n = {
     settings: '设置',
     help: '帮助',
     insertNetworkImage: '网络图片（URL）…',
+    open: "打开",
+    viewMode: "视图模式",
+    viewSource: "源码",
+    viewSplit: "分栏",
+    viewLive: "实时编辑",
+    viewPreview: "预览模式",
+    viewReading: "阅读模式",
+    aiMenu: "更多 AI 操作",
+    cleanAiMarks: "清除 AI 生成的格式标记",
+    livePreviewToggle: "编辑器内实时预览",
+    fitWidth: "预览自适应窗口宽度",
   },
   palette: {
     placeholder: '输入命令…',
@@ -1878,6 +1889,7 @@ export const zh: I18n = {
       toggleTheme: '视图:切换主题',
       toggleLivePreview: '视图:实时渲染/原始源码(Markdown)',
       toggleSpellCheck: '视图:切换拼写检查',
+      toggleFitWidth: "视图:切换预览自适应宽度",
       toggleFocusMode: '视图:切换专注模式',
       toggleTypewriter: '视图:切换打字机模式',
       slideshow: '开始幻灯片演示',
@@ -2000,6 +2012,7 @@ export const zh: I18n = {
     },
     pomodoro: {
       startLast: "开始专注写作",
+      open: "专注计时…",
     },
   },
 };

@@ -156,6 +156,17 @@ export const de: I18n = {
     settings: 'Einstellungen',
     help: 'Hilfe',
     insertNetworkImage: 'Bild aus URL…',
+    open: "Öffnen",
+    viewMode: "Ansichtsmodus",
+    viewSource: "Quelltext",
+    viewSplit: "Geteilt",
+    viewLive: "Live-Bearbeitung",
+    viewPreview: "Vorschau",
+    viewReading: "Lesemodus",
+    aiMenu: "Weitere KI-Aktionen",
+    cleanAiMarks: "KI-generierte Formatierungszeichen entfernen",
+    livePreviewToggle: "Live-Vorschau im Editor",
+    fitWidth: "Vorschau an Fensterbreite anpassen",
   },
   palette: {
     placeholder: 'Befehl eingeben…',
@@ -1874,6 +1885,7 @@ export const de: I18n = {
       toggleTheme: 'Ansicht: Design umschalten',
       toggleLivePreview: 'Ansicht: Live-Vorschau / Rohtext umschalten (Markdown)',
       toggleSpellCheck: 'Ansicht: Rechtschreibprüfung umschalten',
+      toggleFitWidth: "Ansicht: Vorschau an Fensterbreite anpassen",
       toggleFocusMode: 'Ansicht: Fokusmodus umschalten',
       toggleTypewriter: 'Ansicht: Schreibmaschinenmodus umschalten',
       slideshow: 'Diashow präsentieren',
@@ -1996,6 +2008,7 @@ export const de: I18n = {
     },
     pomodoro: {
       startLast: "Schreibsitzung starten",
+      open: "Schreibsitzung (Pomodoro)…",
     },
   },
 };

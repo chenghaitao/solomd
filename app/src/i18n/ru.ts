@@ -156,6 +156,17 @@ export const ru: I18n = {
     settings: 'Настройки',
     help: 'Справка',
     insertNetworkImage: 'Изображение по URL…',
+    open: "Открыть",
+    viewMode: "Режим просмотра",
+    viewSource: "Исходник",
+    viewSplit: "Разделённый",
+    viewLive: "Редактирование вживую",
+    viewPreview: "Предпросмотр",
+    viewReading: "Чтение",
+    aiMenu: "Другие действия ИИ",
+    cleanAiMarks: "Убрать метки форматирования, добавленные ИИ",
+    livePreviewToggle: "Предпросмотр вживую в редакторе",
+    fitWidth: "Подогнать предпросмотр под ширину окна",
   },
   palette: {
     placeholder: 'Введите команду…',
@@ -1865,6 +1876,7 @@ export const ru: I18n = {
       toggleTheme: 'Вид: сменить тему',
       toggleLivePreview: 'Вид: живой просмотр / исходный текст (Markdown)',
       toggleSpellCheck: 'Вид: проверка орфографии',
+      toggleFitWidth: "Вид: подгонка предпросмотра по ширине",
       toggleFocusMode: 'Вид: режим фокуса',
       toggleTypewriter: 'Вид: режим пишущей машинки',
       slideshow: 'Показать как слайды',
@@ -1987,6 +1999,7 @@ export const ru: I18n = {
     },
     pomodoro: {
       startLast: 'Начать сеанс письма (дзен)',
+      open: "Сеанс письма (Pomodoro)…",
     },
   },
 };

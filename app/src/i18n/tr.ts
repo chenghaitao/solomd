@@ -156,6 +156,17 @@ export const tr: I18n = {
     settings: 'Ayarlar',
     help: 'Yardım',
     insertNetworkImage: 'URL\'den görsel…',
+    open: "Aç",
+    viewMode: "Görünüm modu",
+    viewSource: "Kaynak",
+    viewSplit: "Bölünmüş",
+    viewLive: "Canlı düzenleme",
+    viewPreview: "Önizleme",
+    viewReading: "Okuma",
+    aiMenu: "Diğer yapay zekâ işlemleri",
+    cleanAiMarks: "Yapay zekânın ürettiği biçim işaretlerini temizle",
+    livePreviewToggle: "Düzenleyicide canlı önizleme",
+    fitWidth: "Önizlemeyi pencere genişliğine sığdır",
   },
   palette: {
     placeholder: 'Bir komut yazın…',
@@ -1891,6 +1902,7 @@ export const tr: I18n = {
       toggleTheme: 'Görünüm: Temayı Değiştir',
       toggleLivePreview: 'Görünüm: Canlı Önizleme / Ham Kaynak Arasında Geçiş (Markdown)',
       toggleSpellCheck: 'Görünüm: Yazım Denetimini Aç/Kapat',
+      toggleFitWidth: "Görünüm: Önizlemeyi genişliğe sığdırmayı aç/kapat",
       toggleFocusMode: 'Görünüm: Odak Modunu Aç/Kapat',
       toggleTypewriter: 'Görünüm: Daktilo Modunu Aç/Kapat',
       slideshow: 'Slayt Gösterisini Başlat',
@@ -2013,6 +2025,7 @@ export const tr: I18n = {
     },
     pomodoro: {
       startLast: "Yazma oturumu başlat",
+      open: "Yazma oturumu (Pomodoro)…",
     },
   },
 };
