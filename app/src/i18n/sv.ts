@@ -737,6 +737,7 @@ export const sv: I18n = {
     suggestions: 'Förslag',
     addToDict: 'Lägg till i ordbok',
     ignoreOnce: 'Ignorera en gång',
+    noSuggestions: 'Inga förslag',
   },
   proofread: {
     heading: 'CJK-korrektur',

@@ -82,7 +82,8 @@ import { SLASH_BLOCKS, filterBlocks, expandSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
 import { isAndroid, isIOS } from '../lib/platform';
-import EditorContextMenu, { type EditorMenuAction } from './EditorContextMenu.vue';
+import EditorContextMenu, { type EditorMenuAction, type EditorMenuSpell } from './EditorContextMenu.vue';
+import { lookupMisspelling, addToSpellDict } from '../lib/spell-suggest';
 import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
 import { computeListContinuation } from '../lib/list-continuation';
@@ -2770,7 +2771,17 @@ function enterPlainRangeSelection(anchor: number, head: number) {
 // Linux keep the system menu, see onEditorContextMenu). On phones a long-press
 // fires `contextmenu` too; the system selection menu is better there, so we
 // leave it alone.
-const editorCtx = ref<{ x: number; y: number; hasSelection: boolean; hasImage: boolean } | null>(null);
+const editorCtx = ref<{
+  x: number;
+  y: number;
+  hasSelection: boolean;
+  hasImage: boolean;
+  spell: EditorMenuSpell | null;
+} | null>(null);
+// #376 — the misspelled word the menu was opened on, for replacing it with a
+// suggestion. `el` is the textarea on the Windows paths, null for CodeMirror.
+let ctxSpell: { el: HTMLTextAreaElement | null; from: number; to: number; word: string } | null = null;
+let ctxSeq = 0;
 let ctxTextarea: HTMLTextAreaElement | null = null;
 // #362 — the rendered image the menu was opened on (CodeMirror live-edit
 // widgets and the Windows live blocks alike), for "Copy image".
@@ -2790,7 +2801,7 @@ function onEditorMouseDownCapture(event: MouseEvent) {
   }
 }
 
-function onEditorContextMenu(event: MouseEvent) {
+async function onEditorContextMenu(event: MouseEvent) {
   const pointer = (event as PointerEvent).pointerType;
   if (pointer === 'touch' || pointer === 'pen' || isAndroid() || isIOS()) return;
   // Windows only. There the WebView2 menu lost the selection (#210). The
@@ -2799,9 +2810,21 @@ function onEditorContextMenu(event: MouseEvent) {
   if (!isWindowsEditorRuntime()) return;
   event.preventDefault();
   let hasSelection = false;
+  // #376 — where to look for a misspelled word: the line under the pointer,
+  // the pointer's offset in it, and where that line starts in the editor.
+  let spellProbe: { el: HTMLTextAreaElement | null; line: string; offset: number; base: number; selFrom: number; selTo: number } | null = null;
+  const spellOn = props.spellCheck || settings.spellcheckEnabled;
   if (!usePlainWindowsEditor) {
     hasSelection = !!view && !view.state.selection.main.empty;
     ctxTextarea = null;
+    if (spellOn && view) {
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos != null) {
+        const line = view.state.doc.lineAt(pos);
+        const sel = view.state.selection.main;
+        spellProbe = { el: null, line: line.text, offset: pos - line.from, base: line.from, selFrom: sel.from, selTo: sel.to };
+      }
+    }
   } else {
     const el = event.target instanceof HTMLTextAreaElement ? event.target : plainActiveTextarea();
     ctxTextarea = el;
@@ -2813,12 +2836,94 @@ function onEditorContextMenu(event: MouseEvent) {
       el.setSelectionRange(ctxSavedRange.start, ctxSavedRange.end);
     }
     hasSelection = !!el && el.selectionStart !== el.selectionEnd;
+    // Only a textarea has editable text to correct; a rendered live block
+    // under the pointer is not spell-checked by anyone.
+    if (spellOn && el && event.target === el) {
+      const text = el.value;
+      const off = offsetAtPoint(el, text, event.clientX, event.clientY);
+      const base = text.lastIndexOf('\n', off - 1) + 1;
+      const nl = text.indexOf('\n', off);
+      spellProbe = {
+        el,
+        line: text.slice(base, nl < 0 ? text.length : nl),
+        offset: off - base,
+        base,
+        selFrom: el.selectionStart ?? 0,
+        selTo: el.selectionEnd ?? 0,
+      };
+    }
   }
   ctxSavedRange = null;
   const target = event.target instanceof Element ? event.target : null;
   const img = target?.closest('img');
   ctxImage = img instanceof HTMLImageElement && img.src ? img : null;
-  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection, hasImage: !!ctxImage };
+  const seq = ++ctxSeq;
+  ctxSpell = null;
+  let spell: EditorMenuSpell | null = null;
+  if (spellProbe) {
+    const hit = await lookupMisspelling(spellProbe.line, spellProbe.offset, settings.spellcheckLang);
+    if (seq !== ctxSeq) return; // a newer right-click took over
+    if (hit) {
+      const from = spellProbe.base + hit.from;
+      const to = spellProbe.base + hit.to;
+      // A right-click on a selection acts on the selection; suggestions only
+      // when nothing is selected or the selection is that very word (Chromium
+      // selects the misspelling under the pointer on its own).
+      const selIsWord = spellProbe.selFrom === from && spellProbe.selTo === to;
+      if (!hasSelection || selIsWord) {
+        ctxSpell = { el: spellProbe.el, from, to, word: hit.word };
+        spell = {
+          word: hit.word,
+          suggestions: hit.suggestions,
+          // Adding a word only clears an underline our own checker drew: the
+          // CodeMirror Hunspell one. The webview's native underline would stay.
+          canAdd: settings.spellcheckEnabled && !usePlainWindowsEditor,
+        };
+      }
+    }
+  }
+  editorCtx.value = { x: event.clientX, y: event.clientY, hasSelection, hasImage: !!ctxImage, spell };
+}
+
+/** Replace the right-clicked misspelling with `word` (#376) — one undoable
+ *  edit, through the same channels as typing on each editor path. */
+function onEditorMenuReplace(word: string) {
+  editorCtx.value = null;
+  const target = ctxSpell;
+  ctxSpell = null;
+  ctxTextarea = null;
+  ctxImage = null;
+  if (!target) return;
+  if (!target.el) {
+    const v = view;
+    if (!v || v.state.sliceDoc(target.from, target.to) !== target.word) return;
+    v.dispatch({
+      changes: { from: target.from, to: target.to, insert: word },
+      selection: { anchor: target.from + word.length },
+      userEvent: 'input.spellcheck',
+      scrollIntoView: true,
+    });
+    v.focus();
+    return;
+  }
+  const el = target.el;
+  if (!el.isConnected || el.value.slice(target.from, target.to) !== target.word) return;
+  el.focus();
+  el.setSelectionRange(target.from, target.to);
+  // execCommand keeps it on the textarea's undo stack and fires the input
+  // event the block / flat handlers sync the document from (as paste does).
+  document.execCommand('insertText', false, word);
+}
+
+async function onEditorMenuAddWord(word: string) {
+  editorCtx.value = null;
+  ctxSpell = null;
+  try {
+    await addToSpellDict(word);
+  } catch (err) {
+    console.warn('[spellcheck] add to dictionary failed', err);
+  }
+  view?.focus();
 }
 
 async function copyContextImage(img: HTMLImageElement) {
@@ -2852,6 +2957,7 @@ async function readClipboard(): Promise<string> {
 
 async function onEditorMenuAction(id: EditorMenuAction) {
   editorCtx.value = null;
+  ctxSpell = null;
   if (id === 'copyImage') {
     const img = ctxImage;
     ctxImage = null;
@@ -4621,7 +4727,10 @@ const cls = computed(() => ({
       :y="editorCtx.y"
       :has-selection="editorCtx.hasSelection"
       :has-image="editorCtx.hasImage"
+      :spell="editorCtx.spell"
       @action="onEditorMenuAction"
+      @replace="onEditorMenuReplace"
+      @add-word="onEditorMenuAddWord"
       @close="editorCtx = null"
     />
   </Teleport>

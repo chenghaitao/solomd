@@ -737,6 +737,7 @@ export const de: I18n = {
     suggestions: 'Vorschläge',
     addToDict: 'Zum Wörterbuch hinzufügen',
     ignoreOnce: 'Einmal ignorieren',
+    noSuggestions: 'Keine Vorschläge',
   },
   proofread: {
     heading: 'CJK-Korrektur',

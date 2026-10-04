@@ -737,6 +737,7 @@ export const ko: I18n = {
     suggestions: '제안',
     addToDict: '사전에 추가',
     ignoreOnce: '한 번 무시',
+    noSuggestions: '제안 없음',
   },
   proofread: {
     heading: 'CJK 교정',

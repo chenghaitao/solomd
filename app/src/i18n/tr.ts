@@ -737,6 +737,7 @@ export const tr: I18n = {
     suggestions: 'Öneriler',
     addToDict: 'Sözlüğe ekle',
     ignoreOnce: 'Bir kez yoksay',
+    noSuggestions: 'Öneri yok',
   },
   proofread: {
     heading: 'CJK Denetimi',

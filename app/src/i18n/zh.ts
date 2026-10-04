@@ -738,6 +738,7 @@ export const zh: I18n = {
     suggestions: '拼写建议',
     addToDict: '添加到词典',
     ignoreOnce: '本次忽略',
+    noSuggestions: '无拼写建议',
   },
   proofread: {
     heading: '中文校对',

@@ -737,6 +737,7 @@ export const ja: I18n = {
     suggestions: '候補',
     addToDict: '辞書に追加',
     ignoreOnce: '一度だけ無視',
+    noSuggestions: '候補なし',
   },
   proofread: {
     heading: 'CJK 校正',

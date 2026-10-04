@@ -737,6 +737,7 @@ export const it: I18n = {
     suggestions: 'Suggerimenti',
     addToDict: 'Aggiungi al dizionario',
     ignoreOnce: 'Ignora una volta',
+    noSuggestions: 'Nessun suggerimento',
   },
   proofread: {
     heading: 'Revisione CJK',
