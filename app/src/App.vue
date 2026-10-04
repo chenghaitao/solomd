@@ -10,6 +10,7 @@ import { recordDay, shouldPrompt, type StarPromptState } from './lib/star-prompt
 import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
+import { ensureSpellDict } from './lib/spell-suggest';
 import Toolbar from './components/Toolbar.vue';
 import TelemetryBanner from './components/TelemetryBanner.vue';
 import TileRoot from './components/TileRoot.vue';
@@ -790,17 +791,11 @@ window.addEventListener(
 // it, and changing it reloads, so a user who drops es_ES into
 // `<config>/dictionaries/` and picks it gets Spanish checking immediately
 // instead of every word flagged against an English dictionary.
-let spellcheckLoadedFor: string | null = null;
-watchEffect(async () => {
+// The loaded-for bookkeeping lives in lib/spell-suggest.ts, which the editor
+// right-click menu (#376) also loads through on demand.
+watchEffect(() => {
   const lang = settings.spellcheckLang || 'en_US';
-  if (settings.spellcheckEnabled && spellcheckLoadedFor !== lang) {
-    try {
-      await invoke('spellcheck_init', { lang });
-      spellcheckLoadedFor = lang;
-    } catch (e) {
-      console.warn('spellcheck_init failed', e);
-    }
-  }
+  if (settings.spellcheckEnabled) void ensureSpellDict(lang);
 });
 
 watch(

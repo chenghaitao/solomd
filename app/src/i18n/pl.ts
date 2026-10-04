@@ -739,6 +739,7 @@ export const pl: I18n = {
     suggestions: 'Sugestie',
     addToDict: 'Dodaj do słownika',
     ignoreOnce: 'Zignoruj raz',
+    noSuggestions: 'Brak sugestii',
   },
   proofread: {
     heading: 'Korekta CJK',

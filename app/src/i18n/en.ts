@@ -745,6 +745,7 @@ export const en = {
     suggestions: 'Suggestions',
     addToDict: 'Add to dictionary',
     ignoreOnce: 'Ignore once',
+    noSuggestions: 'No suggestions',
   },
   proofread: {
     heading: 'CJK Proofread',

@@ -739,6 +739,7 @@ export const uk: I18n = {
     suggestions: 'Пропозиції',
     addToDict: 'Додати до словника',
     ignoreOnce: 'Ігнорувати одноразово',
+    noSuggestions: 'Немає варіантів',
   },
   proofread: {
     heading: 'Коректура CJK',

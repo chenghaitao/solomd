@@ -739,6 +739,7 @@ export const fr: I18n = {
     suggestions: 'Suggestions',
     addToDict: 'Ajouter au dictionnaire',
     ignoreOnce: 'Ignorer une fois',
+    noSuggestions: 'Aucune suggestion',
   },
   proofread: {
     heading: 'Relecture CJK',

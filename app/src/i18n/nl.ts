@@ -739,6 +739,7 @@ export const nl: I18n = {
     suggestions: 'Suggesties',
     addToDict: 'Toevoegen aan woordenboek',
     ignoreOnce: 'Eenmaal negeren',
+    noSuggestions: 'Geen suggesties',
   },
   proofread: {
     heading: 'CJK-correctie',

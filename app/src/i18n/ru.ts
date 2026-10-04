@@ -737,6 +737,7 @@ export const ru: I18n = {
     suggestions: 'Варианты',
     addToDict: 'Добавить в словарь',
     ignoreOnce: 'Пропустить',
+    noSuggestions: 'Нет вариантов',
   },
   proofread: {
     heading: 'Корректура CJK',
