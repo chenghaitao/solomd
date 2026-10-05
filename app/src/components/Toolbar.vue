@@ -602,20 +602,45 @@ watch(menubarOpen, () => {
 // menu anchors" (toolbar's own overflow scroll) from pane scrolls.
 const toolbarRef = ref<HTMLElement | null>(null);
 let barResizeObserver: ResizeObserver | null = null;
+// Startup cost: reading scrollWidth during mount forced a synchronous layout
+// of the whole freshly-built app (the single biggest item in a startup
+// profile — ~65% of app.mount() on a cold load), and every store-driven
+// re-render during startup forced another one. Neither read has to happen
+// synchronously:
+//  - ResizeObserver delivers an initial notification for every observed
+//    element right after the first layout and before that frame paints, so
+//    the first measurement reads an already-computed layout for free and a
+//    resulting "⋯" still lands in the first painted frame.
+//  - Content updates are coalesced into one read per animation frame (rAF
+//    runs before that frame's layout/paint, so the read costs the layout the
+//    frame was going to do anyway, and the result is painted in the same
+//    frame).
+let measureRaf = 0;
+function scheduleMeasureOverflow(): void {
+  if (measureRaf) return;
+  measureRaf = requestAnimationFrame(() => {
+    measureRaf = 0;
+    measureOverflow();
+  });
+}
 onMounted(() => {
-  measureOverflow();
-  if (typeof ResizeObserver === 'undefined' || !toolbarRef.value) return;
+  if (typeof ResizeObserver === 'undefined' || !toolbarRef.value) {
+    scheduleMeasureOverflow();
+    return;
+  }
   barResizeObserver = new ResizeObserver(() => measureOverflow());
   barResizeObserver.observe(toolbarRef.value);
 });
 onBeforeUnmount(() => {
   barResizeObserver?.disconnect();
   barResizeObserver = null;
+  if (measureRaf) cancelAnimationFrame(measureRaf);
+  measureRaf = 0;
 });
 // The bar's *contents* change too — a markdown tab adds two groups, a locale
 // switch re-widths every label. ResizeObserver never fires for those, because
 // the strip scrolls instead of growing.
-onUpdated(() => measureOverflow());
+onUpdated(() => scheduleMeasureOverflow());
 
 // ── Windows caption buttons (min / max / close) ─────────────────────────────
 const isMaximized = ref(false);

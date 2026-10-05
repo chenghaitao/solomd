@@ -92,6 +92,22 @@ export function activeKeyActions(
   return KEY_ACTIONS.filter((a) => !a.platforms || a.platforms.includes(platform));
 }
 
+/** id → action for one platform. `combosFor` runs once per label at startup
+ *  (every toolbar tooltip, palette entry and menu accelerator), and a fresh
+ *  `activeKeyActions()` filter + linear find per call made that quadratic.
+ *  KEY_ACTIONS is a constant table, so the index never goes stale. */
+const actionIndex = new Map<string, Map<string, KeyActionDef>>();
+function activeActionById(actionId: string, platform: 'mac' | 'windows' | 'linux'): KeyActionDef | undefined {
+  let index = actionIndex.get(platform);
+  if (!index) {
+    index = new Map();
+    // First match wins, as with the `find` this replaces.
+    for (const a of activeKeyActions(platform)) if (!index.has(a.id)) index.set(a.id, a);
+    actionIndex.set(platform, index);
+  }
+  return index.get(actionId);
+}
+
 /**
  * Every app-level shortcut, transcribed from the pre-#180 handler so the
  * defaults are byte-for-byte what shipped before.
@@ -359,7 +375,7 @@ export function combosFor(
   overrides: KeyOverrides = {},
   platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
 ): KeyCombo[] {
-  const action = activeKeyActions(platform).find((a) => a.id === actionId);
+  const action = activeActionById(actionId, platform);
   if (!action) return [];
   return effectiveCombos(action, overrides);
 }

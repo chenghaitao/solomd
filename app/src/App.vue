@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch, watchEffect, computed, provide, nextTick } from 'vue';
+import { onMounted, onBeforeUnmount, ref, watch, watchEffect, computed, provide, nextTick, defineAsyncComponent } from 'vue';
+import { useLazyComponent } from './composables/useLazyComponent';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -15,21 +16,18 @@ import Toolbar from './components/Toolbar.vue';
 import TelemetryBanner from './components/TelemetryBanner.vue';
 import TileRoot from './components/TileRoot.vue';
 import StatusBar from './components/StatusBar.vue';
-import CommandPalette from './components/CommandPalette.vue';
-import QuickSwitcher from './components/QuickSwitcher.vue';
 import Outline from './components/Outline.vue';
 import BacklinksPanel from './components/BacklinksPanel.vue';
-import AndroidFolderPicker from './components/AndroidFolderPicker.vue';
-import NeighborhoodPanel from './components/NeighborhoodPanel.vue';
-import RelationshipsPanel from './components/RelationshipsPanel.vue';
-import TagsPanel from './components/TagsPanel.vue';
-import TasksPanel from './components/TasksPanel.vue';
-import TableEditor from './components/TableEditor.vue';
-import FormulaEditor from './components/FormulaEditor.vue';
-import TypesPanel from './components/TypesPanel.vue';
-import HistoryPanel from './components/HistoryPanel.vue';
-import PropertiesInspector from './components/PropertiesInspector.vue';
-import AgentPanel from './components/AgentPanel.vue';
+const NeighborhoodPanel = defineAsyncComponent(() => import('./components/NeighborhoodPanel.vue'));
+const RelationshipsPanel = defineAsyncComponent(() => import('./components/RelationshipsPanel.vue'));
+const TagsPanel = defineAsyncComponent(() => import('./components/TagsPanel.vue'));
+const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'));
+const TableEditor = defineAsyncComponent(() => import('./components/TableEditor.vue'));
+const FormulaEditor = defineAsyncComponent(() => import('./components/FormulaEditor.vue'));
+const TypesPanel = defineAsyncComponent(() => import('./components/TypesPanel.vue'));
+const HistoryPanel = defineAsyncComponent(() => import('./components/HistoryPanel.vue'));
+const PropertiesInspector = defineAsyncComponent(() => import('./components/PropertiesInspector.vue'));
+const AgentPanel = defineAsyncComponent(() => import('./components/AgentPanel.vue'));
 import RsSplitter from './components/RsSplitter.vue';
 import { useAutoCommit } from './composables/useAutoCommit';
 import { useGithubSync } from './composables/useGithubSync';
@@ -37,12 +35,12 @@ import { useSessionRestore } from './composables/useSessionRestore';
 import SessionRestoreDialog from './components/SessionRestoreDialog.vue';
 import WhiteboardOverlay from './components/WhiteboardOverlay.vue';
 import AIRewriteOverlay from './components/AIRewriteOverlay.vue';
-import BasesView from './components/BasesView.vue';
+const BasesView = defineAsyncComponent(() => import('./components/BasesView.vue'));
 import { BASES_OPEN_EVENT, BASES_CLOSE_EVENT } from './composables/useBasesView';
-import InboxView from './components/InboxView.vue';
+const InboxView = defineAsyncComponent(() => import('./components/InboxView.vue'));
 import { INBOX_OPEN_EVENT, INBOX_CLOSE_EVENT } from './composables/useInboxView';
 // v4.6.1 F2 — Type lens (center-pane filtered view of one type's members).
-import TypeLensView from './components/TypeLensView.vue';
+const TypeLensView = defineAsyncComponent(() => import('./components/TypeLensView.vue'));
 import { TYPE_LENS_OPEN_EVENT, TYPE_LENS_CLOSE_EVENT } from './composables/useTypeLens';
 import FileTree from './components/FileTree.vue';
 // v4.6 F5 — Saved filtered views (sidebar panel + filtered list + editor).
@@ -50,17 +48,10 @@ import ViewsPanel from './components/ViewsPanel.vue';
 import ViewNoteList from './components/ViewNoteList.vue';
 import ViewEditorDialog from './components/ViewEditorDialog.vue';
 import { VIEW_OPEN_EVENT, VIEW_CLOSE_EVENT } from './composables/useSavedViews';
-import SettingsPanel from './components/SettingsPanel.vue';
-import MarkdownHelp from './components/MarkdownHelp.vue';
 import GlobalSearch from './components/GlobalSearch.vue';
-import RagSearch from './components/RagSearch.vue';
-import CjkProofread from './components/CjkProofread.vue';
 import ReadingView from './components/ReadingView.vue';
-import AboutDialog from './components/AboutDialog.vue';
-import AgentSetupWizard from './components/AgentSetupWizard.vue';
 import UnsavedDialog from './components/UnsavedDialog.vue';
 import FileChangedDialog from './components/FileChangedDialog.vue';
-import ImageUrlDialog from './components/ImageUrlDialog.vue';
 import Toast from './components/Toast.vue';
 import { useTabsStore } from './stores/tabs';
 import { useSettingsStore, buildEditorFontStack, setRightSidebarShell } from './stores/settings';
@@ -91,7 +82,8 @@ import { useSavedViewsStore } from './stores/savedViews';
 import { usePropertiesStore } from './stores/properties';
 import { useRagStore } from './stores/rag';
 import { IS_APP_STORE_BUILD } from './lib/app-build';
-import UiPreview from './components/UiPreview.vue';
+import { runWhenIdle } from './lib/idle';
+const UiPreview = defineAsyncComponent(() => import('./components/UiPreview.vue'));
 
 /* v4.6 dev-only UI gallery. `?uikit` renders ONLY the design-system preview
  * and skips the normal app, so the token layer can be eyeballed in isolation.
@@ -303,6 +295,31 @@ const ragSearchOpen = ref(false);
 const cjkProofreadOpen = ref(false);
 const aboutOpen = ref(false);
 const wizardOpen = ref(false);
+
+// Startup trim: these dialogs are closed at launch, so they're loaded (module,
+// setup, CSS) the first time they're opened instead of on the mount path, and
+// stay mounted afterwards. `xxxLazy.open` lags the real flag by one tick on
+// the first open — see useLazyComponent.
+const { component: CommandPaletteC, open: paletteLazyOpen } = useLazyComponent(
+  () => import('./components/CommandPalette.vue'), () => paletteOpen.value);
+const { component: QuickSwitcherC, open: quickSwitcherLazyOpen } = useLazyComponent(
+  () => import('./components/QuickSwitcher.vue'), () => quickSwitcherOpen.value);
+const { component: SettingsPanelC, open: settingsLazyOpen } = useLazyComponent(
+  () => import('./components/SettingsPanel.vue'), () => settingsOpen.value);
+const { component: MarkdownHelpC, open: helpLazyOpen } = useLazyComponent(
+  () => import('./components/MarkdownHelp.vue'), () => helpOpen.value);
+const { component: RagSearchC, open: ragSearchLazyOpen } = useLazyComponent(
+  () => import('./components/RagSearch.vue'), () => ragSearchOpen.value);
+const { component: CjkProofreadC, open: cjkProofreadLazyOpen } = useLazyComponent(
+  () => import('./components/CjkProofread.vue'), () => cjkProofreadOpen.value);
+const { component: AboutDialogC, open: aboutLazyOpen } = useLazyComponent(
+  () => import('./components/AboutDialog.vue'), () => aboutOpen.value);
+const { component: AgentSetupWizardC, open: wizardLazyOpen } = useLazyComponent(
+  () => import('./components/AgentSetupWizard.vue'), () => wizardOpen.value);
+const { component: ImageUrlDialogC, open: imageUrlLazyOpen } = useLazyComponent(
+  () => import('./components/ImageUrlDialog.vue'), () => imageUrlDialogOpen.value);
+const { component: AndroidFolderPickerC, open: androidPickerLazyOpen } = useLazyComponent(
+  () => import('./components/AndroidFolderPicker.vue'), () => androidPickerOpen.value);
 
 // Unsaved-changes dialog state
 const unsavedOpen = ref(false);
@@ -1414,27 +1431,30 @@ onMounted(async () => {
     console.warn('drag-drop not available', e);
   }
 
-  // Auto-check for updates
-  if (!isIOS() && settings.autoCheckUpdate) {
-    try {
-      const { checkForUpdateOnStartup, openReleaseUrl } = await import('./lib/check-update');
-      const result = await checkForUpdateOnStartup();
-      if (result && result.hasUpdate) {
-        const toastsStore = (await import('./stores/toasts')).useToastsStore();
-        const { useI18n } = await import('./i18n');
-        const { t: tr } = useI18n();
-        // #171 — no auto-opening the browser (it yanks the user out of
-        // whatever they're writing). The toast lingers; clicking it opens
-        // the download page.
-        toastsStore.success(
-          tr('settings.updateAvailable', { version: result.latest || '' }),
-          12000,
-          () => { void openReleaseUrl(result.url); },
-        );
-      }
-    } catch { /* silent */ }
-  }
+  // Auto-check for updates — once startup has settled; nobody waits on it,
+  // and it shouldn't share the main thread with the first keystrokes.
+  if (!isIOS() && settings.autoCheckUpdate) runWhenIdle(() => void checkForUpdatesNow());
 });
+
+async function checkForUpdatesNow(): Promise<void> {
+  try {
+    const { checkForUpdateOnStartup, openReleaseUrl } = await import('./lib/check-update');
+    const result = await checkForUpdateOnStartup();
+    if (result && result.hasUpdate) {
+      const toastsStore = (await import('./stores/toasts')).useToastsStore();
+      const { useI18n } = await import('./i18n');
+      const { t: tr } = useI18n();
+      // #171 — no auto-opening the browser (it yanks the user out of
+      // whatever they're writing). The toast lingers; clicking it opens
+      // the download page.
+      toastsStore.success(
+        tr('settings.updateAvailable', { version: result.latest || '' }),
+        12000,
+        () => { void openReleaseUrl(result.url); },
+      );
+    }
+  } catch { /* silent */ }
+}
 
 function onAIRewriteAccept(e: Event) {
   const detail = (e as CustomEvent).detail || {};
@@ -2174,22 +2194,26 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       :has-key="aiHasKey"
       @open-settings="(section?: string) => openSettingsAt(section ?? 'integrations')"
     />
-    <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
-    <QuickSwitcher :open="quickSwitcherOpen" @close="quickSwitcherOpen = false" />
-    <SettingsPanel
-      :open="settingsOpen"
+    <component :is="CommandPaletteC" v-if="CommandPaletteC" :open="paletteLazyOpen" @close="paletteOpen = false" />
+    <component :is="QuickSwitcherC" v-if="QuickSwitcherC" :open="quickSwitcherLazyOpen" @close="quickSwitcherOpen = false" />
+    <component
+      :is="SettingsPanelC"
+      v-if="SettingsPanelC"
+      :open="settingsLazyOpen"
       :initial-section="settingsInitialSection"
       @close="settingsOpen = false; settingsInitialSection = null; refreshAiHasKey()"
     />
-    <MarkdownHelp :open="helpOpen" :tab="helpTab" @close="helpOpen = false" />
-    <RagSearch
-      :open="ragSearchOpen"
+    <component :is="MarkdownHelpC" v-if="MarkdownHelpC" :open="helpLazyOpen" :tab="helpTab" @close="helpOpen = false" />
+    <component
+      :is="RagSearchC"
+      v-if="RagSearchC"
+      :open="ragSearchLazyOpen"
       @close="ragSearchOpen = false"
       @open-settings="(section?: string) => { ragSearchOpen = false; openSettingsAt(section ?? 'writing'); }"
     />
-    <CjkProofread :open="cjkProofreadOpen" @close="cjkProofreadOpen = false" />
-    <AboutDialog :open="aboutOpen" @close="aboutOpen = false" />
-    <AgentSetupWizard v-if="!IS_APP_STORE_BUILD" :open="wizardOpen" @close="wizardOpen = false" />
+    <component :is="CjkProofreadC" v-if="CjkProofreadC" :open="cjkProofreadLazyOpen" @close="cjkProofreadOpen = false" />
+    <component :is="AboutDialogC" v-if="AboutDialogC" :open="aboutLazyOpen" @close="aboutOpen = false" />
+    <component :is="AgentSetupWizardC" v-if="!IS_APP_STORE_BUILD && AgentSetupWizardC" :open="wizardLazyOpen" @close="wizardOpen = false" />
     <UnsavedDialog
       :open="unsavedOpen"
       :mode="unsavedMode"
@@ -2199,8 +2223,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @discard="onUnsavedAction('discard')"
       @cancel="onUnsavedAction('cancel')"
     />
-    <ImageUrlDialog
-      :open="imageUrlDialogOpen"
+    <component
+      :is="ImageUrlDialogC"
+      v-if="ImageUrlDialogC"
+      :open="imageUrlLazyOpen"
       @confirm="onImageUrlConfirm"
       @cancel="imageUrlDialogOpen = false"
     />
@@ -2216,8 +2242,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @cancel="onFileChangedAction('cancel')"
     />
     <Toast />
-    <AndroidFolderPicker
-      :open="androidPickerOpen"
+    <component
+      :is="AndroidFolderPickerC"
+      v-if="AndroidFolderPickerC"
+      :open="androidPickerLazyOpen"
       :start="workspace.currentFolder ?? undefined"
       @pick="onAndroidFolderPick"
       @close="androidPickerOpen = false"
