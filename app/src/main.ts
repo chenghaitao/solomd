@@ -24,6 +24,14 @@ const rootComponent = isSlideshow
   : isQuickCapture
     ? defineAsyncComponent(() => import('./components/QuickCapture.vue'))
     : App;
+// Dev-only: ?imetrace loads dev/ime-trace.js (IME event tracer for the
+// Windows VM tests). Stripped from production builds by the DEV guard.
+if (import.meta.env.DEV && /[?&]imetrace\b/.test(location.search)) {
+  const s = document.createElement('script');
+  s.src = '/dev/ime-trace.js';
+  document.head.appendChild(s);
+}
+
 const app = createApp(rootComponent);
 app.use(createPinia());
 

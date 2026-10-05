@@ -1,4 +1,4 @@
-param([string]$Exe = "notepad.exe", [string]$Title = "", [switch]$NewTab, [string]$Out = "C:\Users\Public\ime-result.txt", [int]$Settle = 4)
+param([string]$Exe = "notepad.exe", [string]$Title = "", [switch]$NewTab, [string]$ExeArgs = "", [string]$WinText = "", [int]$AfterEnterMs = 300, [int]$BeforeEnterMs = 300, [string]$Out = "C:\Users\Public\ime-result.txt", [int]$Settle = 4)
 $ErrorActionPreference = "Continue"
 Add-Type @"
 using System; using System.Runtime.InteropServices; using System.Text;
@@ -42,7 +42,7 @@ function TypeAscii([string]$s) { foreach ($c in $s.ToCharArray()) {
 Get-Process msedge, Notepad -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
 Get-Process SoloMD -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
 Start-Sleep 1
-$p = Start-Process $Exe -PassThru
+if ($ExeArgs) { $p = Start-Process $Exe -ArgumentList $ExeArgs -PassThru } else { $p = Start-Process $Exe -PassThru }
 Start-Sleep -Seconds $Settle
 # find a visible top-level window of the process
 $target = [IntPtr]::Zero
@@ -50,6 +50,9 @@ $procIds = @($p.Id) + @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$
 [W]::EnumWindows({ param($h, $l) $pid2 = 0; [W]::GetWindowThreadProcessId($h, [ref]$pid2) | Out-Null
   if ($procIds -contains [int]$pid2 -and [W]::IsWindowVisible($h)) { $sb = New-Object Text.StringBuilder 256; [W]::GetClassName($h, $sb, 256) | Out-Null
     if ($Title -eq "" -or $sb.ToString() -eq $Title) { $script:target = $h; return $false } }; return $true }, [IntPtr]::Zero) | Out-Null
+if ($target -eq [IntPtr]::Zero -and $WinText) {
+  [W]::EnumWindows({ param($h, $l) if ([W]::IsWindowVisible($h)) { $sb = New-Object Text.StringBuilder 512; [W]::GetWindowText($h, $sb, 512) | Out-Null
+    if ($sb.ToString() -like "*$WinText*") { $script:target = $h; return $false } }; return $true }, [IntPtr]::Zero) | Out-Null }
 if ($target -eq [IntPtr]::Zero) { $target = $p.MainWindowHandle }
 L "target=$target pid=$($p.Id)"
 [W]::ShowWindow($target, 3) | Out-Null
@@ -62,7 +65,7 @@ for ($i = 0; $i -lt 20 -and [W]::GetForegroundWindow() -ne $target; $i++) {
   Start-Sleep -Milliseconds 250 }
 $ok = [W]::GetForegroundWindow() -eq $target
 L "foreground ok=$ok"
-if (-not $ok) { Set-Content -Path $Out -Encoding UTF8 -Value (($log -join "`n") + "`n----TEXT----`nABORTED: target not foreground"); exit 1 }
+if (-not $ok) { Add-Type -AssemblyName System.Windows.Forms, System.Drawing; $b0 = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bm0 = New-Object Drawing.Bitmap $b0.Width, $b0.Height; $g0 = [Drawing.Graphics]::FromImage($bm0); $g0.CopyFromScreen($b0.Location, [Drawing.Point]::Empty, $b0.Size); $bm0.Save($Out + ".png"); $sbf = New-Object Text.StringBuilder 512; [W]::GetWindowText([W]::GetForegroundWindow(), $sbf, 512) | Out-Null; L ("fg window: " + $sbf.ToString()); Set-Content -Path $Out -Encoding UTF8 -Value (($log -join "`n") + "`n----TEXT----`nABORTED: target not foreground"); exit 1 }
 Start-Sleep -Milliseconds 800
 if ($NewTab) { Combo @(0x11) 0x4E; Start-Sleep -Seconds 2; L "new tab" }
 $r = New-Object W+RECT; [W]::GetWindowRect($target, [ref]$r) | Out-Null
@@ -75,9 +78,8 @@ if (($m -band 1) -eq 0) { Key 0x10; Start-Sleep -Milliseconds 400; $m = ImeMode;
 $tid = [W]::GetWindowThreadProcessId($target, [IntPtr]::Zero)
 L ("hkl=0x{0:X}" -f [int64][W]::GetKeyboardLayout($tid))
 # the test text: each line = pinyin + space (pick first candidate), punctuation via , and .
-$lines = @("diyigezibunengdiu ", "zhe shi ~**~jiacu ~**~de wenzi ,", "~- ~liebiao diyi xiang ", "liebiao dier xiang ", "", "zuihou yi hang ceshi wanbi .")
-Set-Clipboard -Value "## "; Start-Sleep -Milliseconds 200; Combo @(0x11) 0x56; Start-Sleep -Milliseconds 400
-foreach ($ln in $lines) { $parts = $ln -split "~"; for ($pi = 0; $pi -lt $parts.Count; $pi++) { if ($pi % 2 -eq 1) { Set-Clipboard -Value $parts[$pi]; Start-Sleep -Milliseconds 150; Combo @(0x11) 0x56; Start-Sleep -Milliseconds 300 } else { TypeAscii $parts[$pi] } }; Start-Sleep -Milliseconds 300; Key 0x0D; Start-Sleep -Milliseconds 300 }
+$lines = @("zheshi diyihang ", "nihao shijie ", "women shi pengyou ", "zhege zi bu neng diu ", "jintian tianqi henhao ,", "zaijian ", "shuru fa ceshi ", "zuihou yihang ,,, ..")
+foreach ($ln in $lines) { $parts = $ln -split "~"; for ($pi = 0; $pi -lt $parts.Count; $pi++) { if ($pi % 2 -eq 1) { Set-Clipboard -Value $parts[$pi]; Start-Sleep -Milliseconds 150; Combo @(0x11) 0x56; Start-Sleep -Milliseconds 300 } else { TypeAscii $parts[$pi] } }; Start-Sleep -Milliseconds $BeforeEnterMs; Key 0x0D; Start-Sleep -Milliseconds $AfterEnterMs }
 Start-Sleep -Milliseconds 800
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object Drawing.Bitmap $b.Width, $b.Height
