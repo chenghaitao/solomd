@@ -550,7 +550,17 @@ function openMenubarSub(key: string, e: MouseEvent) {
   // Open to the right; flip left when the window has no room there.
   const left = r.right + SUBMENU_WIDTH > window.innerWidth - 8 ? r.left - SUBMENU_WIDTH : r.right - 2;
   menubarSub.value = { key, top: r.top - 4, left: Math.max(8, left) };
+  // Like a native menu: a submenu that would run off the bottom of the window
+  // slides up until it fits (it only scrolls when taller than the window).
+  void nextTick(() => {
+    const el = menubarSubEl.value;
+    const sub = menubarSub.value;
+    if (!el || !sub || sub.key !== key) return;
+    const fitTop = Math.max(8, window.innerHeight - 8 - el.scrollHeight);
+    if (fitTop < sub.top) menubarSub.value = { ...sub, top: fitTop };
+  });
 }
+const menubarSubEl = ref<HTMLElement | null>(null);
 // Moving diagonally from the row to the submenu crosses the rows below it;
 // closing on the first of those would make the submenu impossible to reach.
 let menubarSubTimer = 0;
@@ -877,6 +887,7 @@ onBeforeUnmount(() => {
         </div>
         <div
           v-if="menubarOpen && menubarSubItems"
+          ref="menubarSubEl"
           class="dropdown__menu dropdown__menu--sub"
           :style="menubarSubStyle"
           @mouseenter="cancelMenubarSubClose"

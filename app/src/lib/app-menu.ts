@@ -76,6 +76,25 @@ export interface MenuState {
   fitWidth: boolean;
   dark: boolean;
   theme: string;
+  /** Word wrap / line numbers (editor). */
+  wordWrap: boolean;
+  lineNumbers: boolean;
+  /** Auto-commit on save (history). */
+  autoGit: boolean;
+  /** Right-sidebar / left-sidebar pane visibility, for the 面板 check marks. */
+  panes: {
+    outline: boolean;
+    inspector: boolean;
+    backlinks: boolean;
+    relationships: boolean;
+    neighborhood: boolean;
+    tags: boolean;
+    tasks: boolean;
+    types: boolean;
+    history: boolean;
+    savedViews: boolean;
+    agent: boolean;
+  };
 }
 
 export interface MenuContext {
@@ -92,6 +111,8 @@ export interface MenuContext {
   aiAvailable: boolean;
   /** Mac App Store builds may not check for updates themselves. */
   updateCheckAvailable: boolean;
+  /** Git history / GitHub sync need libgit2, which Android does not ship. */
+  gitAvailable: boolean;
 }
 
 const sep = { type: 'sep' } as const;
@@ -134,17 +155,28 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('file.newText', t('menubar.newText')),
     item('file.newInFolder', t('cmd.file.newInFolder')),
     item('window.new', t('menubar.newWindow')),
+    item('capture.quick', t('menubar.quickCapture')),
     sep,
     item('file.open', t('menubar.openFile')),
     item('file.openFolder', t('menubar.openFolder')),
     { type: 'submenu', id: 'recent', label: t('menubar.openRecent'), items: recentItems },
-    item('daily.openToday', t('cmd.daily.openToday')),
+    {
+      type: 'submenu',
+      id: 'daily',
+      label: t('menubar.daily'),
+      items: [
+        item('daily.openToday', t('menubar.dailyToday')),
+        item('daily.openYesterday', t('menubar.dailyYesterday')),
+        item('daily.openTomorrow', t('menubar.dailyTomorrow')),
+      ],
+    },
     sep,
     item('file.save', t('menubar.save')),
     item('file.saveAs', t('menubar.saveAs')),
     item('file.autoSave', t('menubar.autoSave'), { checked: state.autoSave }),
     sep,
     item('file.import', t('menubar.importDocs')),
+    item('image.uploadLocalImages', t('menubar.uploadLocalImages')),
     {
       type: 'submenu',
       id: 'export',
@@ -157,12 +189,48 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
         item('export.pdf', t('toolbar.exportPdf')),
         item('export.image', t('toolbar.exportImage')),
         sep,
+        // Pandoc-based: they tell the user when Pandoc is not installed.
+        item('export.epub', t('cmd.export.epub')),
+        item('export.odt', t('cmd.export.odt')),
+        item('export.latex', t('cmd.export.latex')),
+        item('export.rtf', t('cmd.export.rtf')),
+        item('export.pandocCustom', t('cmd.export.pandocCustom')),
+        sep,
         item('export.copyHtml', t('cmd.export.copyHtml')),
         item('export.copyMd', t('cmd.export.copyMd')),
+        item('export.copyPlain', t('cmd.export.copyPlain')),
+        item('export.copyImage', t('cmd.export.copyImage')),
       ],
     },
     sep,
-    item('inbox.toggle', t('cmd.inbox.toggle')),
+    {
+      type: 'submenu',
+      id: 'inbox',
+      label: t('menubar.inbox'),
+      items: [
+        item('inbox.open', t('menubar.inboxOpen')),
+        item('inbox.toggle', t('cmd.inbox.toggle')),
+        item('inbox.organizeAndAdvance', t('menubar.inboxOrganizeAndAdvance')),
+      ],
+    },
+    // Android has no libgit2: every history / sync command would only fail.
+    ...(ctx.gitAvailable
+      ? [{
+          type: 'submenu' as const,
+          id: 'syncHistory',
+          label: t('menubar.syncHistory'),
+          items: [
+            item('sync.pullNow', t('menubar.syncPull')),
+            item('sync.pushNow', t('menubar.syncPush')),
+            item('sync.copyShareLink', t('menubar.copyShareLink')),
+            item('note.copyGitUrl', t('menubar.copyGitUrl')),
+            sep,
+            item('history.commitNow', t('menubar.historyCommitNow')),
+            item('history.initWorkspace', t('menubar.historyInit')),
+            item('history.toggleAutoGit', t('menubar.autoCommit'), { checked: state.autoGit }),
+          ],
+        }]
+      : []),
     sep,
     item('file.openExternal', t('menubar.openExternal')),
     // macOS keeps Settings in the app menu (HIG); everywhere else it is File.
@@ -185,7 +253,18 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     sep,
     editKey('selectAll', 'edit.selectAll', t('menubar.selectAll'), 'Ctrl+A'),
     sep,
-    item('editor.caseCycle', t('cmd.editor.caseCycle')),
+    {
+      type: 'submenu',
+      id: 'case',
+      label: t('menubar.caseMenu'),
+      items: [
+        item('editor.caseCycle', t('cmd.editor.caseCycle')),
+        sep,
+        item('editor.caseUpper', t('menubar.caseUpper')),
+        item('editor.caseLower', t('menubar.caseLower')),
+        item('editor.caseTitle', t('menubar.caseTitle')),
+      ],
+    },
     sep,
     item('editor.selectWord', t('cmd.editor.selectWord')),
     item('editor.deleteWord', t('cmd.editor.deleteWord')),
@@ -194,8 +273,21 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     sep,
     ...(ctx.aiAvailable ? [item('editor.aiRewrite', t('cmd.editor.aiRewrite'))] : []),
     item('clean.aiArtifacts', t('toolbar.cleanAiMarks')),
-    item('proofread.cjk', t('cmd.proofread.cjk')),
+    item('clean.stripMarkdown', t('menubar.stripMarkdown')),
     item('format.markdown', t('cmd.format.markdown')),
+    sep,
+    {
+      type: 'submenu',
+      id: 'chinese',
+      label: t('menubar.chinese'),
+      items: [
+        item('proofread.cjk', t('cmd.proofread.cjk')),
+        sep,
+        item('cn.s2t', t('menubar.cnS2t')),
+        item('cn.t2s', t('menubar.cnT2s')),
+        item('cn.copyPinyin', t('menubar.cnCopyPinyin')),
+      ],
+    },
   ];
 
   // ---- 段落 Paragraph ----
@@ -248,6 +340,12 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('tile.splitDown', t('cmd.tile.splitDown')),
     item('tile.focusNext', t('cmd.tile.focusNext')),
     item('tile.focusPrev', t('cmd.tile.focusPrev')),
+    item('tile.closePane', t('cmd.tile.closePane')),
+    sep,
+    item('bases.open', t('menubar.bases')),
+    item('views.create', t('menubar.newSavedView')),
+    item('type.create', t('menubar.newType')),
+    item('tags.refresh', t('cmd.tags.refresh')),
   ];
 
   // ---- 视图 View ----
@@ -281,13 +379,38 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     sep,
     item('view.toggleFileTree', t('menubar.toggleFileTree')),
     item('view.toggleRightSidebar', t('menubar.toggleRightSidebar')),
-    item('view.toggleOutline', t('menubar.toggleOutline')),
-    item('view.toggleInspector', t('menubar.toggleInspector')),
+    {
+      type: 'submenu',
+      id: 'panes',
+      label: t('menubar.panes'),
+      items: [
+        item('view.toggleOutline', t('menubar.paneOutline'), { checked: state.panes.outline }),
+        item('view.toggleInspector', t('menubar.paneInspector'), { checked: state.panes.inspector }),
+        item('view.toggleBacklinks', t('menubar.paneBacklinks'), { checked: state.panes.backlinks }),
+        item('view.relationships', t('menubar.paneRelationships'), { checked: state.panes.relationships }),
+        item('view.toggleNeighborhood', t('menubar.paneNeighborhood'), { checked: state.panes.neighborhood }),
+        item('view.toggleTagsPanel', t('menubar.paneTags'), { checked: state.panes.tags }),
+        item('view.toggleTasksPanel', t('menubar.paneTasks'), { checked: state.panes.tasks }),
+        item('view.toggleTypesPanel', t('menubar.paneTypes'), { checked: state.panes.types }),
+        item('view.toggleHistoryPanel', t('menubar.paneHistory'), { checked: state.panes.history }),
+        item('views.toggle', t('menubar.paneSavedViews'), { checked: state.panes.savedViews }),
+        // App Store builds ship without AI.
+        ...(ctx.aiAvailable ? [item('view.toggleAgentPanel', t('menubar.paneAgent'), { checked: state.panes.agent })] : []),
+        sep,
+        item('view.resetSidebarPanes', t('menubar.resetSidebarPanes')),
+      ],
+    },
     item('view.toggleToolbar', t('menubar.toggleToolbar')),
     sep,
     item('fold.toggle', t('cmd.fold.toggle')),
     item('fold.all', t('cmd.fold.all')),
     item('fold.none', t('cmd.fold.none')),
+    {
+      type: 'submenu',
+      id: 'foldLevel',
+      label: t('menubar.foldToLevel'),
+      items: [1, 2, 3, 4, 5, 6].map((n) => item(`fold.level${n}`, t('menubar.foldLevelN', { n }))),
+    },
     sep,
     item('view.toggleFocusMode', t('menubar.focusMode'), { checked: state.focusMode }),
     item('view.toggleTypewriter', t('menubar.typewriterMode'), { checked: state.typewriter }),
@@ -295,6 +418,8 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('pomodoro.open', t('menubar.writingSession')),
     sep,
     item('view.toggleSpellCheck', t('menubar.spellCheck'), { checked: state.spellCheck }),
+    item('view.toggleWrap', t('menubar.wordWrap'), { checked: state.wordWrap }),
+    item('view.toggleLineNumbers', t('menubar.lineNumbers'), { checked: state.lineNumbers }),
     item('view.toggleLivePreview', t('toolbar.livePreviewToggle'), { checked: state.livePreview }),
     item('view.toggleFitWidth', t('toolbar.fitWidth'), { checked: state.fitWidth }),
     sep,
@@ -303,7 +428,12 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
       type: 'submenu',
       id: 'theme',
       label: t('menubar.theme'),
-      items: ctx.themes.map((th) => item(`theme.set:${th.value}`, th.label, { checked: state.theme === th.value })),
+      items: [
+        ...ctx.themes.map((th) => item(`theme.set:${th.value}`, th.label, { checked: state.theme === th.value })),
+        sep,
+        item('theme.customCss', t('menubar.customCss')),
+        item('theme.clearCustomCss', t('menubar.clearCustomCss')),
+      ],
     },
     sep,
     {
@@ -332,6 +462,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('help.markdown', t('menubar.mdHelp')),
     item('help.shortcuts', t('menubar.helpShortcuts')),
     item('help.cli', t('menubar.helpCli')),
+    item('help.welcomeTour', t('menubar.welcomeTour')),
     ...(ctx.updateCheckAvailable ? [sep, item('help.checkUpdate', t('menubar.checkUpdate'))] : []),
     sep,
     item('help.about', t('menubar.about')),
