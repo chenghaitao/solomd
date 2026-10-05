@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 
 import { buildAppMenu, itemShortcut, toNativeSpec, type MenuContext, type MenuNode, type NativeNode, type TopMenu } from './app-menu.ts';
 import { KEY_ACTIONS, typoraPreset } from './keybindings.ts';
@@ -23,10 +24,11 @@ const DICTS: Record<string, unknown> = { en, zh, ja, ko, de, fr, es, pt, it: itD
 
 /** A `t` that fails loudly on a key the locale does not have. */
 function strictT(dict: unknown, lang: string) {
-  return (key: string) => {
+  return (key: string, params?: Record<string, string | number>) => {
     let cur: any = dict;
     for (const p of key.split('.')) cur = cur?.[p];
     if (typeof cur !== 'string') throw new Error(`${lang}: missing ${key}`);
+    if (params) for (const [k, v] of Object.entries(params)) cur = cur.replaceAll(`{${k}}`, String(v));
     return cur;
   };
 }
@@ -42,9 +44,15 @@ function ctx(over: Partial<MenuContext> = {}): MenuContext {
     state: {
       autoSave: false, viewMode: 'edit', focusMode: true, typewriter: false, spellCheck: true,
       livePreview: true, fitWidth: false, dark: false, theme: 'light',
+      wordWrap: true, lineNumbers: false, autoGit: false,
+      panes: {
+        outline: true, inspector: false, backlinks: true, relationships: false, neighborhood: false,
+        tags: false, tasks: true, types: false, history: false, savedViews: false, agent: false,
+      },
     },
     aiAvailable: true,
     updateCheckAvailable: true,
+    gitAvailable: true,
     ...over,
   };
 }
@@ -60,6 +68,36 @@ const ids = (menus: TopMenu[]) =>
   menus.flatMap((m) => walk(m.items)).filter((n) => n.type === 'item').map((n) => (n as { id: string }).id);
 const find = (menus: TopMenu[], id: string) =>
   menus.flatMap((m) => walk(m.items)).find((n) => n.type === 'item' && n.id === id) as Extract<MenuNode, { type: 'item' }>;
+
+/** Palette commands (useCommands) the menus added for coverage. */
+const PALETTE_MENU_IDS = [
+  // File
+  'capture.quick', 'daily.openYesterday', 'daily.openTomorrow', 'image.uploadLocalImages',
+  'export.epub', 'export.odt', 'export.latex', 'export.rtf', 'export.pandocCustom',
+  'export.copyPlain', 'export.copyImage', 'inbox.open', 'inbox.organizeAndAdvance',
+  'sync.pullNow', 'sync.pushNow', 'sync.copyShareLink', 'note.copyGitUrl',
+  'history.commitNow', 'history.initWorkspace', 'history.toggleAutoGit',
+  // Edit
+  'editor.caseUpper', 'editor.caseLower', 'editor.caseTitle', 'cn.s2t', 'cn.t2s', 'cn.copyPinyin',
+  'clean.stripMarkdown',
+  // Navigate
+  'tile.closePane', 'bases.open', 'views.create', 'type.create', 'tags.refresh',
+  // View
+  'view.toggleBacklinks', 'view.relationships', 'view.toggleNeighborhood', 'view.toggleTagsPanel',
+  'view.toggleTasksPanel', 'view.toggleTypesPanel', 'view.toggleHistoryPanel', 'views.toggle',
+  'view.toggleAgentPanel', 'view.resetSidebarPanes', 'view.toggleWrap', 'view.toggleLineNumbers',
+  'theme.customCss', 'theme.clearCustomCss',
+  'fold.level1', 'fold.level2', 'fold.level3', 'fold.level4', 'fold.level5', 'fold.level6',
+  // Help
+  'help.welcomeTour',
+];
+
+/** The submenu (any depth) with this id. */
+function submenu(menus: TopMenu[], id: string) {
+  return menus.flatMap((m) => walk(m.items)).find((n) => n.type === 'submenu' && n.id === id) as
+    Extract<MenuNode, { type: 'submenu' }> | undefined;
+}
+const itemIds = (nodes: MenuNode[]) => nodes.filter((n) => n.type === 'item').map((n) => (n as { id: string }).id);
 
 test('C1: seven top-level menus, no Tools menu', () => {
   const m = buildAppMenu(ctx());
@@ -124,6 +162,8 @@ test('every menu id is something App.vue can dispatch', () => {
     'export.html', 'export.docx', 'export.pdf', 'export.image', 'clean.aiArtifacts',
     'view.toggleSpellCheck', 'view.toggleLivePreview', 'view.toggleFitWidth', 'pomodoro.open',
     'editor.insertImage', 'editor.insertImageUrl',
+    // palette commands reached through the dispatchMenuAction fallback
+    ...PALETTE_MENU_IDS,
   ]);
   for (const platform of ['windows', 'mac', 'linux'] as const) {
     for (const id of ids(buildAppMenu(ctx({ platform })))) {
@@ -218,4 +258,67 @@ test('native spec never steals the OS edit chords', () => {
   assert.equal(nativeAccel(spec, 'pomodoro.startLast'), undefined);
   const edit = spec.find((m) => m.text === 'Edit')!;
   assert.ok(edit.items.some((n) => n.kind === 'predefined' && n.role === 'redo'));
+});
+
+test('menu coverage: every palette feature has a menu home, on every platform', () => {
+  for (const platform of ['windows', 'mac', 'linux'] as const) {
+    const menus = buildAppMenu(ctx({ platform, macKeys: platform === 'mac' }));
+    const all = new Set(ids(menus));
+    for (const id of PALETTE_MENU_IDS) assert.ok(all.has(id), `${platform}: missing ${id}`);
+    // Still the seven (plus app / Window on macOS).
+    assert.equal(menus.filter((m) => !['app', 'window'].includes(m.id)).length, 7);
+    // No id appears twice in one menu bar.
+    const list = ids(menus);
+    assert.equal(new Set(list).size, list.length, `${platform}: duplicate menu ids`);
+  }
+});
+
+test('menu coverage: the new submenus hold what they should', () => {
+  const m = buildAppMenu(ctx());
+  assert.deepEqual(itemIds(submenu(m, 'daily')!.items), ['daily.openToday', 'daily.openYesterday', 'daily.openTomorrow']);
+  assert.deepEqual(itemIds(submenu(m, 'inbox')!.items), ['inbox.open', 'inbox.toggle', 'inbox.organizeAndAdvance']);
+  assert.deepEqual(itemIds(submenu(m, 'case')!.items), ['editor.caseCycle', 'editor.caseUpper', 'editor.caseLower', 'editor.caseTitle']);
+  assert.deepEqual(itemIds(submenu(m, 'chinese')!.items), ['proofread.cjk', 'cn.s2t', 'cn.t2s', 'cn.copyPinyin']);
+  const panes = itemIds(submenu(m, 'panes')!.items);
+  assert.ok(panes.includes('view.toggleOutline') && panes.includes('view.toggleInspector'));
+  assert.equal(panes.at(-1), 'view.resetSidebarPanes');
+  assert.ok(itemIds(submenu(m, 'theme')!.items).includes('theme.customCss'));
+  // Shortcuts survive the move into submenus.
+  assert.equal(itemShortcut(find(m, 'daily.openToday'), ctx()), 'Ctrl+D');
+  assert.equal(itemShortcut(find(m, 'inbox.toggle'), ctx()), 'Ctrl+E');
+  assert.equal(itemShortcut(find(m, 'view.toggleInspector'), ctx()), 'Ctrl+Shift+I');
+  assert.equal(find(m, 'fold.level2').label, 'Show Down to Level 2');
+});
+
+test('menu coverage: pane / wrap / line-number / auto-commit check marks follow state', () => {
+  const m = buildAppMenu(ctx());
+  assert.equal(find(m, 'view.toggleOutline').checked, true);
+  assert.equal(find(m, 'view.toggleInspector').checked, false);
+  assert.equal(find(m, 'view.toggleBacklinks').checked, true);
+  assert.equal(find(m, 'view.toggleTasksPanel').checked, true);
+  assert.equal(find(m, 'view.toggleWrap').checked, true);
+  assert.equal(find(m, 'view.toggleLineNumbers').checked, false);
+  assert.equal(find(m, 'history.toggleAutoGit').checked, false);
+  // Actions (not toggles) carry no check mark.
+  assert.equal(find(m, 'view.resetSidebarPanes').checked, undefined);
+});
+
+test('menu coverage: AI and git entries follow their availability flags', () => {
+  const store = ids(buildAppMenu(ctx({ aiAvailable: false })));
+  assert.ok(!store.includes('view.toggleAgentPanel'), 'App Store builds have no AI panel');
+  assert.ok(!store.includes('editor.aiRewrite'));
+  const android = buildAppMenu(ctx({ gitAvailable: false }));
+  assert.equal(submenu(android, 'syncHistory'), undefined, 'no git backend → no 同步与历史');
+  assert.ok(!ids(android).some((id) => id.startsWith('sync.') || id.startsWith('history.')));
+  assert.ok(submenu(buildAppMenu(ctx()), 'syncHistory'));
+});
+
+test('menu coverage: every fallback id really is a palette command (useCommands.ts)', () => {
+  // useCommands needs Pinia + Tauri, so read its source: each id must be
+  // declared there, or dispatchMenuAction's palette fallback finds nothing.
+  const src = readFileSync(new URL('../composables/useCommands.ts', import.meta.url), 'utf8');
+  for (const id of PALETTE_MENU_IDS) {
+    const declared = src.includes(`id: '${id}'`) || (/^fold\.level[1-6]$/.test(id) && src.includes('id: `fold.level${level}`'));
+    assert.ok(declared, `${id} is not a command in useCommands.ts`);
+  }
 });

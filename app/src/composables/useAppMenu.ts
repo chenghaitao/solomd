@@ -3,7 +3,8 @@ import { useWorkspaceStore } from '../stores/workspace';
 import { useI18n } from '../i18n';
 import { buildAppMenu, type MenuPlatform, type TopMenu } from '../lib/app-menu';
 import { themeFamily, themeLabels } from '../lib/themes';
-import { isMacOS } from '../lib/platform';
+import { hasGitBackend, isMacOS } from '../lib/platform';
+import { useTabsStore } from '../stores/tabs';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { isMasBuild } from '../lib/check-update';
 import type { Theme } from '../types';
@@ -16,6 +17,7 @@ import type { Theme } from '../types';
 export function useAppMenu() {
   const settings = useSettingsStore();
   const workspace = useWorkspaceStore();
+  const tabs = useTabsStore();
   const { t } = useI18n();
   const macKeys = isMacOS();
 
@@ -40,9 +42,27 @@ export function useAppMenu() {
         fitWidth: settings.previewFitWidth,
         dark: themeFamily(settings.theme as Theme) === 'dark',
         theme: settings.theme,
+        wordWrap: settings.wordWrap,
+        lineNumbers: settings.showLineNumbers,
+        autoGit: settings.autoGitEnabled,
+        panes: {
+          // The outline is per tab; the rest are workspace-wide settings.
+          outline: !!tabs.activeTab?.showOutline,
+          inspector: settings.showInspector,
+          backlinks: settings.showBacklinks,
+          relationships: settings.showRelationships,
+          neighborhood: settings.showNeighborhood,
+          tags: settings.showTagsPanel,
+          tasks: settings.showTasksPanel,
+          types: settings.showTypesPanel,
+          history: settings.showHistoryPanel,
+          savedViews: settings.showViewsPanel,
+          agent: settings.showAgentPanel,
+        },
       },
       aiAvailable: !IS_APP_STORE_BUILD,
       updateCheckAvailable: !isMasBuild(),
+      gitAvailable: hasGitBackend(),
     });
   }
 

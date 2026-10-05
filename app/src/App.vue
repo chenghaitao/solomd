@@ -643,12 +643,20 @@ const appMenu = useAppMenu();
 const nativeMenuPlatform = '__TAURI_INTERNALS__' in window && !isMobile() && !isWindowsDesktop()
   ? (isMacOS() ? 'mac' : 'linux')
   : null;
+// The 面板 › 大纲 check mark is per tab, so switching tabs re-runs this; only
+// rebuild the native menu when the spec actually changed.
+let lastNativeSpec = '';
 watchEffect(() => {
   if (!nativeMenuPlatform) return;
   const menus = appMenu.menuFor(nativeMenuPlatform);
-  invoke('set_menu_spec', {
-    menus: toNativeSpec(menus, { overrides: { ...settings.keybindings } }),
-  }).catch((e) => console.warn('[menu] set_menu_spec failed', e));
+  const spec = toNativeSpec(menus, { overrides: { ...settings.keybindings } });
+  const key = JSON.stringify(spec);
+  if (key === lastNativeSpec) return;
+  lastNativeSpec = key;
+  invoke('set_menu_spec', { menus: spec }).catch((e) => {
+    lastNativeSpec = '';
+    console.warn('[menu] set_menu_spec failed', e);
+  });
 });
 watchEffect(() => {
   invoke('save_language_preference', { lang: settings.language }).catch(() => {});
