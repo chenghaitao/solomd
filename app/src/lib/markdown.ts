@@ -1,6 +1,43 @@
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
-import hljs from 'highlight.js/lib/common';
+import hljs from 'highlight.js/lib/core';
+import type { LanguageFn } from 'highlight.js';
+import hl_xml from 'highlight.js/lib/languages/xml';
+import hl_bash from 'highlight.js/lib/languages/bash';
+import hl_c from 'highlight.js/lib/languages/c';
+import hl_cpp from 'highlight.js/lib/languages/cpp';
+import hl_csharp from 'highlight.js/lib/languages/csharp';
+import hl_css from 'highlight.js/lib/languages/css';
+import hl_markdown from 'highlight.js/lib/languages/markdown';
+import hl_diff from 'highlight.js/lib/languages/diff';
+import hl_ruby from 'highlight.js/lib/languages/ruby';
+import hl_go from 'highlight.js/lib/languages/go';
+import hl_graphql from 'highlight.js/lib/languages/graphql';
+import hl_ini from 'highlight.js/lib/languages/ini';
+import hl_java from 'highlight.js/lib/languages/java';
+import hl_javascript from 'highlight.js/lib/languages/javascript';
+import hl_json from 'highlight.js/lib/languages/json';
+import hl_kotlin from 'highlight.js/lib/languages/kotlin';
+import hl_less from 'highlight.js/lib/languages/less';
+import hl_lua from 'highlight.js/lib/languages/lua';
+import hl_makefile from 'highlight.js/lib/languages/makefile';
+import hl_perl from 'highlight.js/lib/languages/perl';
+import hl_objectivec from 'highlight.js/lib/languages/objectivec';
+import hl_php from 'highlight.js/lib/languages/php';
+import hl_php_template from 'highlight.js/lib/languages/php-template';
+import hl_plaintext from 'highlight.js/lib/languages/plaintext';
+import hl_python from 'highlight.js/lib/languages/python';
+import hl_python_repl from 'highlight.js/lib/languages/python-repl';
+import hl_r from 'highlight.js/lib/languages/r';
+import hl_rust from 'highlight.js/lib/languages/rust';
+import hl_scss from 'highlight.js/lib/languages/scss';
+import hl_shell from 'highlight.js/lib/languages/shell';
+import hl_sql from 'highlight.js/lib/languages/sql';
+import hl_swift from 'highlight.js/lib/languages/swift';
+import hl_yaml from 'highlight.js/lib/languages/yaml';
+import hl_typescript from 'highlight.js/lib/languages/typescript';
+import hl_vbnet from 'highlight.js/lib/languages/vbnet';
+import hl_wasm from 'highlight.js/lib/languages/wasm';
 import 'katex/contrib/mhchem';
 // @ts-ignore — types are loose
 import katex from '@vscode/markdown-it-katex';
@@ -35,6 +72,57 @@ const katexPlugin: any = (katex as any).default ?? katex;
 // punctuation. ASCII text keeps stock CommonMark behaviour — `**limit:**hard`
 // stays literal — because nothing CJK is adjacent.
 
+
+// Startup trim: `highlight.js/lib/common` registers its 36 grammars at module
+// load — each `registerLanguage` runs the grammar factory — although nothing
+// is highlighted until a code fence renders. Same 36 grammars, registered in
+// the same order (highlightAuto's tie-break), on the first highlight instead.
+const HLJS_LANGUAGES: [string, LanguageFn][] = [
+  ['xml', hl_xml],
+  ['bash', hl_bash],
+  ['c', hl_c],
+  ['cpp', hl_cpp],
+  ['csharp', hl_csharp],
+  ['css', hl_css],
+  ['markdown', hl_markdown],
+  ['diff', hl_diff],
+  ['ruby', hl_ruby],
+  ['go', hl_go],
+  ['graphql', hl_graphql],
+  ['ini', hl_ini],
+  ['java', hl_java],
+  ['javascript', hl_javascript],
+  ['json', hl_json],
+  ['kotlin', hl_kotlin],
+  ['less', hl_less],
+  ['lua', hl_lua],
+  ['makefile', hl_makefile],
+  ['perl', hl_perl],
+  ['objectivec', hl_objectivec],
+  ['php', hl_php],
+  ['php-template', hl_php_template],
+  ['plaintext', hl_plaintext],
+  ['python', hl_python],
+  ['python-repl', hl_python_repl],
+  ['r', hl_r],
+  ['rust', hl_rust],
+  ['scss', hl_scss],
+  ['shell', hl_shell],
+  ['sql', hl_sql],
+  ['swift', hl_swift],
+  ['yaml', hl_yaml],
+  ['typescript', hl_typescript],
+  ['vbnet', hl_vbnet],
+  ['wasm', hl_wasm],
+];
+let hljsRegistered = false;
+function ensureHljs(): typeof hljs {
+  if (!hljsRegistered) {
+    hljsRegistered = true;
+    for (const [name, lang] of HLJS_LANGUAGES) hljs.registerLanguage(name, lang);
+  }
+  return hljs;
+}
 
 // Per-render front-matter capture. markdown-it is synchronous so a
 // module-level variable is safe for sequential calls, but this is NOT
@@ -73,14 +161,15 @@ export const md = new MarkdownIt({
     // markdown-it falls through to its default HTML-escape path for this
     // lang; the class is still emitted via langPrefix on the <code> tag.
     if (lang === 'mermaid') return '';
-    if (lang && hljs.getLanguage(lang)) {
+    const hl = ensureHljs();
+    if (lang && hl.getLanguage(lang)) {
       try {
-        return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+        return hl.highlight(code, { language: lang, ignoreIllegals: true }).value;
       } catch {}
     }
     // Unknown language: let hljs auto-detect for a best-effort highlight.
     try {
-      return hljs.highlightAuto(code).value;
+      return hl.highlightAuto(code).value;
     } catch {
       return '';
     }
