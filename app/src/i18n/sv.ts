@@ -498,10 +498,10 @@ export const sv: I18n = {
     windowsEditorEngineAuto: "Automatiskt — CodeMirror från WebView2 154, annars Inbyggd (nu: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Inbyggd",
-    windowsEditorEngineNative: "Inbyggd — Windows egen textruta",
+    windowsEditorEngineNative: "Inbyggd — Windows egen textruta (standard)",
     windowsEditorEngineCodeMirror: "CodeMirror — syntaxmarkering, stabilare liveredigering",
     windowsEditorEngineHint:
-      "Automatiskt använder CodeMirror när systemets WebView2 är version 154 eller nyare, och den inbyggda redigeraren på äldre versioner, där vissa inmatningsmetoder kunde tappa första tecknet eller dubblera skiljetecken i CodeMirror. CodeMirror har Markdown-syntaxmarkering och fullständigt redigeringsbeteende; den inbyggda redigeraren använder Windows textruta. Om en inmatningsmetod krånglar i CodeMirror, välj Inbyggd.",
+      "Den inbyggda redigeraren använder Windows textruta och fungerar pålitligt med alla kinesiska, japanska och koreanska inmatningsmetoder. CodeMirror har Markdown-syntaxmarkering och fullständigt redigeringsbeteende; med Microsoft Pinyin på WebView2 154 eller nyare skriver den rätt, men Sogou Pinyin kan fortfarande tappa första bokstaven efter att ett ord bekräftats. Automatiskt använder CodeMirror på WebView2 154 eller nyare. Använder du Sogou, behåll Inbyggd.",
     windowsEditorEngineVimHint: "Vim-läget använder alltid CodeMirror. Stäng av Vim-läget för att välja.",
     slashCommandsEnabled: 'Snedstreckskommandon ( / ) — popup med Markdown-block (rubrik, lista, kod, tabell…) när du skriver / på en ny rad',
     fenceLanguageSuggestions: 'Föreslå språk för kodblock efter ```',

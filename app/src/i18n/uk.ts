@@ -498,10 +498,10 @@ export const uk: I18n = {
     windowsEditorEngineAuto: "Автоматично — CodeMirror з WebView2 154 і новіших, інакше Нативний (зараз: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Нативний",
-    windowsEditorEngineNative: "Нативний — власне текстове поле Windows",
+    windowsEditorEngineNative: "Нативний — власне текстове поле Windows (типово)",
     windowsEditorEngineCodeMirror: "CodeMirror — підсвічування синтаксису, стабільніше живе редагування",
     windowsEditorEngineHint:
-      "Автоматичний режим використовує CodeMirror, коли системний WebView2 має версію 154 або новішу, а на старіших версіях — нативний редактор: у них деякі методи введення в CodeMirror могли губити перший символ або дублювати розділові знаки. CodeMirror має підсвічування синтаксису Markdown і повну поведінку редагування; нативний редактор використовує текстове поле Windows. Якщо метод введення працює з CodeMirror погано, виберіть «Нативний».",
+      "Нативний редактор використовує текстове поле Windows і надійно працює з усіма методами введення китайської, японської та корейської. CodeMirror має підсвічування синтаксису Markdown і повну поведінку редагування; з Microsoft Pinyin на WebView2 154 і новіших введення правильне, але Sogou Pinyin усе ще може губити першу літеру після підтвердження слова. Автоматичний режим використовує CodeMirror на WebView2 154 і новіших. Якщо користуєтеся Sogou, залиште «Нативний».",
     windowsEditorEngineVimHint: "Режим Vim завжди використовує CodeMirror. Вимкніть режим Vim, щоб обрати.",
     slashCommandsEnabled: 'Слеш-команди ( / ) — спливне меню з блоками Markdown (заголовок, список, код, таблиця…) при наборі / на новому рядку',
     fenceLanguageSuggestions: 'Пропонувати мови блоків коду після ```',

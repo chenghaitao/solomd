@@ -498,10 +498,10 @@ export const ja: I18n = {
     windowsEditorEngineAuto: "自動 — WebView2 154 以降は CodeMirror、それ以外はネイティブ（現在: {current}）",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "ネイティブ",
-    windowsEditorEngineNative: "ネイティブ — Windows 標準のテキストボックス",
+    windowsEditorEngineNative: "ネイティブ — Windows 標準のテキストボックス（既定）",
     windowsEditorEngineCodeMirror: "CodeMirror — 構文ハイライト、安定したライブ編集",
     windowsEditorEngineHint:
-      "自動は、システムの WebView2 がバージョン 154 以降なら CodeMirror、それより古い場合はネイティブエディターを使います（古い WebView2 では、一部の IME で CodeMirror の先頭文字が消えたり句読点が重複したりすることがありました）。CodeMirror は Markdown の構文ハイライトと完全な編集動作を備え、ネイティブは Windows 標準のテキストボックスを使います。CodeMirror で IME に問題が出たらネイティブを選んでください。",
+      "ネイティブエディターは Windows 標準のテキストボックスを使い、どの日中韓 IME でも安定して入力できます。CodeMirror は Markdown の構文ハイライトと完全な編集動作を備え、WebView2 154 以降の Microsoft Pinyin では正しく入力できますが、搜狗（Sogou）入力では確定直後の最初の文字が消えることがあります。「自動」は WebView2 154 以降で CodeMirror を使います。Sogou を使う場合はネイティブのままにしてください。",
     windowsEditorEngineVimHint: "Vim モードでは常に CodeMirror を使います。選択するには Vim モードをオフにしてください。",
     slashCommandsEnabled: 'スラッシュコマンド ( / ) — 新しい行で / を入力すると Markdown ブロック（見出し、リスト、コード、テーブル…）のポップアップが表示',
     fenceLanguageSuggestions: '``` の入力後にコードブロックの言語を提案する',

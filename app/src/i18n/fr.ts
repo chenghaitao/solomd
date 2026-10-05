@@ -498,10 +498,10 @@ export const fr: I18n = {
     windowsEditorEngineAuto: "Automatique — CodeMirror à partir de WebView2 154, sinon Natif (actuellement : {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Natif",
-    windowsEditorEngineNative: "Natif — la zone de texte de Windows",
+    windowsEditorEngineNative: "Natif — la zone de texte de Windows (par défaut)",
     windowsEditorEngineCodeMirror: "CodeMirror — coloration syntaxique, édition en direct plus stable",
     windowsEditorEngineHint:
-      "Automatique utilise CodeMirror quand le WebView2 du système est en version 154 ou plus récente, et l’éditeur natif sur les versions plus anciennes, où certaines méthodes de saisie pouvaient perdre le premier caractère ou doubler la ponctuation dans CodeMirror. CodeMirror offre la coloration syntaxique Markdown et un comportement d’édition complet ; l’éditeur natif utilise la zone de texte de Windows. Si une méthode de saisie pose problème dans CodeMirror, choisissez Natif.",
+      "L’éditeur natif utilise la zone de texte de Windows et fonctionne de façon fiable avec toutes les méthodes de saisie chinoises, japonaises et coréennes. CodeMirror offre la coloration syntaxique Markdown et un comportement d’édition complet ; avec Microsoft Pinyin à partir de WebView2 154, la saisie est correcte, mais Sogou Pinyin peut encore perdre la première lettre après la validation d’un mot. Automatique utilise CodeMirror à partir de WebView2 154. Si vous utilisez Sogou, gardez Natif.",
     windowsEditorEngineVimHint: "Le mode Vim utilise toujours CodeMirror. Désactivez le mode Vim pour choisir.",
     slashCommandsEnabled: 'Commandes slash ( / ) — popup avec blocs Markdown (titre, liste, code, tableau…) lors de la saisie de / en début de ligne',
     fenceLanguageSuggestions: 'Suggérer des langages de bloc de code après ```',

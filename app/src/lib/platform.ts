@@ -95,15 +95,17 @@ export function isWindowsEditorRuntime(): boolean {
   );
 }
 
-/** Which editor Windows uses: the native textarea, CodeMirror (#328, #344),
- *  or `auto` — CodeMirror on WebView2 154+, the textarea below that. */
+/** Which editor Windows uses: the native textarea (default), CodeMirror
+ *  (#328, #344), or `auto` — CodeMirror on WebView2 154+, the textarea below. */
 export type WindowsEditorEngine = 'auto' | 'native' | 'codemirror';
 
 /**
- * First WebView2 major version on which CodeMirror is the default on Windows.
+ * WebView2 major version from which the opt-in `auto` engine picks CodeMirror.
  * The native textarea exists because CodeMirror dropped or doubled characters
- * under some IMEs in WebView2; that was a Chromium regression, fixed in 154.
- * Below it the textarea stays the safe default.
+ * under IMEs in WebView2 (WebView2Feedback#5625). On 154 Microsoft Pinyin
+ * types correctly in CodeMirror, but Sogou Pinyin still drops the first letter
+ * after a commit (VM test 2026-10-05) — so native stays the default and
+ * `auto` is only a choice.
  */
 export const CODEMIRROR_SAFE_WEBVIEW2_MAJOR = 154;
 
@@ -135,7 +137,7 @@ export function resolveWindowsEditorEngine(
 export function shouldUsePlainWindowsEditor(
   windowsRuntime: boolean,
   vimMode: boolean,
-  engine: WindowsEditorEngine = 'auto',
+  engine: WindowsEditorEngine = 'native',
   webviewVersion: string | null = currentWebviewVersion(),
 ): boolean {
   return windowsRuntime && !vimMode && resolveWindowsEditorEngine(engine, webviewVersion) === 'native';
