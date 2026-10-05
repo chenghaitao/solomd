@@ -262,17 +262,34 @@ function measureTabsOverflow() {
   tabsOverflow.value = !!el && el.scrollWidth > el.clientWidth + 1;
 }
 let tabsRO: ResizeObserver | null = null;
+// Startup: no synchronous scrollWidth read in onMounted — that forced a
+// layout of the whole app mid-mount. ResizeObserver's initial notification
+// arrives right after the first layout (before paint), and tab-list changes
+// are measured in the next animation frame, again before it paints.
+let tabsMeasureRaf = 0;
+function scheduleMeasureTabsOverflow() {
+  if (tabsMeasureRaf) return;
+  tabsMeasureRaf = requestAnimationFrame(() => {
+    tabsMeasureRaf = 0;
+    measureTabsOverflow();
+  });
+}
 onMounted(() => {
   if (typeof ResizeObserver !== 'undefined' && tabsEl.value) {
     tabsRO = new ResizeObserver(measureTabsOverflow);
     tabsRO.observe(tabsEl.value);
+  } else {
+    scheduleMeasureTabsOverflow();
   }
-  measureTabsOverflow();
 });
-onBeforeUnmount(() => tabsRO?.disconnect());
+onBeforeUnmount(() => {
+  tabsRO?.disconnect();
+  if (tabsMeasureRaf) cancelAnimationFrame(tabsMeasureRaf);
+  tabsMeasureRaf = 0;
+});
 watch(
   () => tabs.tabs.map((x) => x.fileName).join('\u0000'),
-  () => nextTick(measureTabsOverflow),
+  () => nextTick(scheduleMeasureTabsOverflow),
 );
 
 const tabListPos = ref<{ top: number; right: number } | null>(null);
