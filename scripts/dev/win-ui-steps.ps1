@@ -1,7 +1,7 @@
 ﻿param([string]$Exe, [string]$Steps, [string]$Out = "C:\Users\Public\ui-steps", [string]$WinClass = "Tauri Window", [string]$ProcName = "SoloMD")
 # Drive SoloMD in the Windows VM through a list of steps, with real input:
 #   launch | open:<file> | open2:<file> | kill | wait:<s> | ms:<ms> | key:<combo> (ctrl+b, alt+f4, ctrl+shift+b, enter, esc…)
-#   type:<ascii> | click:<x>,<y> (window-relative CSS-ish px) | shot:<name> | fg
+#   type:<ascii> | wheel:<x>,<y>,<notches down> | click:<x>,<y> (window-relative CSS-ish px) | shot:<name> | fg
 # Steps are ';'-separated. Screenshots land at <Out>-<name>.png, the log at <Out>.txt.
 $ErrorActionPreference = "Continue"
 Add-Type @"
@@ -77,6 +77,9 @@ foreach ($st in $Steps.Split(';')) { $st = $st.Trim(); if (-not $st) { continue 
     'type'   { TypeAscii $arg; L "type $arg" }
     'click'  { $r = New-Object W+RECT; [W]::GetWindowRect($script:target, [ref]$r) | Out-Null; $xy = $arg.Split(',')
                [W]::SetCursorPos($r.L + [int]$xy[0], $r.T + [int]$xy[1]) | Out-Null; [W]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 60; [W]::mouse_event(4,0,0,0,[UIntPtr]::Zero); L "click $arg" }
+    'wheel'  { $r = New-Object W+RECT; [W]::GetWindowRect($script:target, [ref]$r) | Out-Null; $w = $arg.Split(',')
+               [W]::SetCursorPos($r.L + [int]$w[0], $r.T + [int]$w[1]) | Out-Null
+               for ($k = 0; $k -lt [Math]::Abs([int]$w[2]); $k++) { [W]::mouse_event(0x0800, 0, 0, [uint32]([int][Math]::Sign(-[int]$w[2]) * 120 -band 0xFFFFFFFF), [UIntPtr]::Zero); Start-Sleep -Milliseconds 80 }; L "wheel $arg" }
     'shot'   { Shot $arg }
     'alive'  { L ("alive=" + [bool](Get-Process $ProcName -EA SilentlyContinue)) }
   } }
