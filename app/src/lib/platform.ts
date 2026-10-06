@@ -144,6 +144,12 @@ export function shouldUsePlainWindowsEditor(
   engine: WindowsEditorEngine = 'auto',
   webviewVersion: string | null = currentWebviewVersion(),
 ): boolean {
+  // DEV-only QA hook, the counterpart of `?forcePlain`: a plain browser on
+  // Windows has no WebView2 version to read, so `auto` would always pick the
+  // textarea there. `?forceCodeMirror` lets the IME harness test CodeMirror.
+  if (import.meta.env?.DEV && typeof location !== 'undefined' && location.search.includes('forceCodeMirror')) {
+    return false;
+  }
   return windowsRuntime && !vimMode && resolveWindowsEditorEngine(engine, webviewVersion) === 'native';
 }
 
