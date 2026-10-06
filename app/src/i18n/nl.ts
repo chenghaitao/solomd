@@ -336,6 +336,7 @@ export const nl: I18n = {
     folderMissingLocate: 'Map zoeken…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "Bestandsboom verbergen",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const nl: I18n = {
     openFileInNewWindow: 'Bestanden in een nieuw venster openen',
     openFileInNewWindowHint: 'Indien aan opent "Bestand openen" een nieuw venster in plaats van een tabblad toe te voegen aan het huidige venster.',
     revealInFileTreeOnOpen: 'Bestand tonen in bestandsboom bij openen',
-    revealInFileTreeOnOpenHint: 'Indien aan stelt het openen van een bestand de zijbalk in op de bovenliggende map (en toont de zijbalk indien verborgen).',
+    revealInFileTreeOnOpenHint: "Indien aan, zet het openen van een bestand de bestandsboom op de bovenliggende map. Een verborgen bestandsboom blijft verborgen.",
     openLinkedFilesExternally: 'Gekoppelde bestanden openen met de standaard-app',
     openLinkedFilesExternallyHint: 'Indien aan, opent klikken op een Markdown-link naar een lokaal PDF- / Office- / ander document dit in de standaard-app van het systeem. Zet uit om het in plaats daarvan naar Markdown te converteren. Links naar .md / tekst / afbeeldingen openen altijd binnen SoloMD.',
     autoCheckUpdate: 'Automatisch op updates controleren',

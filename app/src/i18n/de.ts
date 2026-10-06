@@ -336,6 +336,7 @@ export const de: I18n = {
     folderMissingLocate: 'Ordner suchen…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "Dateibaum ausblenden",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const de: I18n = {
     openFileInNewWindow: 'Dateien in neuem Fenster öffnen',
     openFileInNewWindowHint: 'Wenn aktiviert, öffnet "Datei öffnen" ein neues Fenster, statt einen Tab im aktuellen hinzuzufügen.',
     revealInFileTreeOnOpen: 'Datei beim Öffnen im Dateibaum anzeigen',
-    revealInFileTreeOnOpenHint: 'Wenn aktiviert, springt die Seitenleiste beim Öffnen einer Datei in deren Ordner (und blendet die Seitenleiste ein, falls verborgen).',
+    revealInFileTreeOnOpenHint: "Wenn aktiv, zeigt der Dateibaum beim Öffnen einer Datei deren übergeordneten Ordner. Ein ausgeblendeter Dateibaum bleibt ausgeblendet.",
     openLinkedFilesExternally: 'Verlinkte Dateien mit der Standard-App öffnen',
     openLinkedFilesExternallyHint: 'Wenn aktiviert, öffnet ein Klick auf einen Markdown-Link zu einer lokalen PDF- / Office- / anderen Dokumentdatei diese in der Standard-App des Systems. Ausschalten, um stattdessen in Markdown umzuwandeln. Links zu .md / Text / Bildern öffnen immer in SoloMD.',
     autoCheckUpdate: 'Automatisch nach Updates suchen',

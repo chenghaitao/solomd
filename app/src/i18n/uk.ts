@@ -336,6 +336,7 @@ export const uk: I18n = {
     folderMissingLocate: 'Знайти теку…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "Сховати дерево файлів",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const uk: I18n = {
     openFileInNewWindow: 'Відкривати файли в новому вікні',
     openFileInNewWindowHint: 'Якщо ввімкнено, «Відкрити файл» створює нове вікно замість додавання вкладки до поточного.',
     revealInFileTreeOnOpen: 'Показувати файл у дереві при відкритті',
-    revealInFileTreeOnOpenHint: 'Якщо ввімкнено, відкриття файлу встановлює бічну панель на його батьківську теку (і відкриває панель, якщо вона прихована).',
+    revealInFileTreeOnOpenHint: "Якщо ввімкнено, відкриття файлу перемикає дерево файлів на його теку. Приховане дерево залишається прихованим.",
     openLinkedFilesExternally: 'Відкривати пов\'язані файли типовою програмою',
     openLinkedFilesExternallyHint: 'Коли увімкнено, клік на посиланні Markdown до локального PDF / Office / іншого документа відкриває його в типовій програмі системи. Вимкніть, щоб натомість конвертувати у Markdown. Посилання на .md / текст / зображення завжди відкриваються в SoloMD.',
     autoCheckUpdate: 'Автоматично перевіряти оновлення',

@@ -336,6 +336,7 @@ export const ja: I18n = {
     folderMissingLocate: 'フォルダを指定し直す…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "ファイルツリーを隠す",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const ja: I18n = {
     openFileInNewWindow: 'ファイルを新しいウィンドウで開く',
     openFileInNewWindowHint: 'オンの場合、「ファイルを開く」は現在のウィンドウにタブを追加せず新しいウィンドウを開きます。',
     revealInFileTreeOnOpen: 'ファイルを開いた時にファイルツリーで表示',
-    revealInFileTreeOnOpenHint: 'オンの場合、ファイルを開くとサイドバーが親フォルダに移動します（サイドバーが非表示なら表示します）。',
+    revealInFileTreeOnOpenHint: "オンにすると、ファイルを開いたときにファイルツリーをその親フォルダーに切り替えます。非表示のファイルツリーは非表示のままです。",
     openLinkedFilesExternally: 'リンク先のファイルを既定のアプリで開く',
     openLinkedFilesExternallyHint: 'オンにすると、Markdown 内のローカル PDF / Office / その他の文書へのリンクをクリックすると OS の既定アプリで開きます。オフにすると Markdown に変換して開きます。.md / テキスト / 画像へのリンクは常に SoloMD 内で開きます。',
     autoCheckUpdate: '自動でアップデートを確認',

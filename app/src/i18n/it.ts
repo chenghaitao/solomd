@@ -336,6 +336,7 @@ export const it: I18n = {
     folderMissingLocate: 'Individua la cartella…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "Nascondi albero dei file",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const it: I18n = {
     openFileInNewWindow: 'Apri file in nuova finestra',
     openFileInNewWindowHint: 'Quando attivo, "Apri file" apre una nuova finestra invece di aggiungere una scheda a quella corrente.',
     revealInFileTreeOnOpen: 'Rivela file nell\'albero all\'apertura',
-    revealInFileTreeOnOpenHint: 'Quando attivo, aprire un file porta la barra laterale alla sua cartella padre (e rivela la barra se nascosta).',
+    revealInFileTreeOnOpenHint: "Se attivo, aprire un file porta l’albero dei file sulla sua cartella. Un albero nascosto resta nascosto.",
     openLinkedFilesExternally: 'Apri i file collegati con l\'app predefinita',
     openLinkedFilesExternallyHint: 'Se attivo, fare clic su un link Markdown verso un file locale PDF / Office / altro documento lo apre nell\'app predefinita del sistema. Disattiva per convertirlo in Markdown. I link a .md / testo / immagini si aprono sempre dentro SoloMD.',
     autoCheckUpdate: 'Controlla aggiornamenti automaticamente',

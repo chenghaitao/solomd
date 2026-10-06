@@ -338,6 +338,7 @@ export const pt: I18n = {
     folderMissingLocate: 'Localizar a pasta…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "Ocultar árvore de arquivos",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -587,7 +588,7 @@ export const pt: I18n = {
     openFileInNewWindow: 'Abrir arquivos em nova janela',
     openFileInNewWindowHint: 'Quando ativo, "Abrir arquivo" lança uma nova janela em vez de adicionar uma aba à atual.',
     revealInFileTreeOnOpen: 'Revelar arquivo na árvore ao abrir',
-    revealInFileTreeOnOpenHint: 'Quando ativo, abrir um arquivo coloca a barra lateral em sua pasta-pai (e revela a barra se oculta).',
+    revealInFileTreeOnOpenHint: "Quando ativado, abrir um arquivo leva a árvore de arquivos à pasta dele. Uma árvore oculta continua oculta.",
     openLinkedFilesExternally: 'Abrir arquivos vinculados com o app padrão',
     openLinkedFilesExternallyHint: 'Quando ativado, clicar em um link Markdown para um arquivo local PDF / Office / outro documento o abre no app padrão do sistema. Desative para convertê-lo em Markdown. Links para .md / texto / imagens sempre abrem dentro do SoloMD.',
     autoCheckUpdate: 'Verificar atualizações automaticamente',

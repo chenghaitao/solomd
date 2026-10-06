@@ -336,6 +336,7 @@ export const ko: I18n = {
     folderMissingLocate: '폴더 다시 찾기…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "파일 트리 숨기기",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const ko: I18n = {
     openFileInNewWindow: '파일을 새 창으로 열기',
     openFileInNewWindowHint: '켜두면 "파일 열기"가 현재 창에 탭을 추가하지 않고 새 창을 엽니다.',
     revealInFileTreeOnOpen: '파일 열 때 파일 트리에서 표시',
-    revealInFileTreeOnOpenHint: '켜두면 파일을 열 때 사이드바가 상위 폴더로 이동합니다(숨겨져 있으면 표시).',
+    revealInFileTreeOnOpenHint: "켜면 파일을 열 때 파일 트리를 해당 상위 폴더로 전환합니다. 숨긴 파일 트리는 그대로 숨겨져 있습니다.",
     openLinkedFilesExternally: '링크된 파일을 기본 앱으로 열기',
     openLinkedFilesExternallyHint: '켜면 Markdown 안의 로컬 PDF / Office / 기타 문서 링크를 클릭할 때 OS 기본 앱으로 엽니다. 끄면 대신 Markdown으로 변환해 엽니다. .md / 텍스트 / 이미지 링크는 항상 SoloMD 안에서 열립니다.',
     autoCheckUpdate: '업데이트 자동 확인',

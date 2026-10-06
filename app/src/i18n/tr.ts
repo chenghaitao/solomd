@@ -336,6 +336,7 @@ export const tr: I18n = {
     folderMissingLocate: 'Klasörü bul…',
     copyRelPathDone: 'Relative path copied.',
     closeFolder: 'Close folder',
+    hideTree: "Dosya ağacını gizle",
     noRecentFolders: 'No other folders yet — open one to switch later.',
   },
   statusbar: {
@@ -585,7 +586,7 @@ export const tr: I18n = {
     openFileInNewWindow: 'Dosyaları yeni pencerede aç',
     openFileInNewWindowHint: 'Açıkken "Dosya Aç" mevcut pencereye sekme eklemek yerine yeni pencere açar.',
     revealInFileTreeOnOpen: 'Açılan dosyayı dosya ağacında göster',
-    revealInFileTreeOnOpenHint: 'Açıkken bir dosya açıldığında kenar çubuğu üst klasöre ayarlanır (gizliyse kenar çubuğu da gösterilir).',
+    revealInFileTreeOnOpenHint: "Açıkken bir dosya açıldığında dosya ağacı onun klasörüne geçer. Gizli dosya ağacı gizli kalır.",
     openLinkedFilesExternally: 'Bağlantılı dosyaları varsayılan uygulamayla aç',
     openLinkedFilesExternallyHint: 'Açıkken, Markdown içindeki yerel bir PDF / Office / başka belgeye giden bağlantıya tıklamak onu sistemin varsayılan uygulamasında açar. Bunun yerine Markdown\'a dönüştürmek için kapatın. .md / metin / görsel bağlantıları her zaman SoloMD içinde açılır.',
     autoCheckUpdate: 'Güncellemeleri otomatik denetle',
