@@ -550,10 +550,10 @@ export const en = {
     windowsEditorEngineAuto: "Automatic — CodeMirror on WebView2 154 or newer, otherwise Native (now: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Native",
-    windowsEditorEngineNative: "Native — Windows' own text box (default)",
+    windowsEditorEngineNative: "Native — Windows' own text box",
     windowsEditorEngineCodeMirror: "CodeMirror — syntax highlighting, steadier live edit",
     windowsEditorEngineHint:
-      "The native editor uses Windows' own text box and works reliably with every Chinese, Japanese and Korean input method. CodeMirror adds Markdown syntax highlighting and complete editing behaviour, and with Microsoft Pinyin on WebView2 154 or newer it types correctly — but Sogou Pinyin can still drop the first letter after a word is committed. Automatic uses CodeMirror on WebView2 154 or newer. If you use Sogou, keep Native.",
+      "Automatic uses CodeMirror when the system WebView2 is version 154 or newer, and the native editor on older versions, where some input methods could drop the first character or double punctuation in CodeMirror. CodeMirror has Markdown syntax highlighting and complete editing behaviour; the native editor uses Windows' own text box. If an input method misbehaves in CodeMirror, choose Native.",
     windowsEditorEngineVimHint: "Vim mode always uses CodeMirror. Turn Vim mode off to choose.",
     slashCommandsEnabled: 'Slash commands ( / ) — popup with Markdown blocks (Heading, list, code, table…) when you type / on a new line',
     fenceLanguageSuggestions: 'Suggest code-block languages after ```',

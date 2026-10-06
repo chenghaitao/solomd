@@ -547,10 +547,10 @@ export const nl: I18n = {
     windowsEditorEngineAuto: "Automatisch — CodeMirror vanaf WebView2 154, anders Native (nu: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Native",
-    windowsEditorEngineNative: "Native — het eigen tekstvak van Windows (standaard)",
+    windowsEditorEngineNative: "Native — het eigen tekstvak van Windows",
     windowsEditorEngineCodeMirror: "CodeMirror — syntaxiskleuring, rustiger live bewerken",
     windowsEditorEngineHint:
-      "De native editor gebruikt het tekstvak van Windows en werkt betrouwbaar met alle Chinese, Japanse en Koreaanse invoermethoden. CodeMirror heeft Markdown-syntaxiskleuring en volledig bewerkingsgedrag; met Microsoft Pinyin op WebView2 154 of nieuwer typt het goed, maar Sogou Pinyin kan na het bevestigen van een woord nog de eerste letter kwijtraken. Automatisch gebruikt CodeMirror vanaf WebView2 154. Gebruik je Sogou, houd dan Native aan.",
+      "Automatisch gebruikt CodeMirror als de systeem-WebView2 versie 154 of nieuwer is, en op oudere versies de native editor — daar konden sommige invoermethoden in CodeMirror het eerste teken kwijtraken of leestekens verdubbelen. CodeMirror heeft Markdown-syntaxiskleuring en volledig bewerkingsgedrag; de native editor gebruikt het tekstvak van Windows. Als een invoermethode in CodeMirror problemen geeft, kies dan Native.",
     windowsEditorEngineVimHint: "Vim-modus gebruikt altijd CodeMirror. Zet Vim-modus uit om te kiezen.",
     slashCommandsEnabled: 'Slash-opdrachten ( / ) — pop-up met Markdown-blokken (kop, lijst, code, tabel…) wanneer je / typt op een nieuwe regel',
     fenceLanguageSuggestions: 'Talen voor codeblokken voorstellen na ```',

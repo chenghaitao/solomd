@@ -547,10 +547,10 @@ export const ko: I18n = {
     windowsEditorEngineAuto: "자동 — WebView2 154 이상은 CodeMirror, 그 외에는 네이티브 (현재: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "네이티브",
-    windowsEditorEngineNative: "네이티브 — Windows 기본 텍스트 상자 (기본값)",
+    windowsEditorEngineNative: "네이티브 — Windows 기본 텍스트 상자",
     windowsEditorEngineCodeMirror: "CodeMirror — 구문 강조, 안정적인 라이브 편집",
     windowsEditorEngineHint:
-      "네이티브 편집기는 Windows 기본 텍스트 상자를 사용하며 모든 한중일 입력기에서 안정적으로 입력됩니다. CodeMirror는 Markdown 구문 강조와 완전한 편집 동작을 제공하고 WebView2 154 이상에서 Microsoft Pinyin으로는 정상 입력되지만, Sogou 입력기는 단어를 확정한 직후 첫 글자를 빠뜨릴 수 있습니다. 자동은 WebView2 154 이상에서 CodeMirror를 사용합니다. Sogou를 쓴다면 네이티브를 유지하세요.",
+      "자동은 시스템 WebView2가 154 이상이면 CodeMirror를, 더 오래된 버전에서는 네이티브 편집기를 사용합니다(오래된 WebView2에서는 일부 입력기가 CodeMirror에서 첫 글자를 빠뜨리거나 문장 부호를 중복 입력할 수 있었습니다). CodeMirror는 Markdown 구문 강조와 완전한 편집 동작을 제공하고, 네이티브는 Windows 기본 텍스트 상자를 사용합니다. CodeMirror에서 입력기에 문제가 생기면 네이티브를 선택하세요.",
     windowsEditorEngineVimHint: "Vim 모드에서는 항상 CodeMirror를 사용합니다. 선택하려면 Vim 모드를 끄세요.",
     slashCommandsEnabled: '슬래시 명령(/) — 새 줄에서 /를 입력하면 Markdown 블록(제목, 목록, 코드, 표 등) 팝업',
     fenceLanguageSuggestions: '``` 입력 후 코드 블록 언어 제안',

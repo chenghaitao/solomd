@@ -547,10 +547,10 @@ export const es: I18n = {
     windowsEditorEngineAuto: "Automático — CodeMirror con WebView2 154 o posterior, si no Nativo (ahora: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Nativo",
-    windowsEditorEngineNative: "Nativo — el cuadro de texto de Windows (predeterminado)",
+    windowsEditorEngineNative: "Nativo — el cuadro de texto de Windows",
     windowsEditorEngineCodeMirror: "CodeMirror — resaltado de sintaxis, edición en vivo más estable",
     windowsEditorEngineHint:
-      "El editor nativo usa el cuadro de texto de Windows y funciona de forma fiable con todos los métodos de entrada de chino, japonés y coreano. CodeMirror tiene resaltado de sintaxis Markdown y un comportamiento de edición completo; con Microsoft Pinyin en WebView2 154 o posterior escribe bien, pero Sogou Pinyin aún puede perder la primera letra tras confirmar una palabra. Automático usa CodeMirror con WebView2 154 o posterior. Si usas Sogou, mantén Nativo.",
+      "Automático usa CodeMirror cuando el WebView2 del sistema es la versión 154 o posterior, y el editor nativo en versiones anteriores, donde algunos métodos de entrada podían perder el primer carácter o duplicar la puntuación en CodeMirror. CodeMirror tiene resaltado de sintaxis Markdown y un comportamiento de edición completo; el editor nativo usa el cuadro de texto de Windows. Si un método de entrada falla en CodeMirror, elige Nativo.",
     windowsEditorEngineVimHint: "El modo Vim siempre usa CodeMirror. Desactiva el modo Vim para elegir.",
     slashCommandsEnabled: 'Comandos slash ( / ) — popup con bloques Markdown (título, lista, código, tabla…) al escribir / al inicio de línea',
     fenceLanguageSuggestions: 'Sugerir lenguajes de bloques de código después de ```',

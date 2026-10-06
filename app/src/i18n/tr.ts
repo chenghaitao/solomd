@@ -547,10 +547,10 @@ export const tr: I18n = {
     windowsEditorEngineAuto: "Otomatik — WebView2 154 ve sonrasında CodeMirror, aksi halde Yerel (şu an: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Yerel",
-    windowsEditorEngineNative: "Yerel — Windows'un kendi metin kutusu (varsayılan)",
+    windowsEditorEngineNative: "Yerel — Windows'un kendi metin kutusu",
     windowsEditorEngineCodeMirror: "CodeMirror — sözdizimi vurgulama, daha kararlı canlı düzenleme",
     windowsEditorEngineHint:
-      "Yerel düzenleyici Windows'un metin kutusunu kullanır ve tüm Çince, Japonca ve Korece giriş yöntemleriyle güvenilir çalışır. CodeMirror Markdown sözdizimi vurgulaması ve eksiksiz düzenleme davranışı sunar; WebView2 154 ve sonrasında Microsoft Pinyin ile doğru yazar, ancak Sogou Pinyin bir kelime onaylandıktan sonra ilk harfi hâlâ kaybedebilir. Otomatik, WebView2 154 ve sonrasında CodeMirror'ı kullanır. Sogou kullanıyorsanız Yerel'de kalın.",
+      "Otomatik, sistemdeki WebView2 154 veya daha yeni bir sürümse CodeMirror'ı, daha eski sürümlerde yerel düzenleyiciyi kullanır; eski sürümlerde bazı giriş yöntemleri CodeMirror'da ilk karakteri kaybedebiliyor veya noktalamayı çiftleyebiliyordu. CodeMirror Markdown sözdizimi vurgulaması ve eksiksiz düzenleme davranışı sunar; yerel düzenleyici Windows'un metin kutusunu kullanır. CodeMirror'da bir giriş yöntemi sorun çıkarırsa Yerel'i seçin.",
     windowsEditorEngineVimHint: "Vim modu her zaman CodeMirror kullanır. Seçmek için Vim modunu kapatın.",
     slashCommandsEnabled: 'Eğik çizgi komutları ( / ) — yeni satırda / yazdığınızda Markdown bloklarıyla (Başlık, liste, kod, tablo…) açılır pencere',
     fenceLanguageSuggestions: '``` yazdıktan sonra kod bloğu dilleri öner',

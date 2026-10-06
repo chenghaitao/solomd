@@ -549,10 +549,10 @@ export const zh: I18n = {
     windowsEditorEngineAuto: "自动 —— WebView2 154 及以上用 CodeMirror，否则用原生（当前：{current}）",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "原生",
-    windowsEditorEngineNative: "原生 —— 使用 Windows 自带的文本框（默认）",
+    windowsEditorEngineNative: "原生 —— 使用 Windows 自带的文本框",
     windowsEditorEngineCodeMirror: "CodeMirror —— 语法着色，实时编辑更稳定",
     windowsEditorEngineHint:
-      "原生编辑器使用 Windows 自带的文本框，各种中日韩输入法都能稳定输入。CodeMirror 有 Markdown 语法着色、编辑行为完整，WebView2 154 及以上配合微软拼音输入正常；但搜狗输入法在 CodeMirror 下仍可能在上屏后吞掉下一个字母。「自动」会在 WebView2 154 及以上使用 CodeMirror。使用搜狗输入法请保持「原生」。",
+      "自动：系统的 WebView2 为 154 或更新版本时使用 CodeMirror，更旧的版本使用原生编辑器（旧版 WebView2 下，部分输入法在 CodeMirror 里会吞掉第一个字或重复标点）。CodeMirror 有 Markdown 语法着色、编辑行为完整；原生编辑器使用 Windows 自带的文本框。如果在 CodeMirror 下输入法出问题，请选择「原生」。",
     windowsEditorEngineVimHint: "开启 Vim 模式时总是使用 CodeMirror。关闭 Vim 模式后可以选择。",
     slashCommandsEnabled: '斜杠命令 ( / ) —— 在空行输入 / 时弹出菜单，可快速插入标题、列表、代码块、表格等 Markdown 块',
     fenceLanguageSuggestions: '输入 ``` 后建议代码块语言',

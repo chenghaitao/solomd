@@ -547,10 +547,10 @@ export const pl: I18n = {
     windowsEditorEngineAuto: "Automatycznie — CodeMirror od WebView2 154, w przeciwnym razie Natywny (teraz: {current})",
     windowsEditorEngineNameCodeMirror: "CodeMirror",
     windowsEditorEngineNameNative: "Natywny",
-    windowsEditorEngineNative: "Natywny — pole tekstowe Windows (domyślny)",
+    windowsEditorEngineNative: "Natywny — pole tekstowe Windows",
     windowsEditorEngineCodeMirror: "CodeMirror — podświetlanie składni, stabilniejsza edycja na żywo",
     windowsEditorEngineHint:
-      "Edytor natywny używa pola tekstowego Windows i działa niezawodnie ze wszystkimi metodami wprowadzania chińskiego, japońskiego i koreańskiego. CodeMirror ma podświetlanie składni Markdown i pełne zachowanie edycji; z Microsoft Pinyin na WebView2 154 i nowszym pisanie działa, ale Sogou Pinyin wciąż może gubić pierwszą literę po zatwierdzeniu słowa. Tryb automatyczny używa CodeMirror na WebView2 154 i nowszym. Jeśli używasz Sogou, zostaw Natywny.",
+      "Tryb automatyczny używa CodeMirror, gdy systemowy WebView2 ma wersję 154 lub nowszą, a na starszych wersjach edytora natywnego — w nich niektóre metody wprowadzania mogły w CodeMirror gubić pierwszy znak lub dublować interpunkcję. CodeMirror ma podświetlanie składni Markdown i pełne zachowanie edycji; edytor natywny używa pola tekstowego Windows. Jeśli metoda wprowadzania sprawia problemy w CodeMirror, wybierz Natywny.",
     windowsEditorEngineVimHint: "Tryb Vim zawsze używa CodeMirror. Wyłącz tryb Vim, aby wybrać.",
     slashCommandsEnabled: 'Polecenia ukośnikowe ( / ) — popup z blokami Markdown (nagłówek, lista, kod, tabela…) po wpisaniu / w nowej linii',
     fenceLanguageSuggestions: 'Sugeruj języki bloków kodu po wpisaniu ```',
