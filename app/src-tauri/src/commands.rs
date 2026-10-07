@@ -555,6 +555,14 @@ pub fn fs_delete(path: String) -> Result<(), String> {
 /// empty tree under its own name, which reads as "my notes are gone".
 /// Matching on `read_dir`'s error string would be a guess: it is localized on
 /// Windows.
+/// Version of the system webview (WebView2 on Windows, e.g. "154.0.4258.48").
+/// The frontend picks the Windows editor engine from it: CodeMirror's
+/// input-method problems were WebView2-side and are gone from 154 on.
+#[tauri::command]
+pub fn webview_runtime_version() -> Option<String> {
+    tauri::webview_version().ok()
+}
+
 #[tauri::command]
 pub fn fs_dir_exists(path: String) -> bool {
     Path::new(&path).is_dir()

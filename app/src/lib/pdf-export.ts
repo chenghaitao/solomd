@@ -143,6 +143,11 @@ const PDF_CSS = `
     border: 1px solid #e4e6e9;
     padding: 7px 13px;
     text-align: left;
+    /* #370 — a long unbreakable run (number, identifier, URL) widened the
+       table past the page and html2canvas cut the right side off. Let it
+       break inside the cell instead (see main.css @media print). */
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   /* #271 — short cells stay on one line (see markdown.ts table_short_cells). */
   .pdf-page .cell-nowrap { white-space: nowrap; }
@@ -174,7 +179,8 @@ const PDF_CSS = `
   .pdf-page .katex-display {
     overflow-x: auto;
     overflow-y: hidden;
-    margin: 1em 0;
+    padding: 0.5em 0;
+    margin: 0.5em 0;
   }
 `;
 

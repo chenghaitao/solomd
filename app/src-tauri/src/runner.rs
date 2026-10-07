@@ -146,12 +146,11 @@ mod portable;
 #[path = "win_chrome.rs"]
 mod win_chrome;
 
+#[path = "menu_spec.rs"]
+mod menu_spec;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-#[cfg(not(target_os = "windows"))]
-use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-#[cfg(target_os = "macos")]
-use tauri::menu::{AboutMetadata, PredefinedMenuItem};
 use tauri::{Emitter, Manager, RunEvent};
 
 /// Tell macOS AppKit to use the given language for native dialogs
@@ -227,416 +226,20 @@ fn force_close_window(window: tauri::Window) {
     window.close().ok();
 }
 
-/// Localized menu strings. Two languages for now: "en" and "zh".
-#[cfg(not(target_os = "windows"))]
-struct MenuStrings {
-    file: &'static str,
-    edit: &'static str,
-    view: &'static str,
-    help: &'static str,
-    new_md: &'static str,
-    new_txt: &'static str,
-    open_file: &'static str,
-    open_folder: &'static str,
-    import_docs: &'static str,
-    save: &'static str,
-    save_as: &'static str,
-    print_item: &'static str,
-    close_tab: &'static str,
-    new_window: &'static str,
-    open_external: &'static str,
-    toggle_theme: &'static str,
-    toggle_sidebar: &'static str,
-    toggle_outline: &'static str,
-    cycle_view: &'static str,
-    // v4.3.0 PR #74 — 3-axis zoom (UI / Editor / Preview).
-    ui_zoom_in: &'static str,
-    ui_zoom_out: &'static str,
-    ui_zoom_reset: &'static str,
-    editor_zoom_in: &'static str,
-    editor_zoom_out: &'static str,
-    editor_zoom_reset: &'static str,
-    preview_zoom_in: &'static str,
-    preview_zoom_out: &'static str,
-    preview_zoom_reset: &'static str,
-    palette: &'static str,
-    global_search: &'static str,
-    settings_menu: &'static str,
-    md_help: &'static str,
-    help_shortcuts: &'static str,
-    help_cli: &'static str,
-    zoom: &'static str,
-    find: &'static str,
-    about: &'static str,
-    /// Only the Linux menu builds an Exit item (#272), so this is dead on
-    /// macOS and Windows — where Quit lives in the app menu / Alt+F4.
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-    exit: &'static str,
-}
-
-#[cfg(not(target_os = "windows"))]
-fn strings_for(lang: &str) -> MenuStrings {
-    if lang == "zh" {
-        MenuStrings {
-            file: "文件",
-            edit: "编辑",
-            view: "视图",
-            help: "帮助",
-            new_md: "新建 Markdown",
-            new_txt: "新建纯文本",
-            open_file: "打开文件…",
-            open_folder: "打开文件夹…",
-            import_docs: "导入文档…",
-            save: "保存",
-            save_as: "另存为…",
-            print_item: "打印…",
-            close_tab: "关闭标签页",
-            new_window: "新建窗口",
-            open_external: "用外部编辑器打开",
-            toggle_theme: "切换主题",
-            toggle_sidebar: "切换文件树",
-            toggle_outline: "切换大纲",
-            cycle_view: "切换视图模式 (编辑/分栏/预览)",
-            ui_zoom_in: "整体界面：放大",
-            ui_zoom_out: "整体界面：缩小",
-            ui_zoom_reset: "整体界面：复位",
-            editor_zoom_in: "编辑器：放大字号",
-            editor_zoom_out: "编辑器：缩小字号",
-            editor_zoom_reset: "编辑器：复位字号",
-            preview_zoom_in: "预览：放大字号",
-            preview_zoom_out: "预览：缩小字号",
-            preview_zoom_reset: "预览：复位字号",
-            palette: "命令面板",
-            global_search: "在文件夹中搜索…",
-            settings_menu: "设置…",
-            md_help: "Markdown 速查",
-            help_shortcuts: "快捷键一览",
-            help_cli: "命令行 (CLI)",
-            zoom: "缩放",
-            find: "查找和替换…",
-            about: "关于 SoloMD",
-            exit: "退出",
-        }
-    } else {
-        MenuStrings {
-            file: "File",
-            edit: "Edit",
-            view: "View",
-            help: "Help",
-            new_md: "New Markdown",
-            new_txt: "New Plain Text",
-            open_file: "Open File…",
-            open_folder: "Open Folder…",
-            import_docs: "Import Documents…",
-            save: "Save",
-            save_as: "Save As…",
-            print_item: "Print…",
-            close_tab: "Close Tab",
-            new_window: "New Window",
-            open_external: "Open in External Editor",
-            toggle_theme: "Toggle Theme",
-            toggle_sidebar: "Toggle File Tree",
-            toggle_outline: "Toggle Outline",
-            cycle_view: "Cycle Edit/Split/Preview",
-            ui_zoom_in: "UI: Zoom In",
-            ui_zoom_out: "UI: Zoom Out",
-            ui_zoom_reset: "UI: Reset Zoom",
-            editor_zoom_in: "Editor: Zoom In",
-            editor_zoom_out: "Editor: Zoom Out",
-            editor_zoom_reset: "Editor: Reset Zoom",
-            preview_zoom_in: "Preview: Zoom In",
-            preview_zoom_out: "Preview: Zoom Out",
-            preview_zoom_reset: "Preview: Reset Zoom",
-            palette: "Command Palette",
-            global_search: "Search in Folder…",
-            settings_menu: "Settings…",
-            md_help: "Markdown Cheatsheet",
-            help_shortcuts: "Keyboard Shortcuts",
-            help_cli: "Command Line (CLI)",
-            zoom: "Zoom",
-            find: "Find and Replace…",
-            about: "About SoloMD",
-            exit: "Exit",
-        }
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn build_app_menu<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    lang: &str,
-    // #180 — the user's effective shortcut per menu-item id. A missing entry
-    // keeps the built-in accelerator; an entry holding an empty string means
-    // the action was rebound or unbound, so the item must carry NO
-    // accelerator — otherwise macOS keeps firing the old chord from the menu
-    // and "changing" a shortcut would only ever add a second one.
-    accels: &std::collections::HashMap<String, String>,
-) -> tauri::Result<tauri::menu::Menu<R>> {
-    let s = strings_for(lang);
-    // Resolve an item's accelerator: user override, else the shipped default.
-    macro_rules! accel {
-        ($item:expr, $id:expr, $default:expr) => {{
-            match accels.get($id).map(String::as_str) {
-                Some("") => $item,
-                Some(custom) => $item.accelerator(custom),
-                None => $item.accelerator($default),
-            }
-        }};
-    }
-
-    let new_md = accel!(MenuItemBuilder::with_id("file.new", s.new_md), "file.new", "CmdOrCtrl+N")
-        .build(app)?;
-    let new_txt = accel!(MenuItemBuilder::with_id("file.newText", s.new_txt), "file.newText", "CmdOrCtrl+Alt+N")
-        .build(app)?;
-    let open_file = accel!(MenuItemBuilder::with_id("file.open", s.open_file), "file.open", "CmdOrCtrl+O")
-        .build(app)?;
-    let open_folder = MenuItemBuilder::with_id("file.openFolder", s.open_folder).build(app)?;
-    // Converting a Word/PDF/HTML file has been possible for versions, but only
-    // by opening one — there was no entry point that said "import", which is
-    // the word people look for.
-    let import_docs = accel!(
-        MenuItemBuilder::with_id("file.import", s.import_docs),
-        "file.import",
-        "CmdOrCtrl+Shift+L"
-    )
-    .build(app)?;
-    let save = accel!(MenuItemBuilder::with_id("file.save", s.save), "file.save", "CmdOrCtrl+S")
-        .build(app)?;
-    let save_as = accel!(MenuItemBuilder::with_id("file.saveAs", s.save_as), "file.saveAs", "CmdOrCtrl+Shift+S")
-        .build(app)?;
-    let print_item = accel!(MenuItemBuilder::with_id("file.print", s.print_item), "file.print", "CmdOrCtrl+P")
-        .build(app)?;
-    let close_tab = accel!(MenuItemBuilder::with_id("file.closeTab", s.close_tab), "file.closeTab", "CmdOrCtrl+W")
-        .build(app)?;
-    let new_window = accel!(MenuItemBuilder::with_id("window.new", s.new_window), "window.new", "CmdOrCtrl+Shift+N")
-        .build(app)?;
-    let open_external = accel!(MenuItemBuilder::with_id("file.openExternal", s.open_external), "file.openExternal", "CmdOrCtrl+Shift+E")
-        .build(app)?;
-    // Linux tiling WM has no window X button — needs discoverable Exit in native menu (Ctrl+Q).
-    #[cfg(target_os = "linux")]
-    let exit_item =
-        accel!(MenuItemBuilder::with_id("file.exit", s.exit), "file.exit", "Ctrl+Q").build(app)?;
-
-    // Settings are application-wide, not a view option: the macOS app menu
-    // holds them by HIG convention, File does everywhere else.
-    let settings_item = accel!(MenuItemBuilder::with_id("view.settings", s.settings_menu), "view.settings", "CmdOrCtrl+,")
-        .build(app)?;
-
-    #[cfg(target_os = "linux")]
-    let file_submenu = SubmenuBuilder::new(app, s.file)
-        .item(&new_md)
-        .item(&new_txt)
-        .separator()
-        .item(&open_file)
-        .item(&open_folder)
-        .item(&import_docs)
-        .separator()
-        .item(&save)
-        .item(&save_as)
-        .separator()
-        .item(&open_external)
-        .separator()
-        .item(&print_item)
-        .separator()
-        .item(&new_window)
-        .item(&close_tab)
-        .separator()
-        .item(&settings_item)
-        .separator()
-        .item(&exit_item)
-        .build()?;
-    #[cfg(not(target_os = "linux"))]
-    let file_submenu = SubmenuBuilder::new(app, s.file)
-        .item(&new_md)
-        .item(&new_txt)
-        .separator()
-        .item(&open_file)
-        .item(&open_folder)
-        .item(&import_docs)
-        .separator()
-        .item(&save)
-        .item(&save_as)
-        .separator()
-        .item(&open_external)
-        .separator()
-        .item(&print_item)
-        .separator()
-        .item(&new_window)
-        .item(&close_tab)
-        .build()?;
-
-    // No accelerator on purpose: a native menu accelerator wins over the
-    // webview, and ⌘F has to reach whichever find is focused (the editor's,
-    // the preview's, the settings search box).
-    let find_item = MenuItemBuilder::with_id("edit.find", s.find).build(app)?;
-    let edit_submenu = SubmenuBuilder::new(app, s.edit)
-        .undo()
-        .redo()
-        .separator()
-        .cut()
-        .copy()
-        .paste()
-        .select_all()
-        .separator()
-        .item(&find_item)
-        .build()?;
-
-    let toggle_theme = MenuItemBuilder::with_id("view.toggleTheme", s.toggle_theme).build(app)?;
-    let toggle_sidebar = accel!(MenuItemBuilder::with_id("view.toggleFileTree", s.toggle_sidebar), "view.toggleFileTree", "CmdOrCtrl+B")
-        .build(app)?;
-    let toggle_outline = accel!(MenuItemBuilder::with_id("view.toggleOutline", s.toggle_outline), "view.toggleOutline", "CmdOrCtrl+Shift+O")
-        .build(app)?;
-    let cycle_view = accel!(MenuItemBuilder::with_id("view.cycleView", s.cycle_view), "view.cycleView", "CmdOrCtrl+Shift+P")
-        .build(app)?;
-    // v4.3.0 PR #74 — three independent zoom axes wired through native
-    // menu accelerators (more reliable than JS keyboard handlers on macOS,
-    // which the WKWebView can sometimes intercept). Action ids are
-    // dispatched in App.vue's `dispatchMenuAction`.
-    let ui_zoom_in = accel!(MenuItemBuilder::with_id("view.zoomUiIn", s.ui_zoom_in), "view.zoomUiIn", "CmdOrCtrl+=")
-        .build(app)?;
-    let ui_zoom_out = accel!(MenuItemBuilder::with_id("view.zoomUiOut", s.ui_zoom_out), "view.zoomUiOut", "CmdOrCtrl+-")
-        .build(app)?;
-    let ui_zoom_reset = accel!(MenuItemBuilder::with_id("view.zoomUiReset", s.ui_zoom_reset), "view.zoomUiReset", "CmdOrCtrl+0")
-        .build(app)?;
-    let editor_zoom_in = accel!(MenuItemBuilder::with_id("view.zoomEditorIn", s.editor_zoom_in), "view.zoomEditorIn", "CmdOrCtrl+Shift+=")
-        .build(app)?;
-    let editor_zoom_out = accel!(MenuItemBuilder::with_id("view.zoomEditorOut", s.editor_zoom_out), "view.zoomEditorOut", "CmdOrCtrl+Shift+-")
-        .build(app)?;
-    let editor_zoom_reset = accel!(MenuItemBuilder::with_id("view.zoomEditorReset", s.editor_zoom_reset), "view.zoomEditorReset", "CmdOrCtrl+Shift+0")
-        .build(app)?;
-    let preview_zoom_in = accel!(MenuItemBuilder::with_id("view.zoomPreviewIn", s.preview_zoom_in), "view.zoomPreviewIn", "CmdOrCtrl+Control+=")
-        .build(app)?;
-    let preview_zoom_out = accel!(MenuItemBuilder::with_id("view.zoomPreviewOut", s.preview_zoom_out), "view.zoomPreviewOut", "CmdOrCtrl+Control+-")
-        .build(app)?;
-    let preview_zoom_reset = accel!(MenuItemBuilder::with_id("view.zoomPreviewReset", s.preview_zoom_reset), "view.zoomPreviewReset", "CmdOrCtrl+Control+0")
-        .build(app)?;
-    let palette = accel!(MenuItemBuilder::with_id("view.cmdPalette", s.palette), "view.cmdPalette", "CmdOrCtrl+Shift+K")
-        .build(app)?;
-    let global_search = accel!(MenuItemBuilder::with_id("search.global", s.global_search), "search.global", "CmdOrCtrl+Shift+F")
-        .build(app)?;
-
-    // Nine rows of one pattern took half the View menu.
-    let zoom_submenu = SubmenuBuilder::new(app, s.zoom)
-        .item(&ui_zoom_in)
-        .item(&ui_zoom_out)
-        .item(&ui_zoom_reset)
-        .separator()
-        .item(&editor_zoom_in)
-        .item(&editor_zoom_out)
-        .item(&editor_zoom_reset)
-        .separator()
-        .item(&preview_zoom_in)
-        .item(&preview_zoom_out)
-        .item(&preview_zoom_reset)
-        .build()?;
-    let view_submenu = SubmenuBuilder::new(app, s.view)
-        .item(&toggle_theme)
-        .separator()
-        .item(&toggle_sidebar)
-        .item(&toggle_outline)
-        .item(&cycle_view)
-        .separator()
-        .item(&zoom_submenu)
-        .separator()
-        .item(&palette)
-        .item(&global_search)
-        .build()?;
-
-    let md_help = accel!(MenuItemBuilder::with_id("help.markdown", s.md_help), "help.markdown", "F1")
-        .build(app)?;
-    let about = MenuItemBuilder::with_id("help.about", s.about).build(app)?;
-
-    // F1 opens a three-tab panel; one row per tab.
-    let help_shortcuts = MenuItemBuilder::with_id("help.shortcuts", s.help_shortcuts).build(app)?;
-    let help_cli = MenuItemBuilder::with_id("help.cli", s.help_cli).build(app)?;
-    let help_submenu = SubmenuBuilder::new(app, s.help)
-        .item(&md_help)
-        .item(&help_shortcuts)
-        .item(&help_cli)
-        .separator()
-        .item(&about)
-        .build()?;
-
-    // macOS: the first submenu becomes the "App menu" (titled with the
-    // app's process name) and is where users go for About / Settings /
-    // Quit by HIG convention. Without this, ⌘Q does nothing and the
-    // last menu item visually becomes "Close Tab" (issue #31).
-    #[cfg(target_os = "macos")]
-    {
-        let app_about_meta = AboutMetadata {
-            name: Some("SoloMD".into()),
-            version: Some(env!("CARGO_PKG_VERSION").into()),
-            credits: Some("Made by 智通 / xiangdong li".into()),
-            authors: Some(vec!["xiangdong li".into()]),
-            comments: Some("Lightweight, cross-platform Markdown editor.".into()),
-            website: Some("https://solomd.app".into()),
-            website_label: Some("solomd.app".into()),
-            ..Default::default()
-        };
-        let app_submenu = SubmenuBuilder::new(app, "SoloMD")
-            .about(Some(app_about_meta))
-            .separator()
-            .item(&settings_item)
-            .separator()
-            .item(&PredefinedMenuItem::services(app, None)?)
-            .separator()
-            .item(&PredefinedMenuItem::hide(app, None)?)
-            .item(&PredefinedMenuItem::hide_others(app, None)?)
-            .item(&PredefinedMenuItem::show_all(app, None)?)
-            .separator()
-            .item(&PredefinedMenuItem::quit(app, None)?)
-            .build()?;
-
-        let window_submenu = SubmenuBuilder::new(app, if lang == "zh" { "窗口" } else { "Window" })
-            .item(&PredefinedMenuItem::minimize(app, None)?)
-            .item(&PredefinedMenuItem::maximize(app, None)?)
-            .separator()
-            .item(&PredefinedMenuItem::close_window(app, None)?)
-            .build()?;
-
-        return MenuBuilder::new(app)
-            .items(&[
-                &app_submenu,
-                &file_submenu,
-                &edit_submenu,
-                &view_submenu,
-                &window_submenu,
-                &help_submenu,
-            ])
-            .build();
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    MenuBuilder::new(app)
-        .items(&[&file_submenu, &edit_submenu, &view_submenu, &help_submenu])
-        .build()
-}
-
-/// Frontend calls this when user changes language in Settings.
-/// Windows has no native menu bar (frameless unified title bar — the in-app
-/// menu re-renders reactively from the i18n store), so it's a no-op there.
+/// bug/C1 — rebuild the native menu from the frontend's spec
+/// (`lib/app-menu.ts`): the same seven menus the Windows title-bar menubar
+/// renders, labels in the UI language, accelerators = the bindings in effect.
+/// Windows has no native menu bar (frameless unified title bar), so it is a
+/// no-op there.
 #[tauri::command]
-fn set_menu_language(app: tauri::AppHandle, lang: String) -> Result<(), String> {
-    set_menu_config(app, lang, std::collections::HashMap::new())
-}
-
-/// #180 — rebuild the native menu with the user's shortcut overrides applied.
-/// `accels` maps a menu item id to a Tauri accelerator string, or to an empty
-/// string to strip the accelerator entirely (the action moved to a chord the
-/// webview owns, or the user unbound it).
-#[tauri::command]
-fn set_menu_config(
-    app: tauri::AppHandle,
-    lang: String,
-    accels: std::collections::HashMap<String, String>,
-) -> Result<(), String> {
+fn set_menu_spec(app: tauri::AppHandle, menus: Vec<menu_spec::TopMenu>) -> Result<(), String> {
     #[cfg(not(target_os = "windows"))]
     {
-        let menu = build_app_menu(&app, &lang, &accels).map_err(|e| e.to_string())?;
+        let menu = menu_spec::build_menu(&app, &menus).map_err(|e| e.to_string())?;
         app.set_menu(menu).map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "windows")]
-    let _ = (app, lang, accels);
+    let _ = (app, menus);
     Ok(())
 }
 
@@ -776,6 +379,30 @@ pub fn run_with(initial_file: Option<String>) {
 
     let builder = tauri::Builder::default();
 
+    // 张工 4.14.8 report #5 — WebView2 answers its own browser shortcuts when
+    // the page doesn't: Ctrl+J opened the Edge downloads page over the editor,
+    // F5 / Ctrl+R reload the app and throw away whatever isn't saved yet,
+    // Ctrl+H / Ctrl+U / Ctrl+Shift+O open browser pages that make no sense
+    // here. AreBrowserAcceleratorKeysEnabled=false turns those off and nothing
+    // else: editing keys (copy, paste, undo, select all) and the app's own
+    // shortcuts keep working, and zoom is a separate setting. Release builds
+    // only, so dev builds keep F5 and the devtools shortcuts.
+    #[cfg(all(windows, not(debug_assertions)))]
+    let builder = builder.on_page_load(|webview, payload| {
+        if payload.event() != tauri::webview::PageLoadEvent::Started {
+            return;
+        }
+        let _ = webview.with_webview(|platform| unsafe {
+            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+            use windows_core::Interface;
+            let Ok(core) = platform.controller().CoreWebView2() else { return };
+            let Ok(settings) = core.Settings() else { return };
+            if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+                let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+            }
+        });
+    });
+
     // #86/#87(1) — single-instance must register BEFORE any other plugin so
     // its handler hooks into the OS' "another instance launching" signal
     // before the rest of the app starts initialising. The second launch
@@ -876,6 +503,7 @@ pub fn run_with(initial_file: Option<String>) {
             commands::fs_create_dir,
             commands::fs_delete,
             commands::fs_dir_exists,
+            commands::webview_runtime_version,
             commands::fs_rename,
             commands::fs_move,
             commands::fs_list_dirs,
@@ -884,8 +512,7 @@ pub fn run_with(initial_file: Option<String>) {
             search::search_in_dir,
             drain_pending_opens,
             force_close_window,
-            set_menu_language,
-            set_menu_config,
+            set_menu_spec,
             set_max_button_rect,
             save_language_preference,
             set_default::set_as_default_markdown_editor,
@@ -1050,13 +677,13 @@ pub fn run_with(initial_file: Option<String>) {
             let _ = app_handle.emit("solomd://menu", id);
         })
         .setup(|app| {
-            // Build initial menu in English — the frontend will call
-            // `set_menu_language` on mount to apply the user's saved preference.
+            // A minimal startup menu (app menu + Edit) — the frontend sends
+            // the full, localized one (`set_menu_spec`) as soon as it mounts.
             // Windows: no native menu — the frameless window renders its own
-            // File/Edit/View/Help menubar inside the unified toolbar row.
+            // menubar inside the unified toolbar row from the same spec.
             #[cfg(not(target_os = "windows"))]
             {
-                let menu = build_app_menu(app.handle(), "en", &std::collections::HashMap::new())?;
+                let menu = menu_spec::build_menu(app.handle(), &menu_spec::startup_spec())?;
                 app.set_menu(menu)?;
             }
 

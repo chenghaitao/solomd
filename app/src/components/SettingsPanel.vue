@@ -17,14 +17,19 @@ import {
   conflictFor,
   eventToCombo,
   formatCombo,
+  normalizeCombo,
   interceptedBindings,
   filterKeyActions,
   WRITER_PRESET,
   writerPresetActive,
+  typoraPreset,
+  presetActive,
+  planPreset,
   type KeyActionDef,
 } from '../lib/keybindings';
 import { isMacOS } from '../lib/platform';
-import { checkForUpdate, openReleaseUrl, isMasBuild } from '../lib/check-update';
+import { isMasBuild } from '../lib/check-update';
+import { useUpdateCheck } from '../composables/useUpdateCheck';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { useFiles } from '../composables/useFiles';
 import AISettings from './AISettings.vue';
@@ -42,7 +47,8 @@ import GithubSyncSettings from './GithubSyncSettings.vue';
 import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
 import ThemeMarketplace from './ThemeMarketplace.vue';
-import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime } from '../lib/platform';
+import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime, resolveWindowsEditorEngine } from '../lib/platform';
+import type { WindowsEditorEngine } from '../lib/platform';
 import { loadCustomTheme } from '../lib/custom-theme';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { DsModal } from '../ui';
@@ -62,6 +68,12 @@ const masBuild = isMasBuild();
  * only produced `Command … not found` errors the moment the user touched them.
  */
 const gitBackend = hasGitBackend();
+// What "Automatic" resolves to on this machine's WebView2 (shown in its label).
+const autoEngineName = computed(() =>
+  resolveWindowsEditorEngine('auto') === 'codemirror'
+    ? t('settings.windowsEditorEngineNameCodeMirror')
+    : t('settings.windowsEditorEngineNameNative'),
+);
 
 const { t } = useI18n();
 // #180 — the chord in this sentence comes from the user's bindings, not from
@@ -162,6 +174,42 @@ function undoWriterPreset(): void {
   for (const id of Object.keys(WRITER_PRESET)) settings.setKeybinding(id, undefined);
 }
 
+/**
+ * B4 — the tester's full Typora / Word remap, as one button. Factory defaults
+ * stay as they are (most people never hit the AMD clash, and ⌘B / ⌘E / ⌘D
+ * have meant what they mean here for years); this is the opt-in.
+ */
+const typora = typoraPreset();
+const typoraOn = computed(() => presetActive(typora, settings.keybindings));
+const typoraKeys = computed(() => {
+  const k = (id: string) => {
+    const v = typora[id];
+    const first = Array.isArray(v) ? v[0] : v;
+    return first ? formatCombo(normalizeCombo(first), macKeys) : '—';
+  };
+  return {
+    bold: k('fmt.bold'),
+    up: k('heading.promote'),
+    down: k('heading.demote'),
+    para: k('heading.paragraph'),
+    word: k('editor.selectWord'),
+    live: k('view.toggleLiveEdit'),
+    count: String(Object.keys(typora).length),
+  };
+});
+function applyTyporaPreset(): void {
+  const { apply, skipped } = planPreset(typora, settings.keybindings);
+  for (const [id, value] of Object.entries(apply)) {
+    settings.setKeybinding(id, Array.isArray(value) ? [...value] : value);
+  }
+  let msg = t('settings.keysTyporaApplied', { count: String(Object.keys(apply).length) });
+  if (skipped.length) msg += ' ' + t('settings.keysTyporaSkipped', { count: String(skipped.length) });
+  toasts.success(msg);
+}
+function undoTyporaPreset(): void {
+  for (const id of Object.keys(typora)) settings.setKeybinding(id, undefined);
+}
+
 function startRecording(actionId: string): void {
   recordError.value = null;
   recordingAction.value = actionId;
@@ -206,27 +254,8 @@ const categories: { id: SettingsCategory; icon: string; labelKey: string }[] = [
   { id: 'advanced', icon: '🛠️', labelKey: 'settings.catAdvanced' },
 ];
 
-const checkingUpdate = ref(false);
-async function manualCheckUpdate() {
-  checkingUpdate.value = true;
-  try {
-    const r = await checkForUpdate();
-    if (r.error) {
-      // Both solomd.app proxy + GitHub direct failed (offline / DNS / etc).
-      // Don't lie to the user with "up to date" — show a real error.
-      toasts.error(t('settings.updateCheckFailed'));
-    } else if (r.hasUpdate) {
-      toasts.success(t('settings.updateAvailable', { version: r.latest || '' }));
-      await openReleaseUrl(r.url);
-    } else {
-      toasts.info(t('settings.upToDate'));
-    }
-  } catch (e) {
-    toasts.error(String(e));
-  } finally {
-    checkingUpdate.value = false;
-  }
-}
+// Shared with Help → Check for Updates (composables/useUpdateCheck.ts).
+const { checking: checkingUpdate, manualCheckUpdate } = useUpdateCheck();
 
 const settingDefault = ref(false);
 
@@ -1853,6 +1882,16 @@ function onSelectPdfFont(v: string) {
               ✓ {{ t('settings.keysWriterUndo') }}
             </button>
           </div>
+          <div class="kb-clash kb-clash--neutral" data-preset="typora">
+            <p class="kb-clash__title">{{ t('settings.keysTyporaTitle') }}</p>
+            <p class="kb-clash__body">{{ t('settings.keysTyporaBody', typoraKeys) }}</p>
+            <button v-if="!typoraOn" class="kb-btn kb-btn--wide" @click="applyTyporaPreset()">
+              {{ t('settings.keysTyporaApply') }}
+            </button>
+            <button v-else class="kb-btn kb-btn--wide" @click="undoTyporaPreset()">
+              ✓ {{ t('settings.keysTyporaUndo') }}
+            </button>
+          </div>
           <label class="kb-hints-toggle">
             <input type="checkbox" :checked="settings.formatHints" @change="settings.toggleFormatHints()" />
             {{ t('settings.formatHints') }}
@@ -1978,17 +2017,9 @@ function onSelectPdfFont(v: string) {
           <h3 style="font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px;">
             {{ t('pomodoro.settingsHeading') }}
           </h3>
-          <label>
-            <input
-              type="checkbox"
-              :checked="settings.pomodoroShowControls"
-              @change="settings.togglePomodoroShowControls()"
-            />
-            {{ t('pomodoro.showControls') }}
-          </label>
-          <p style="font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.5;">
-            {{ withChord('pomodoro.showControlsHint', 'pomodoro.startLast') }}
-          </p>
+          <!-- bug/C2 — the "show controls in toolbar" switch went with the
+               toolbar chevron it controlled; sessions now start from the
+               command palette ("Writing Session (Pomodoro)…") or the chord. -->
           <label>
             <input
               type="checkbox"
@@ -2044,8 +2075,9 @@ function onSelectPdfFont(v: string) {
           <select
             :value="settings.vimMode ? 'codemirror' : settings.windowsEditorEngine"
             :disabled="settings.vimMode"
-            @change="settings.setWindowsEditorEngine(($event.target as HTMLSelectElement).value as 'native' | 'codemirror')"
+            @change="settings.setWindowsEditorEngine(($event.target as HTMLSelectElement).value as WindowsEditorEngine)"
           >
+            <option value="auto">{{ t('settings.windowsEditorEngineAuto', { current: autoEngineName }) }}</option>
             <option value="native">{{ t('settings.windowsEditorEngineNative') }}</option>
             <option value="codemirror">{{ t('settings.windowsEditorEngineCodeMirror') }}</option>
           </select>
@@ -2058,6 +2090,13 @@ function onSelectPdfFont(v: string) {
           <label>
             <input type="checkbox" :checked="settings.slashCommandsEnabled" @change="settings.toggleSlashCommandsEnabled()" />
             {{ t('settings.slashCommandsEnabled') }}
+          </label>
+        </section>
+
+        <section data-cat="writing">
+          <label>
+            <input type="checkbox" :checked="settings.fenceLanguageSuggestions" @change="settings.toggleFenceLanguageSuggestions()" />
+            {{ t('settings.fenceLanguageSuggestions') }}
           </label>
         </section>
 

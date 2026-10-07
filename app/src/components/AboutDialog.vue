@@ -21,6 +21,10 @@ onMounted(async () => {
 // app release. Silent on failure (offline, blocked): the section just stays
 // hidden. Fetched once per session, only when the dialog is first opened.
 const sponsors = ref<string[]>([]);
+// People who test SoloMD carefully and send detailed bug reports. Kept: it is
+// a credit, not a promotion — the promoter list and the promote button that
+// shipped alongside it in upstream stay out of this fork.
+const testers = ref<string[]>([]);
 let sponsorsLoaded = false;
 async function loadSponsors() {
   if (sponsorsLoaded) return;
@@ -29,10 +33,13 @@ async function loadSponsors() {
     const res = await fetch('https://solomd.app/sponsors.json', { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return;
     const data = await res.json();
-    sponsors.value = (data?.sponsors ?? [])
-      .map((s: { name?: unknown }) => (typeof s?.name === 'string' ? s.name.trim() : ''))
-      .filter((n: string) => n.length > 0 && n.length <= 40)
-      .slice(0, 200);
+    const names = (list: unknown) =>
+      (Array.isArray(list) ? list : [])
+        .map((s: { name?: unknown }) => (typeof s?.name === 'string' ? s.name.trim() : ''))
+        .filter((n: string) => n.length > 0 && n.length <= 40)
+        .slice(0, 200);
+    sponsors.value = names(data?.sponsors);
+    testers.value = names(data?.testers);
   } catch {
     /* offline or blocked — nothing to show */
   }
@@ -123,6 +130,10 @@ async function visit(url: string) {
       <div v-if="sponsors.length" class="about__sponsors">
         <div class="about__sponsors-title">Thanks to our sponsors / 感谢赞助者</div>
         <div class="about__sponsors-names">{{ sponsors.join(' · ') }}</div>
+      </div>
+      <div v-if="testers.length" class="about__sponsors">
+        <div class="about__sponsors-title">Thanks to our testers / 感谢测试者</div>
+        <div class="about__sponsors-names">{{ testers.join(' · ') }}</div>
       </div>
 
       <div class="about__footer">

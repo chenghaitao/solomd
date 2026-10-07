@@ -4,6 +4,7 @@ import App from './App.vue';
 import { isLang, loadLocale } from './i18n';
 import { useSettingsStore } from './stores/settings';
 import { reanchorIosContainerPaths } from './lib/ios-container';
+import { isWindowsDesktop } from './lib/platform';
 import './styles/cjk-font.css';
 import './styles/main.css';
 import './styles/hljs-theme.css';
@@ -25,6 +26,14 @@ const rootComponent = isSlideshow
   : isQuickCapture
     ? defineAsyncComponent(() => import('./components/QuickCapture.vue'))
     : App;
+// Dev-only: ?imetrace loads dev/ime-trace.js (IME event tracer for the
+// Windows VM tests). Stripped from production builds by the DEV guard.
+if (import.meta.env.DEV && /[?&]imetrace\b/.test(location.search)) {
+  const s = document.createElement('script');
+  s.src = '/dev/ime-trace.js';
+  document.head.appendChild(s);
+}
+
 const app = createApp(rootComponent);
 const pinia = createPinia();
 app.use(pinia);
@@ -35,11 +44,27 @@ app.use(pinia);
 // `t()` falls back to English for the few ms until the chunk lands.
 const settings = useSettingsStore(pinia);
 
+// Windows: the editor engine follows the WebView2 version (platform.ts
+// resolveWindowsEditorEngine), and Editor.vue decides it once at load, so the
+// version must be known before mount.
+async function readWebviewVersion(): Promise<void> {
+  if (!isWindowsDesktop()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  const v = await invoke<string | null>('webview_runtime_version');
+  if (v) (window as unknown as { __SOLOMD_WEBVIEW_VERSION__?: string }).__SOLOMD_WEBVIEW_VERSION__ = v;
+}
+
 // iOS: point stored paths at the current app container before any store reads
-// them (lib/ios-container). Bounded, so a slow path API never blocks launch.
+// them (lib/ios-container). Windows: the WebView2 version has to be known
+// before Editor.vue picks an engine. Both are bounded, and the locale chunk is
+// awaited as well, so a slow API never blocks launch — an unknown WebView2
+// version just means the native textarea.
 void Promise.all([
   Promise.race([
-    reanchorIosContainerPaths().catch(() => {}),
+    Promise.all([
+      reanchorIosContainerPaths().catch(() => {}),
+      readWebviewVersion().catch(() => {}),
+    ]),
     new Promise((r) => setTimeout(r, 1500)),
   ]),
   loadLocale(isLang(settings.language) ? settings.language : 'en').catch(() => {}),

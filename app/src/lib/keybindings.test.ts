@@ -67,3 +67,126 @@ test('an IME-processed chord (key "Process") is read from the physical key', asy
   // Without Ctrl/⌘ it is text being composed, not a chord.
   assert.equal(eventToCombo(ev({ code: 'KeyB' })), 'Process');
 });
+
+test('factory defaults have no chord bound twice, on any platform', async () => {
+  const { activeKeyActions, normalizeCombo } = await import('./keybindings.ts');
+  for (const platform of ['mac', 'windows', 'linux'] as const) {
+    const seen = new Map<string, string>();
+    for (const a of activeKeyActions(platform)) {
+      for (const c of a.defaults.map(normalizeCombo)) {
+        assert.ok(!seen.has(c), `${platform}: ${c} is both ${seen.get(c)} and ${a.id}`);
+        seen.set(c, a.id);
+      }
+    }
+  }
+});
+
+test('B4 new commands ship bound only where the chord was free', async () => {
+  const { KEY_ACTIONS } = await import('./keybindings.ts');
+  const d = (id: string) => KEY_ACTIONS.find((a) => a.id === id)?.defaults;
+  assert.deepEqual(d('editor.selectWord'), []); // Mod+D is the daily note
+  assert.deepEqual(d('heading.promote'), []); // Mod+= zooms the UI
+  assert.deepEqual(d('heading.demote'), []);
+  assert.deepEqual(d('heading.paragraph'), []);
+  assert.deepEqual(d('editor.deleteWord'), ['Mod+Shift+D']);
+  assert.deepEqual(d('editor.selectLine'), ['Mod+L']);
+  assert.deepEqual(d('editor.jumpToSelection'), ['Mod+Alt+J']);
+  assert.deepEqual(d('tab.reopenClosed'), ['Mod+Shift+T']);
+  assert.deepEqual(d('view.toggleFocusMode'), ['F8']);
+  assert.deepEqual(d('view.toggleTypewriter'), ['F9']);
+  // The pre-B4 factory chords are untouched.
+  assert.deepEqual(d('fmt.bold'), ['Mod+Shift+B']);
+  assert.deepEqual(d('view.toggleFileTree'), ['Mod+B']);
+  assert.deepEqual(d('daily.openToday'), ['Mod+D']);
+  assert.deepEqual(d('view.zoomUiIn'), ['Mod+Equal']);
+});
+
+test('Typora / Word preset: all 28 B4 changes on Windows, conflict-free', async () => {
+  const { typoraPreset, resolveBindings, normalizeCombo, presetActive, combosFor } = await import('./keybindings.ts');
+  const preset = typoraPreset('windows');
+  assert.equal(Object.keys(preset).length, 28);
+  assert.equal(presetActive(preset, {}, 'windows'), false);
+  const map = resolveBindings(preset, 'windows');
+  for (const [id, value] of Object.entries(preset)) {
+    const want = value === null ? [] : (Array.isArray(value) ? value : [value as string]).map(normalizeCombo);
+    for (const c of want) assert.equal(map.get(c), id, `${c} should run ${id}, runs ${map.get(c)}`);
+    assert.deepEqual(combosFor(id, preset, 'windows'), want);
+  }
+  assert.equal(presetActive(preset, preset, 'windows'), true);
+  // Spot checks against B4 section 八.
+  assert.equal(map.get('Mod+B'), 'fmt.bold');
+  assert.equal(map.get('Mod+Shift+B'), 'view.toggleFileTree');
+  assert.equal(map.get('Mod+Slash'), 'view.toggleLiveEdit');
+  assert.equal(map.get('Mod+Alt+Slash'), 'view.toggleLiveEdit');
+  assert.equal(map.get('F1'), 'help.markdown');
+  assert.equal(map.get('Mod+0'), 'heading.paragraph');
+  assert.equal(map.get('F7'), 'proofread.cjk');
+  assert.equal(map.get('Mod+P'), 'quickSwitcher.open'); // B4: unchanged
+});
+
+test('Typora / Word preset clears every AMD / IME interception', async () => {
+  const { typoraPreset, interceptedBindings } = await import('./keybindings.ts');
+  assert.deepEqual(interceptedBindings(typoraPreset('windows'), 'windows'), []);
+});
+
+test('Typora / Word preset on macOS skips the two chords macOS owns', async () => {
+  const { typoraPreset } = await import('./keybindings.ts');
+  const mac = typoraPreset('mac');
+  assert.ok(!('file.import' in mac), '⌘⌥D is Dock hiding');
+  assert.ok(!('export.copyHtml' in mac), '⌘⌥H is Hide Others');
+  assert.equal(Object.keys(mac).length, 26);
+});
+
+test('the preset never takes a key the user gave to another command', async () => {
+  const { typoraPreset, planPreset } = await import('./keybindings.ts');
+  const preset = typoraPreset('windows');
+  const mine = { 'view.zoomEditorIn': 'Mod+Equal' };
+  const { apply, skipped } = planPreset(preset, mine, 'windows');
+  assert.deepEqual(skipped, ['heading.promote']);
+  assert.ok(!('heading.promote' in apply));
+  assert.equal(Object.keys(apply).length, 27);
+  assert.deepEqual(planPreset(preset, {}, 'windows').skipped, []);
+});
+
+test('an app-bound chord is taken out of the CodeMirror keymap', async () => {
+  const { cmKeyOwnedByApp, typoraPreset } = await import('./keybindings.ts');
+  // ⌘⇧K opens the palette — CodeMirror must not also delete the line.
+  assert.equal(cmKeyOwnedByApp({ key: 'Shift-Mod-k' }, {}, 'windows'), true);
+  assert.equal(cmKeyOwnedByApp({ key: 'Mod-d' }, typoraPreset('windows'), 'windows'), true);
+  assert.equal(cmKeyOwnedByApp({ key: 'Mod-z' }, {}, 'windows'), false);
+  // Emacs-style Ctrl keys exist only on macOS, where Mod is ⌘, not Ctrl.
+  assert.equal(cmKeyOwnedByApp({ mac: 'Ctrl-d' }, {}, 'mac'), false);
+  // Unbinding gives the chord back to CodeMirror.
+  assert.equal(cmKeyOwnedByApp({ key: 'Mod-d' }, { 'daily.openToday': null }, 'windows'), false);
+});
+
+test('Ctrl+Shift+0 reads as the digit, keypad +/- as =/-', async () => {
+  const { eventToCombo } = await import('./keybindings.ts');
+  const ev = (init: Partial<KeyboardEvent>) =>
+    ({ key: '', code: '', keyCode: 0, isComposing: false, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...init }) as KeyboardEvent;
+  assert.equal(eventToCombo(ev({ key: ')', code: 'Digit0', ctrlKey: true, shiftKey: true })), 'Mod+Shift+0');
+  assert.equal(eventToCombo(ev({ key: '+', code: 'NumpadAdd', ctrlKey: true })), 'Mod+Equal');
+  assert.equal(eventToCombo(ev({ key: '+', code: 'Equal', ctrlKey: true, shiftKey: true })), 'Mod+Shift+Equal');
+  assert.equal(eventToCombo(ev({ key: '0', code: 'Digit0', ctrlKey: true })), 'Mod+0');
+});
+
+test('a list override keeps every chord', async () => {
+  const { combosFor } = await import('./keybindings.ts');
+  assert.deepEqual(combosFor('view.toggleLiveEdit', { 'view.toggleLiveEdit': ['Mod+/', 'Mod+Alt+/'] }, 'windows'), [
+    'Mod+Slash',
+    'Mod+Alt+Slash',
+  ]);
+});
+
+test('⌘F stays in CodeMirror: the app find handler defers to it in the editor', async () => {
+  const { cmKeyOwnedByApp } = await import('./keybindings.ts');
+  for (const platform of ['windows', 'mac', 'linux'] as const) {
+    assert.equal(cmKeyOwnedByApp({ key: 'Mod-f' }, {}, platform), false, platform);
+  }
+});
+
+test('a key event without a code still matches punctuation chords (Ctrl+,)', async () => {
+  const { eventToCombo, normalizeCombo, resolveBindings } = await import('./keybindings.ts');
+  const e = { isComposing: false, key: ',', code: '', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, keyCode: 188 } as unknown as KeyboardEvent;
+  assert.equal(resolveBindings({}, 'windows').get(normalizeCombo(eventToCombo(e)!)), 'settings.open');
+});

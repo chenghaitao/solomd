@@ -20,6 +20,34 @@
 
 export type KeyCombo = string;
 
+/**
+ * The user's overrides, as stored in `settings.keybindings`. A string or a
+ * list of strings replaces the action's defaults (a list keeps more than one
+ * chord — the Typora/Word preset gives "toggle live edit" both ⌘/ and ⌘⌥/),
+ * `null` unbinds it, and a missing key means "use the default".
+ */
+export type KeyOverride = string | string[] | null | undefined;
+export type KeyOverrides = Record<string, KeyOverride>;
+
+/** The chords an override stands for, or null when it defers to the defaults. */
+function overrideCombos(override: KeyOverride): KeyCombo[] | null {
+  if (override === null) return [];
+  if (override === undefined || override === '') return null;
+  const list = Array.isArray(override) ? override : [override];
+  const out: KeyCombo[] = [];
+  for (const c of list) {
+    if (typeof c !== 'string' || !c) continue;
+    const n = normalizeCombo(c);
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+/** Effective chords for one action under a set of overrides. */
+function effectiveCombos(action: KeyActionDef, overrides: KeyOverrides): KeyCombo[] {
+  return overrideCombos(overrides[action.id]) ?? action.defaults.map(normalizeCombo);
+}
+
 export interface KeyActionDef {
   /** Stable id — matches the command registry's id where one exists. */
   id: string;
@@ -64,6 +92,22 @@ export function activeKeyActions(
   return KEY_ACTIONS.filter((a) => !a.platforms || a.platforms.includes(platform));
 }
 
+/** id → action for one platform. `combosFor` runs once per label at startup
+ *  (every toolbar tooltip, palette entry and menu accelerator), and a fresh
+ *  `activeKeyActions()` filter + linear find per call made that quadratic.
+ *  KEY_ACTIONS is a constant table, so the index never goes stale. */
+const actionIndex = new Map<string, Map<string, KeyActionDef>>();
+function activeActionById(actionId: string, platform: 'mac' | 'windows' | 'linux'): KeyActionDef | undefined {
+  let index = actionIndex.get(platform);
+  if (!index) {
+    index = new Map();
+    // First match wins, as with the `find` this replaces.
+    for (const a of activeKeyActions(platform)) if (!index.has(a.id)) index.set(a.id, a);
+    actionIndex.set(platform, index);
+  }
+  return index.get(actionId);
+}
+
 /**
  * Every app-level shortcut, transcribed from the pre-#180 handler so the
  * defaults are byte-for-byte what shipped before.
@@ -73,14 +117,15 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'file.new', label: 'New Note', category: 'file', defaults: ['Mod+N', 'Mod+T'] },
   { id: 'file.newText', label: 'New Plain Text File', category: 'file', defaults: ['Mod+Alt+N'] },
   // #338 — a note in the folder selected in the file tree (or the selected
-  // file's folder). No native menu item carries it, so it needs no entry in
-  // MENU_ITEM_BY_ACTION.
+  // file's folder).
   { id: 'file.newInFolder', label: 'New Note in Selected Folder', category: 'file', defaults: ['Mod+Alt+Shift+N'] },
   { id: 'file.open', label: 'Open File…', category: 'file', defaults: ['Mod+O'] },
   { id: 'file.import', label: 'Import Documents…', category: 'file', defaults: ['Mod+Shift+L'] },
   { id: 'file.save', label: 'Save', category: 'file', defaults: ['Mod+S'] },
   { id: 'file.saveAs', label: 'Save As…', category: 'file', defaults: ['Mod+Shift+S'] },
   { id: 'file.closeTab', label: 'Close Tab', category: 'file', defaults: ['Mod+W'] },
+  // B4 — Typora's "reopen closed tab". ⌘⇧T was free, so it ships bound.
+  { id: 'tab.reopenClosed', label: 'Reopen Closed Tab', category: 'file', defaults: ['Mod+Shift+T'] },
   { id: 'file.openExternal', label: 'Open in External Editor', category: 'file', defaults: ['Mod+Shift+E'] },
   { id: 'window.new', label: 'New Window', category: 'file', defaults: ['Mod+Shift+N'] },
   // #272 — not on macOS: Quit ⌘Q belongs to the OS app menu, and the native
@@ -97,6 +142,15 @@ export const KEY_ACTIONS: KeyActionDef[] = [
 
   // ---- Edit ----
   { id: 'editor.caseCycle', label: 'Cycle Case of Selection', category: 'edit', defaults: ['Shift+F3'] },
+  // ---- Typora-style selection commands (B4) ----
+  // Each one works in all three editors (lib/editor-commands.ts decides the
+  // range; Editor.vue applies it). Bound by default only where the chord was
+  // free: ⌘D is today's daily note, so "select word" waits for the
+  // Typora / Word preset (or the user) to give it a key.
+  { id: 'editor.selectWord', label: 'Select Word', category: 'edit', defaults: [] },
+  { id: 'editor.deleteWord', label: 'Delete Word', category: 'edit', defaults: ['Mod+Shift+D'] },
+  { id: 'editor.selectLine', label: 'Select Line', category: 'edit', defaults: ['Mod+L'] },
+  { id: 'editor.jumpToSelection', label: 'Jump to Selection', category: 'edit', defaults: ['Mod+Alt+J'] },
   // ---- Formatting (#296, #274) ----
   // Bold is NOT on Mod+B by default: that has toggled the file tree since
   // 1.0 (the VS Code habit), and taking it away from everyone to match the
@@ -113,6 +167,11 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'fmt.h4', label: 'Heading 4', category: 'edit', defaults: ['Mod+4'] },
   { id: 'fmt.h5', label: 'Heading 5', category: 'edit', defaults: ['Mod+5'] },
   { id: 'fmt.h6', label: 'Heading 6', category: 'edit', defaults: ['Mod+6'] },
+  // B4 — Typora's ⌘= / ⌘- / ⌘0. Those chords zoom the whole UI here, so the
+  // commands ship unbound and the Typora / Word preset hands them the keys.
+  { id: 'heading.promote', label: 'Increase Heading Level', category: 'edit', defaults: [] },
+  { id: 'heading.demote', label: 'Decrease Heading Level', category: 'edit', defaults: [] },
+  { id: 'heading.paragraph', label: 'Convert to Paragraph', category: 'edit', defaults: [] },
   { id: 'fmt.quote', label: 'Blockquote', category: 'edit', defaults: ['Mod+Alt+Q'] },
   { id: 'fmt.ul', label: 'Bulleted List', category: 'edit', defaults: ['Mod+Alt+8'] },
   { id: 'fmt.ol', label: 'Numbered List', category: 'edit', defaults: ['Mod+Alt+7'] },
@@ -139,6 +198,20 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'view.toggleInspector', label: 'Toggle Properties Inspector', category: 'view', defaults: ['Mod+Shift+I'] },
   { id: 'view.toggleToolbar', label: 'Show / Hide Toolbar Buttons', category: 'view', defaults: ['Mod+Alt+Shift+T'] },
   { id: 'view.slideshow', label: 'Slideshow', category: 'view', defaults: ['Mod+Alt+P'] },
+  // B4 — F8 / F9 as in Typora. Both keys were free.
+  { id: 'view.toggleFocusMode', label: 'Toggle Focus Mode', category: 'view', defaults: ['F8'] },
+  { id: 'view.toggleTypewriter', label: 'Toggle Typewriter Mode', category: 'view', defaults: ['F9'] },
+  // Zoom used to be hard-wired in App.vue. It is rebindable now because the
+  // Typora / Word preset gives ⌘= / ⌘- / ⌘0 to the heading-level commands,
+  // and a chord that cannot be unbound cannot be given away. The preview
+  // axis (⌃⌘= on macOS) stays a fixed menu accelerator: "Mod" cannot say
+  // "⌘ and ⌃ together".
+  { id: 'view.zoomUiIn', label: 'UI: Zoom In', category: 'view', defaults: ['Mod+Equal'] },
+  { id: 'view.zoomUiOut', label: 'UI: Zoom Out', category: 'view', defaults: ['Mod+Minus'] },
+  { id: 'view.zoomUiReset', label: 'UI: Reset Zoom', category: 'view', defaults: ['Mod+0'] },
+  { id: 'view.zoomEditorIn', label: 'Editor: Zoom In', category: 'view', defaults: ['Mod+Shift+Equal'] },
+  { id: 'view.zoomEditorOut', label: 'Editor: Zoom Out', category: 'view', defaults: ['Mod+Shift+Minus'] },
+  { id: 'view.zoomEditorReset', label: 'Editor: Reset Zoom', category: 'view', defaults: ['Mod+Shift+0'] },
   // Folding. The chords mirror CodeMirror's own fold keymap so the muscle
   // memory carries over — but they are handled at app level, which is what
   // makes them work in the Windows plain-textarea editor too (it has no
@@ -222,6 +295,13 @@ export function eventToCombo(e: KeyboardEvent): KeyCombo | null {
   } else if (e.altKey && /^Digit\d$/.test(e.code)) {
     // Same story for the number row: ⌥8 arrives as "•", ⌥7 as "¶".
     key = e.code.slice(5);
+  } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && /^Digit\d$/.test(e.code)) {
+    // ⌘⇧0 arrives as ")" on a US layout — read the digit, so "editor: reset
+    // zoom" (Mod+Shift+0) matches on every layout.
+    key = e.code.slice(5);
+  } else if (e.code === 'NumpadAdd' || e.code === 'NumpadSubtract') {
+    // The keypad's + / − have always zoomed along with = / -.
+    key = e.code === 'NumpadAdd' ? 'Equal' : 'Minus';
   } else if (PUNCT_BY_CODE[e.code]) {
     key = e.code;
   } else if (/^F\d{1,2}$/.test(raw)) {
@@ -274,14 +354,12 @@ export function formatCombo(combo: KeyCombo, isMac: boolean): string {
  * browser/OS gets to switch ours off rather than being told to live with it.
  */
 export function resolveBindings(
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
 ): Map<KeyCombo, string> {
   const map = new Map<KeyCombo, string>();
-  for (const action of activeKeyActions()) {
-    const override = overrides[action.id];
-    if (override === null) continue;
-    const combos = override ? [normalizeCombo(override)] : action.defaults.map(normalizeCombo);
-    for (const combo of combos) {
+  for (const action of activeKeyActions(platform)) {
+    for (const combo of effectiveCombos(action, overrides)) {
       // First writer wins, so an earlier action in the table keeps a chord a
       // later one also asks for. The settings UI surfaces the clash before it
       // gets here; this is the tiebreak for a hand-edited settings file.
@@ -294,13 +372,12 @@ export function resolveBindings(
 /** The chords currently bound to one action (for display in settings). */
 export function combosFor(
   actionId: string,
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
 ): KeyCombo[] {
-  const action = activeKeyActions().find((a) => a.id === actionId);
+  const action = activeActionById(actionId, platform);
   if (!action) return [];
-  const override = overrides[actionId];
-  if (override === null) return [];
-  return override ? [normalizeCombo(override)] : action.defaults.map(normalizeCombo);
+  return effectiveCombos(action, overrides);
 }
 
 /**
@@ -340,7 +417,9 @@ export const HOTKEY_INTERCEPTIONS: HotkeyInterception[] = [
   { combo: 'Mod+Shift+E', source: AMD, platforms: ['windows'], alternative: 'Mod+Alt+E' },
   { combo: 'Mod+Shift+C', source: AMD, platforms: ['windows'], alternative: 'Mod+Alt+Shift+C' },
   { combo: 'Mod+Shift+I', source: AMD, platforms: ['windows'], alternative: 'Mod+Alt+I' },
-  { combo: 'Mod+Shift+J', source: AMD, platforms: ['windows'], alternative: 'Mod+Alt+J' },
+  // F7, not ⌘⌥J: that chord is "jump to selection" now (B4), and F7 is where
+  // Word keeps its proofing tools.
+  { combo: 'Mod+Shift+J', source: AMD, platforms: ['windows'], alternative: 'F7' },
   { combo: 'Mod+Shift+S', source: AMD, platforms: ['windows'], alternative: 'Mod+Alt+S' },
   { combo: 'Mod+Shift+O', source: AMD, platforms: ['windows'], alternative: 'Mod+Alt+O' },
   { combo: 'Mod+Shift+F', source: 'Microsoft Pinyin', platforms: ['windows'], alternative: 'Mod+Alt+F' },
@@ -362,17 +441,10 @@ export interface InterceptedBinding {
  * rather than offered — the preset must never create a conflict of its own.
  */
 export function interceptedBindings(
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
   platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
 ): InterceptedBinding[] {
-  // Resolved here rather than via `combosFor`, which looks actions up against
-  // the *running* platform — that would read the wrong table whenever a
-  // caller (a test, mostly) pins a different one.
-  const effective = (action: KeyActionDef): KeyCombo[] => {
-    const override = overrides[action.id];
-    if (override === null) return [];
-    return override ? [normalizeCombo(override)] : action.defaults.map(normalizeCombo);
-  };
+  const effective = (action: KeyActionDef): KeyCombo[] => effectiveCombos(action, overrides);
   const actions = activeKeyActions(platform);
   const taken = new Map<KeyCombo, string>();
   for (const action of actions) {
@@ -406,12 +478,127 @@ export const WRITER_PRESET: Record<string, KeyCombo> = {
 
 /** True when both halves of the swap are in effect (however they got there). */
 export function writerPresetActive(
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
 ): boolean {
   return Object.entries(WRITER_PRESET).every(([id, combo]) => {
     const now = combosFor(id, overrides);
     return now.length === 1 && now[0] === normalizeCombo(combo);
   });
+}
+
+/**
+ * The "Typora / Word" preset — a tester's full remap (bug/B4, section 八,
+ * 28 changes), offered as one click rather than shipped as the defaults:
+ *
+ * - every Ctrl+Shift chord AMD Software or Microsoft Pinyin swallows moves
+ *   to the Ctrl+Alt family (file/edit/view/navigate rows below);
+ * - ⌘B is bold and ⌘⇧B the file tree (the writer swap);
+ * - ⌘E and ⌘D go back to what Word and Typora do with them (inbox and the
+ *   daily note move to ⌘⌥A / ⌘⌥Y, ⌘D selects a word);
+ * - ⌘= / ⌘- / ⌘0 change heading levels, so UI zoom keeps its menu entries
+ *   but loses its chords;
+ * - ⌘/ toggles source / live edit (⌘⌥/ kept as a second key), and Markdown
+ *   help keeps F1 alone.
+ *
+ * `null` unbinds. Commands the preset does not mention keep whatever they
+ * have — including a user's own rebinds.
+ */
+export const TYPORA_PRESET: Record<string, KeyOverride> = {
+  // File
+  'file.import': 'Mod+Alt+D',
+  'file.saveAs': 'Mod+Alt+S',
+  'file.openExternal': 'Mod+Alt+E',
+  // Edit
+  'fmt.bold': 'Mod+B',
+  'export.copyHtml': 'Mod+Alt+H',
+  'proofread.cjk': 'F7',
+  // View
+  'view.toggleReading': 'Mod+Alt+R',
+  'view.toggleOutline': 'Mod+Alt+O',
+  'view.toggleInspector': 'Mod+Alt+I',
+  'view.toggleFileTree': 'Mod+Shift+B',
+  'view.toggleLiveEdit': ['Mod+Slash', 'Mod+Alt+Slash'],
+  'view.zoomUiIn': null,
+  'view.zoomUiOut': null,
+  'view.zoomUiReset': null,
+  // Navigate
+  'search.global': 'Mod+Alt+F',
+  // Tools
+  'inbox.toggle': 'Mod+Alt+A',
+  'daily.openToday': 'Mod+Alt+Y',
+  'help.markdown': 'F1',
+  // New commands (B4 section 七)
+  'view.toggleFocusMode': 'F8',
+  'view.toggleTypewriter': 'F9',
+  'editor.selectWord': 'Mod+D',
+  'editor.deleteWord': 'Mod+Shift+D',
+  'editor.selectLine': 'Mod+L',
+  'editor.jumpToSelection': 'Mod+Alt+J',
+  'heading.promote': 'Mod+Equal',
+  'heading.demote': 'Mod+Minus',
+  'heading.paragraph': 'Mod+0',
+  'tab.reopenClosed': 'Mod+Shift+T',
+};
+
+/**
+ * Chords macOS itself answers before any app sees them (or that the app menu
+ * owns by convention). The B4 remap was written on Windows; two of its Ctrl+Alt
+ * picks are ⌘⌥D (Dock hiding) and ⌘⌥H (Hide Others) on a Mac, so there the
+ * preset leaves those two commands where they were. Nothing else in it clashes.
+ */
+const MAC_RESERVED = new Set(['Mod+Alt+D', 'Mod+Alt+H', 'Mod+H', 'Mod+M', 'Mod+Q', 'Mod+Alt+Escape']);
+
+/** The Typora / Word preset as it applies on one platform. */
+export function typoraPreset(
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
+): Record<string, KeyOverride> {
+  const known = new Set(activeKeyActions(platform).map((a) => a.id));
+  const out: Record<string, KeyOverride> = {};
+  for (const [id, value] of Object.entries(TYPORA_PRESET)) {
+    if (!known.has(id)) continue;
+    const combos = overrideCombos(value) ?? [];
+    if (platform === 'mac' && combos.some((c) => MAC_RESERVED.has(c))) continue;
+    out[id] = value;
+  }
+  return out;
+}
+
+/** True when every binding in `preset` is the one in effect. */
+export function presetActive(
+  preset: Record<string, KeyOverride>,
+  overrides: KeyOverrides = {},
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
+): boolean {
+  return Object.entries(preset).every(([id, value]) => {
+    const want = overrideCombos(value) ?? [];
+    const now = combosFor(id, overrides, platform);
+    return now.length === want.length && now.every((c, i) => c === want[i]);
+  });
+}
+
+/**
+ * What applying `preset` on top of the current overrides would do. A chord the
+ * user has already given to some command outside the preset is left with them,
+ * and the preset entry wanting it is skipped (reported, not forced): a preset
+ * must never quietly take a key away from a choice the user made.
+ */
+export function planPreset(
+  preset: Record<string, KeyOverride>,
+  overrides: KeyOverrides = {},
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
+): { apply: Record<string, KeyOverride>; skipped: string[] } {
+  const next: KeyOverrides = { ...overrides, ...preset };
+  const apply: Record<string, KeyOverride> = {};
+  const skipped: string[] = [];
+  for (const [id, value] of Object.entries(preset)) {
+    const clash = (overrideCombos(value) ?? []).some((c) => {
+      const owner = conflictFor(c, id, next, platform);
+      return !!owner && !(owner in preset) && owner in overrides;
+    });
+    if (clash) skipped.push(id);
+    else apply[id] = value;
+  }
+  return { apply, skipped };
 }
 
 /**
@@ -424,7 +611,7 @@ export function filterKeyActions(
   actions: KeyActionDef[],
   query: string,
   localizedLabel: (a: KeyActionDef) => string,
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
   mac = false,
 ): KeyActionDef[] {
   const words = query.trim().toLowerCase().split(/[\s+]+/).filter(Boolean);
@@ -475,58 +662,20 @@ export function filterKeyActions(
 export function conflictFor(
   combo: KeyCombo,
   actionId: string,
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
 ): string | null {
   const target = normalizeCombo(combo);
-  for (const action of activeKeyActions()) {
+  for (const action of activeKeyActions(platform)) {
     if (action.id === actionId) continue;
-    if (combosFor(action.id, overrides).includes(target)) return action.id;
+    if (effectiveCombos(action, overrides).includes(target)) return action.id;
   }
   return null;
 }
 
-/**
- * Menu-item id → Tauri accelerator, for the native menu (#180).
- *
- * An empty string means "strip the accelerator": the action moved to a chord
- * the webview handles, so leaving the old one on the menu would keep firing
- * it and a rebind would only ever *add* a shortcut. Only ids the menu
- * actually carries appear here; `set_menu_config` keeps its built-in default
- * for anything absent.
- */
-export function nativeMenuAccelerators(
-  overrides: Record<string, string | null | undefined> = {},
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [actionId, menuId] of Object.entries(MENU_ITEM_BY_ACTION)) {
-    if (!Object.prototype.hasOwnProperty.call(overrides, actionId)) continue;
-    const combos = combosFor(actionId, overrides);
-    out[menuId] = combos.length ? toTauriAccelerator(combos[0]) : '';
-  }
-  return out;
-}
-
-/** Menu items whose accelerator mirrors a rebindable action. */
-const MENU_ITEM_BY_ACTION: Record<string, string> = {
-  'file.new': 'file.new',
-  'file.newText': 'file.newText',
-  'file.open': 'file.open',
-  'file.import': 'file.import',
-  'file.save': 'file.save',
-  'file.saveAs': 'file.saveAs',
-  'file.closeTab': 'file.closeTab',
-  'file.openExternal': 'file.openExternal',
-  'window.new': 'window.new',
-  'file.exit': 'file.exit',
-  'export.pdfPrint': 'file.print',
-  'view.toggleFileTree': 'view.toggleFileTree',
-  'view.toggleRightSidebar': 'view.toggleRightSidebar',
-  'view.toggleOutline': 'view.toggleOutline',
-  'view.cycleView': 'view.cycleView',
-  'search.global': 'search.global',
-  'settings.open': 'app.settings',
-  'help.markdown': 'help.markdown',
-};
+// The native menu's accelerators come from lib/app-menu.ts (`toNativeSpec`),
+// which reads the same bindings for every item — bug/C1 replaced the per-item
+// override table that used to live here.
 
 /** `Mod+Shift+K` → `CmdOrCtrl+Shift+K` (Tauri's accelerator grammar). */
 export function toTauriAccelerator(combo: KeyCombo): string {
@@ -548,7 +697,7 @@ export function toTauriAccelerator(combo: KeyCombo): string {
 /** Formatted primary chord for a UI label, or '' when the action is unbound. */
 export function shortcutLabel(
   actionId: string,
-  overrides: Record<string, string | null | undefined> = {},
+  overrides: KeyOverrides = {},
   isMac = false,
 ): string {
   const combos = combosFor(actionId, overrides);
@@ -574,4 +723,41 @@ export function toCodeMirrorKey(combo: KeyCombo): string {
   };
   out.push(punct[key] ?? (key.length === 1 ? key.toLowerCase() : key));
   return out.join('-');
+}
+
+/** `Shift-Mod-k` and `Mod-Shift-k` are one CodeMirror key: compare canonically. */
+function canonicalCmKey(key: string): string {
+  const parts = key.split(/-(?!$)/);
+  const last = parts.pop() ?? '';
+  const mods = parts.map((m) => (m === 'Cmd' || m === 'Meta' ? 'Mod' : m === 'Control' ? 'Ctrl' : m)).sort();
+  return [...mods, last.length === 1 ? last.toLowerCase() : last].join('-');
+}
+
+/**
+ * The app-level binding owns its chord inside CodeMirror too.
+ *
+ * App shortcuts listen on `window`, after CodeMirror's own keymap has run on
+ * the same keydown — so a chord in both used to do two things at once
+ * (⌘D: today's note *and* select-next-occurrence; ⌘/: Markdown help *and*
+ * an HTML comment). Editor.vue drops every CodeMirror default/search binding
+ * this returns true for, and re-filters whenever the user rebinds.
+ */
+export function cmKeyOwnedByApp(
+  binding: { key?: string; mac?: string; win?: string; linux?: string },
+  overrides: KeyOverrides = {},
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
+): boolean {
+  const key =
+    (platform === 'mac' ? binding.mac : platform === 'windows' ? binding.win : binding.linux) ?? binding.key;
+  if (!key) return false;
+  const want = canonicalCmKey(key);
+  for (const [combo, actionId] of resolveBindings(overrides, platform)) {
+    // AI rewrite is itself a CodeMirror keymap entry, not a window handler.
+    // Find is app-level only in the preview: in the editor its handler
+    // declines so CodeMirror's own ⌘F opens the search panel — filtering that
+    // binding out left ⌘F doing nothing in the editor (4.14.8–4.14.9).
+    if (actionId === 'editor.aiRewrite' || actionId === 'editor.find') continue;
+    if (canonicalCmKey(toCodeMirrorKey(combo)) === want) return true;
+  }
+  return false;
 }

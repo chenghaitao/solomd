@@ -75,14 +75,15 @@ const IMAGE_CSS = `
   }
   .img-page ul, .img-page ol { padding-left: 1.8em; margin: .9em 0; }
   .img-page table { border-collapse: collapse; margin: 1.3em 0; width: 100%; font-size: .95em; }
-  .img-page th, .img-page td { border: 1px solid #e6e2d8; padding: 7px 13px; text-align: left; }
+  /* #370 — long unbreakable runs break inside the cell, not past the card. */
+  .img-page th, .img-page td { border: 1px solid #e6e2d8; padding: 7px 13px; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
   .img-page .cell-nowrap { white-space: nowrap; }
   .img-page thead th { background: #ffe7cc; font-weight: 700; border-bottom: 2px solid #ff9f40; }
   .img-page hr { border: none; border-top: 1px solid #e6e2d8; margin: 2em 0; }
   .img-page img { max-width: 100%; border-radius: 6px; margin: 1em 0; }
   .img-page .mermaid-block { display: flex; justify-content: center; margin: 1.5em 0; }
   .img-page .mermaid-block svg { max-width: 100%; height: auto; }
-  .img-page .katex-display { overflow-x: auto; margin: 1em 0; }
+  .img-page .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; margin: 0.5em 0; }
 
   /* Watermark / branding — rendered when settings.imageExportBranding
      is on (default ON in v3.6). Toggleable in Settings → Export so

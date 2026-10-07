@@ -1,3 +1,4 @@
+import { samePath } from '../lib/path-key';
 import { inject } from 'vue';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -82,6 +83,29 @@ export function useFiles() {
 
   async function newFile() {
     tabs.newTab();
+  }
+
+  /**
+   * B4 — reopen the most recently closed tab (Typora ⌘⇧T). A saved file is
+   * re-read from disk; an unsaved note that was discarded comes back with its
+   * text as a new, unsaved tab. A file that is already open again is just
+   * focused, and the next record down is not consumed for it.
+   */
+  async function reopenClosedTab(): Promise<boolean> {
+    const rec = tabs.popClosedTab();
+    if (!rec) {
+      toasts.info(t('toast.nothingToReopen'));
+      return false;
+    }
+    if (rec.filePath) {
+      const open = tabs.tabs.find((x) => samePath(x.filePath, rec.filePath));
+      if (open) tabs.activate(open.id);
+      else await openPath(rec.filePath, { bypassNewWindow: true });
+      return true;
+    }
+    const tab = tabs.newTab({ fileName: rec.fileName, language: rec.language });
+    tabs.setContent(tab.id, rec.content);
+    return true;
   }
 
   async function newTextFile() {
@@ -323,8 +347,10 @@ export function useFiles() {
       if (settings.revealInFileTreeOnOpen && !isSaf) {
         const parent = path.replace(/[\\/][^\\/]+$/, '');
         if (parent && parent !== path) {
+          // 张工 4.14.8 report #3: this used to also re-open a tree the user
+          // had hidden, on every file open. Switching the folder is the
+          // setting's job; whether the tree is shown is the user's.
           workspace.setFolder(parent);
-          if (!settings.showFileTree) settings.toggleFileTree();
         }
       }
 
@@ -981,6 +1007,7 @@ export function useFiles() {
     saveTab,
     autoSaveDirtyTabs,
     closeTabSafe,
+    reopenClosedTab,
     spawnAuxWindow,
   };
 }

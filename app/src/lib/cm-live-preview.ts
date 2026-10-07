@@ -206,7 +206,12 @@ const liveTheme = EditorView.theme({
   // `.cm-selectionLayer`, parking selection beneath the per-char
   // backgrounds painted by `t.monospace`. Need `!important` to beat
   // the inline style; 45% alpha keeps glyphs readable underneath.
-  '.cm-selectionLayer': { zIndex: '2 !important' },
+  // #368 — once the layer sits ABOVE the text its rectangles swallow every
+  // mousedown inside the selection: the event never reaches `.cm-content`,
+  // so CodeMirror can't collapse the selection on click (after Select All
+  // there is nowhere left to click). The layer is purely visual — let
+  // pointer events fall through to the text, as CM's own cursor layer does.
+  '.cm-selectionLayer': { zIndex: '2 !important', pointerEvents: 'none' },
   '.cm-selectionBackground': {
     backgroundColor: 'rgba(255,159,64,0.45) !important',
   },

@@ -56,38 +56,47 @@ function isDark(bg: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 < 128;
 }
 
+// Startup trim: each built-in theme builds a CodeMirror StyleModule and a
+// HighlightStyle. Only the active one is ever needed, so they're built on
+// first use (and cached, so the Extension identity stays stable across
+// reconfigures) instead of all six at module load.
+function lazyTheme(build: () => Extension): () => Extension {
+  let ext: Extension | null = null;
+  return () => (ext ??= build());
+}
+
 // ============================================================
 // Themes — inspired by popular editors
 // ============================================================
 
-export const nordTheme = mkTheme(
+const nordTheme = lazyTheme(() => mkTheme(
   '#2e3440', '#d8dee9', '#4c566a', 'rgba(136,192,208,0.2)', '#88c0d0',
   {
     keyword: '#81a1c1', string: '#a3be8c', number: '#b48ead', comment: '#616e88',
     function: '#88c0d0', variable: '#d8dee9', type: '#8fbcbb', property: '#88c0d0',
     heading: '#81a1c1', operator: '#81a1c1', punctuation: '#eceff4',
   },
-);
+));
 
-export const solarizedLightTheme = mkTheme(
+const solarizedLightTheme = lazyTheme(() => mkTheme(
   '#fdf6e3', '#657b83', '#93a1a1', 'rgba(38,139,210,0.15)', '#268bd2',
   {
     keyword: '#859900', string: '#2aa198', number: '#d33682', comment: '#93a1a1',
     function: '#268bd2', variable: '#657b83', type: '#b58900', property: '#268bd2',
     heading: '#cb4b16', operator: '#657b83', punctuation: '#586e75',
   },
-);
+));
 
-export const solarizedDarkTheme = mkTheme(
+const solarizedDarkTheme = lazyTheme(() => mkTheme(
   '#002b36', '#839496', '#586e75', 'rgba(38,139,210,0.2)', '#268bd2',
   {
     keyword: '#859900', string: '#2aa198', number: '#d33682', comment: '#586e75',
     function: '#268bd2', variable: '#839496', type: '#b58900', property: '#268bd2',
     heading: '#cb4b16', operator: '#839496', punctuation: '#93a1a1',
   },
-);
+));
 
-export const monokaiTheme = mkTheme(
+const monokaiTheme = lazyTheme(() => mkTheme(
   '#272822', '#f8f8f2', '#75715e', 'rgba(249,38,114,0.18)', '#f92672',
   {
     keyword: '#f92672', string: '#e6db74', number: '#ae81ff', comment: '#75715e',
@@ -95,18 +104,18 @@ export const monokaiTheme = mkTheme(
     heading: '#f92672', operator: '#f92672', punctuation: '#f8f8f2',
     constant: '#ae81ff',
   },
-);
+));
 
-export const githubLightTheme = mkTheme(
+const githubLightTheme = lazyTheme(() => mkTheme(
   '#ffffff', '#24292e', '#babbbc', 'rgba(3,102,214,0.12)', '#0366d6',
   {
     keyword: '#d73a49', string: '#032f62', number: '#005cc5', comment: '#6a737d',
     function: '#6f42c1', variable: '#24292e', type: '#e36209', property: '#005cc5',
     heading: '#005cc5', operator: '#d73a49', punctuation: '#24292e',
   },
-);
+));
 
-export const draculaTheme = mkTheme(
+const draculaTheme = lazyTheme(() => mkTheme(
   '#282a36', '#f8f8f2', '#6272a4', 'rgba(189,147,249,0.18)', '#bd93f9',
   {
     keyword: '#ff79c6', string: '#f1fa8c', number: '#bd93f9', comment: '#6272a4',
@@ -114,7 +123,7 @@ export const draculaTheme = mkTheme(
     heading: '#ff79c6', operator: '#ff79c6', punctuation: '#f8f8f2',
     constant: '#bd93f9',
   },
-);
+));
 
 // Map theme name → CodeMirror extension (empty = use CSS vars only)
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -156,12 +165,12 @@ export function cmThemeFor(theme: Theme, customTheme = false): Extension {
   if (customTheme) return themeFamily(theme) === 'dark' ? oneDark : [];
   switch (theme) {
     case 'dark': return oneDark;
-    case 'nord': return nordTheme;
-    case 'solarized-light': return solarizedLightTheme;
-    case 'solarized-dark': return solarizedDarkTheme;
-    case 'monokai': return monokaiTheme;
-    case 'github-light': return githubLightTheme;
-    case 'dracula': return draculaTheme;
+    case 'nord': return nordTheme();
+    case 'solarized-light': return solarizedLightTheme();
+    case 'solarized-dark': return solarizedDarkTheme();
+    case 'monokai': return monokaiTheme();
+    case 'github-light': return githubLightTheme();
+    case 'dracula': return draculaTheme();
     default: return [];
   }
 }

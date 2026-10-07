@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch, watchEffect, computed, provide, nextTick, defineAsyncComponent } from 'vue';
+import { useLazyComponent } from './composables/useLazyComponent';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -9,15 +10,22 @@ import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
+import { ensureSpellDict } from './lib/spell-suggest';
 import Toolbar from './components/Toolbar.vue';
 import TileRoot from './components/TileRoot.vue';
 import StatusBar from './components/StatusBar.vue';
-import CommandPalette from './components/CommandPalette.vue';
-import QuickSwitcher from './components/QuickSwitcher.vue';
 import Outline from './components/Outline.vue';
-import AndroidFolderPicker from './components/AndroidFolderPicker.vue';
-import TableEditor from './components/TableEditor.vue';
-import FormulaEditor from './components/FormulaEditor.vue';
+import BacklinksPanel from './components/BacklinksPanel.vue';
+const NeighborhoodPanel = defineAsyncComponent(() => import('./components/NeighborhoodPanel.vue'));
+const RelationshipsPanel = defineAsyncComponent(() => import('./components/RelationshipsPanel.vue'));
+const TagsPanel = defineAsyncComponent(() => import('./components/TagsPanel.vue'));
+const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'));
+const TableEditor = defineAsyncComponent(() => import('./components/TableEditor.vue'));
+const FormulaEditor = defineAsyncComponent(() => import('./components/FormulaEditor.vue'));
+const TypesPanel = defineAsyncComponent(() => import('./components/TypesPanel.vue'));
+const HistoryPanel = defineAsyncComponent(() => import('./components/HistoryPanel.vue'));
+const PropertiesInspector = defineAsyncComponent(() => import('./components/PropertiesInspector.vue'));
+const AgentPanel = defineAsyncComponent(() => import('./components/AgentPanel.vue'));
 import RsSplitter from './components/RsSplitter.vue';
 import { useAutoCommit } from './composables/useAutoCommit';
 import { useGithubSync } from './composables/useGithubSync';
@@ -25,9 +33,12 @@ import { useSessionRestore } from './composables/useSessionRestore';
 import SessionRestoreDialog from './components/SessionRestoreDialog.vue';
 import WhiteboardOverlay from './components/WhiteboardOverlay.vue';
 import AIRewriteOverlay from './components/AIRewriteOverlay.vue';
+const BasesView = defineAsyncComponent(() => import('./components/BasesView.vue'));
 import { BASES_OPEN_EVENT, BASES_CLOSE_EVENT } from './composables/useBasesView';
+const InboxView = defineAsyncComponent(() => import('./components/InboxView.vue'));
 import { INBOX_OPEN_EVENT, INBOX_CLOSE_EVENT } from './composables/useInboxView';
 // v4.6.1 F2 — Type lens (center-pane filtered view of one type's members).
+const TypeLensView = defineAsyncComponent(() => import('./components/TypeLensView.vue'));
 import { TYPE_LENS_OPEN_EVENT, TYPE_LENS_CLOSE_EVENT } from './composables/useTypeLens';
 import FileTree from './components/FileTree.vue';
 // v4.6 F5 — Saved filtered views (sidebar panel + filtered list + editor).
@@ -35,18 +46,10 @@ import ViewsPanel from './components/ViewsPanel.vue';
 import ViewNoteList from './components/ViewNoteList.vue';
 import ViewEditorDialog from './components/ViewEditorDialog.vue';
 import { VIEW_OPEN_EVENT, VIEW_CLOSE_EVENT } from './composables/useSavedViews';
-import SettingsPanel from './components/SettingsPanel.vue';
-import MarkdownHelp from './components/MarkdownHelp.vue';
-// Kept eager: both are mounted unconditionally (they show/hide through their
-// `open` prop), so an async wrapper would fetch them at startup anyway.
-import RagSearch from './components/RagSearch.vue';
-import CjkProofread from './components/CjkProofread.vue';
+import GlobalSearch from './components/GlobalSearch.vue';
 import ReadingView from './components/ReadingView.vue';
-import AboutDialog from './components/AboutDialog.vue';
-import AgentSetupWizard from './components/AgentSetupWizard.vue';
 import UnsavedDialog from './components/UnsavedDialog.vue';
 import FileChangedDialog from './components/FileChangedDialog.vue';
-import ImageUrlDialog from './components/ImageUrlDialog.vue';
 import Toast from './components/Toast.vue';
 import { useTabsStore } from './stores/tabs';
 import { useSettingsStore, buildEditorFontStack, setRightSidebarShell } from './stores/settings';
@@ -54,13 +57,17 @@ import { useWindowsStore, isAuxLabel } from './stores/windows';
 import { useTilesStore } from './stores/tiles';
 import { usePomodoroStore } from './stores/pomodoro';
 import { useFiles } from './composables/useFiles';
-import { useExport } from './composables/useExport';
 import { useShortcuts } from './composables/useShortcuts';
 import { useFileWatcher } from './composables/useFileWatcher';
 import { loadCustomTheme } from './lib/custom-theme';
-import { isIOS, isMacOS, isAndroid, isMobile } from './lib/platform';
+import { isIOS, isMacOS, isAndroid, isMobile, isWindowsDesktop } from './lib/platform';
 import { useViewport } from './composables/useViewport';
-import { nativeMenuAccelerators } from './lib/keybindings';
+import { toNativeSpec } from './lib/app-menu';
+import { themeFamily } from './lib/themes';
+import type { Theme, ViewMode } from './types';
+import { useAppMenu } from './composables/useAppMenu';
+import { useUpdateCheck } from './composables/useUpdateCheck';
+import { useCommands } from './composables/useCommands';
 import { useI18n } from './i18n';
 import { quickCaptureError } from './lib/quick-capture-status';
 import { tableEditor, closeTableEditor } from './lib/table-editor-bus';
@@ -72,27 +79,7 @@ import { useSavedViewsStore } from './stores/savedViews';
 import { usePropertiesStore } from './stores/properties';
 import { useRagStore } from './stores/rag';
 import { IS_APP_STORE_BUILD } from './lib/app-build';
-
-// Right-side panes and the alternate center-pane views are opened by hand and
-// are `v-if`-gated, so each one becomes a chunk loaded the first time the user
-// actually asks for it (a few ms off local disk) instead of being parsed by
-// every launch. `defineAsyncComponent` only defers the import until first
-// render, so this list must stay limited to components the template really
-// does render conditionally — anything mounted unconditionally would just be
-// fetched at startup anyway.
-const BacklinksPanel = defineAsyncComponent(() => import('./components/BacklinksPanel.vue'));
-const NeighborhoodPanel = defineAsyncComponent(() => import('./components/NeighborhoodPanel.vue'));
-const RelationshipsPanel = defineAsyncComponent(() => import('./components/RelationshipsPanel.vue'));
-const TagsPanel = defineAsyncComponent(() => import('./components/TagsPanel.vue'));
-const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'));
-const TypesPanel = defineAsyncComponent(() => import('./components/TypesPanel.vue'));
-const HistoryPanel = defineAsyncComponent(() => import('./components/HistoryPanel.vue'));
-const PropertiesInspector = defineAsyncComponent(() => import('./components/PropertiesInspector.vue'));
-const AgentPanel = defineAsyncComponent(() => import('./components/AgentPanel.vue'));
-const GlobalSearch = defineAsyncComponent(() => import('./components/GlobalSearch.vue'));
-const BasesView = defineAsyncComponent(() => import('./components/BasesView.vue'));
-const InboxView = defineAsyncComponent(() => import('./components/InboxView.vue'));
-const TypeLensView = defineAsyncComponent(() => import('./components/TypeLensView.vue'));
+import { runWhenIdle } from './lib/idle';
 const UiPreview = defineAsyncComponent(() => import('./components/UiPreview.vue'));
 
 /* v4.6 dev-only UI gallery. `?uikit` renders ONLY the design-system preview
@@ -105,7 +92,6 @@ const settings = useSettingsStore();
 const windowsStore = useWindowsStore();
 const tiles = useTilesStore();
 const files = useFiles();
-const exporter = useExport();
 const workspace = useWorkspaceStore();
 
 // #148 / #151 — Android real-folder vault picking. useFiles.openFolder()
@@ -307,6 +293,31 @@ const cjkProofreadOpen = ref(false);
 const aboutOpen = ref(false);
 const wizardOpen = ref(false);
 
+// Startup trim: these dialogs are closed at launch, so they're loaded (module,
+// setup, CSS) the first time they're opened instead of on the mount path, and
+// stay mounted afterwards. `xxxLazy.open` lags the real flag by one tick on
+// the first open — see useLazyComponent.
+const { component: CommandPaletteC, open: paletteLazyOpen } = useLazyComponent(
+  () => import('./components/CommandPalette.vue'), () => paletteOpen.value);
+const { component: QuickSwitcherC, open: quickSwitcherLazyOpen } = useLazyComponent(
+  () => import('./components/QuickSwitcher.vue'), () => quickSwitcherOpen.value);
+const { component: SettingsPanelC, open: settingsLazyOpen } = useLazyComponent(
+  () => import('./components/SettingsPanel.vue'), () => settingsOpen.value);
+const { component: MarkdownHelpC, open: helpLazyOpen } = useLazyComponent(
+  () => import('./components/MarkdownHelp.vue'), () => helpOpen.value);
+const { component: RagSearchC, open: ragSearchLazyOpen } = useLazyComponent(
+  () => import('./components/RagSearch.vue'), () => ragSearchOpen.value);
+const { component: CjkProofreadC, open: cjkProofreadLazyOpen } = useLazyComponent(
+  () => import('./components/CjkProofread.vue'), () => cjkProofreadOpen.value);
+const { component: AboutDialogC, open: aboutLazyOpen } = useLazyComponent(
+  () => import('./components/AboutDialog.vue'), () => aboutOpen.value);
+const { component: AgentSetupWizardC, open: wizardLazyOpen } = useLazyComponent(
+  () => import('./components/AgentSetupWizard.vue'), () => wizardOpen.value);
+const { component: ImageUrlDialogC, open: imageUrlLazyOpen } = useLazyComponent(
+  () => import('./components/ImageUrlDialog.vue'), () => imageUrlDialogOpen.value);
+const { component: AndroidFolderPickerC, open: androidPickerLazyOpen } = useLazyComponent(
+  () => import('./components/AndroidFolderPicker.vue'), () => androidPickerOpen.value);
+
 // Unsaved-changes dialog state
 const unsavedOpen = ref(false);
 const unsavedMode = ref<'tab' | 'window'>('tab');
@@ -355,7 +366,7 @@ function onFileChangedAction(action: 'reload' | 'overwrite' | 'cancel') {
   }
 }
 
-useShortcuts({
+const shortcuts = useShortcuts({
   openPalette: () => (paletteOpen.value = true),
   openSettings: () => (settingsOpen.value = true),
   openHelp: () => openHelpAt('syntax'),
@@ -408,41 +419,20 @@ function onWheelZoom(e: WheelEvent): void {
 
 // Esc closes the topmost modal
 function onZoomShortcut(e: KeyboardEvent): boolean {
-  // Three independent zoom axes (v4.3.0 issue #72 + PR #74 yzcj105):
-  //   ⌘= / ⌘- / ⌘0           → globalZoom (whole app, CSS zoom)
-  //   ⌘⇧= / ⌘⇧- / ⌘⇧0        → editor font size only
-  //   ⌃⌘= / ⌃⌘- / ⌃⌘0        → preview font size only
-  // On macOS the same shortcuts are also exposed via native View menu
-  // accelerators (runner.rs) — this JS handler covers Linux/Windows and
-  // catches keys before the WebView's built-in browser zoom intercepts them.
-  const cmd = e.metaKey;          // macOS Cmd
-  const ctrlOnly = e.ctrlKey && !e.metaKey; // Linux/Win Ctrl (no Cmd present)
-  if (!cmd && !ctrlOnly) return false;
-  if (e.altKey) return false;
-
-  // Identify axis: Shift = editor; Cmd+Ctrl (both) = preview; otherwise UI.
-  let axis: 'ui' | 'editor' | 'preview' = 'ui';
-  if (e.shiftKey && !(e.metaKey && e.ctrlKey)) axis = 'editor';
-  else if (e.metaKey && e.ctrlKey) axis = 'preview';
-
+  // Three independent zoom axes (v4.3.0 issue #72 + PR #74 yzcj105). The UI
+  // (⌘= / ⌘- / ⌘0) and editor (⌘⇧= / ⌘⇧- / ⌘⇧0) axes are rebindable actions
+  // now (lib/keybindings.ts — the Typora / Word preset hands ⌘= / ⌘- / ⌘0 to
+  // the heading-level commands). Only the preview axis stays here: it is
+  // ⌃⌘ on macOS, which the "Mod" binding grammar cannot express.
+  if (!(e.metaKey && e.ctrlKey) || e.altKey) return false;
   const isIn = e.key === '=' || e.key === '+';
   const isOut = e.key === '-' || e.key === '_';
   const isReset = e.key === '0';
   if (!isIn && !isOut && !isReset) return false;
   e.preventDefault();
-  if (axis === 'editor') {
-    if (isIn) settings.editorFontIn();
-    else if (isOut) settings.editorFontOut();
-    else settings.resetEditorFontSize();
-  } else if (axis === 'preview') {
-    if (isIn) settings.previewFontIn();
-    else if (isOut) settings.previewFontOut();
-    else settings.resetPreviewFontSize();
-  } else {
-    if (isIn) settings.zoomIn();
-    else if (isOut) settings.zoomOut();
-    else settings.resetZoom();
-  }
+  if (isIn) settings.previewFontIn();
+  else if (isOut) settings.previewFontOut();
+  else settings.resetPreviewFontSize();
   return true;
 }
 
@@ -657,19 +647,32 @@ watchEffect(() => {
   }
 });
 
-// Sync native menu bar language — and, since #180, the accelerators too:
-// a rebound action must lose its old chord from the native menu, or macOS
-// keeps firing the original and the rebind only ever adds a second key.
+// bug/C1 — the native menu (macOS menubar, Linux window menu) is built from
+// the same tree as the Windows title-bar menubar (lib/app-menu.ts): labels in
+// the UI language, accelerators = the bindings in effect (#180: a rebound
+// action must lose its old chord from the native menu, or macOS keeps firing
+// it and the rebind only ever adds a second key), check marks = live state.
+// Windows has no native menu bar; mobile has none at all.
+const appMenu = useAppMenu();
+const nativeMenuPlatform = '__TAURI_INTERNALS__' in window && !isMobile() && !isWindowsDesktop()
+  ? (isMacOS() ? 'mac' : 'linux')
+  : null;
+// The 面板 › 大纲 check mark is per tab, so switching tabs re-runs this; only
+// rebuild the native menu when the spec actually changed.
+let lastNativeSpec = '';
 watchEffect(() => {
-  // Spread rather than passing the reactive object straight through: reading
-  // it with `hasOwnProperty` (as nativeMenuAccelerators does) does not register
-  // a dependency on a key that does not exist yet, so the first rebind of an
-  // action never re-ran this effect and the native menu kept the old chord.
-  const overrides = { ...settings.keybindings };
-  invoke('set_menu_config', {
-    lang: settings.language,
-    accels: nativeMenuAccelerators(overrides),
-  }).catch(() => {});
+  if (!nativeMenuPlatform) return;
+  const menus = appMenu.menuFor(nativeMenuPlatform);
+  const spec = toNativeSpec(menus, { overrides: { ...settings.keybindings } });
+  const key = JSON.stringify(spec);
+  if (key === lastNativeSpec) return;
+  lastNativeSpec = key;
+  invoke('set_menu_spec', { menus: spec }).catch((e) => {
+    lastNativeSpec = '';
+    console.warn('[menu] set_menu_spec failed', e);
+  });
+});
+watchEffect(() => {
   invoke('save_language_preference', { lang: settings.language }).catch(() => {});
 });
 
@@ -797,17 +800,11 @@ window.addEventListener(
 // it, and changing it reloads, so a user who drops es_ES into
 // `<config>/dictionaries/` and picks it gets Spanish checking immediately
 // instead of every word flagged against an English dictionary.
-let spellcheckLoadedFor: string | null = null;
-watchEffect(async () => {
+// The loaded-for bookkeeping lives in lib/spell-suggest.ts, which the editor
+// right-click menu (#376) also loads through on demand.
+watchEffect(() => {
   const lang = settings.spellcheckLang || 'en_US';
-  if (settings.spellcheckEnabled && spellcheckLoadedFor !== lang) {
-    try {
-      await invoke('spellcheck_init', { lang });
-      spellcheckLoadedFor = lang;
-    } catch (e) {
-      console.warn('spellcheck_init failed', e);
-    }
-  }
+  if (settings.spellcheckEnabled) void ensureSpellDict(lang);
 });
 
 watch(
@@ -863,38 +860,61 @@ async function openExternalFile() {
   }
 }
 
+const menuCommands = useCommands();
+const updateCheck = useUpdateCheck();
+
+/** Insert-menu snippets (`$|$` marks where the caret lands) — the same
+ *  templates the toolbar's Insert menu uses. */
+const INSERT_SNIPPETS: Record<string, string> = {
+  'insert.mathBlock': '\n$$\n$|$\n$$\n',
+  'insert.mathInline': '$$|$$',
+  'insert.table': '\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n',
+  'insert.mermaid': '\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n',
+  'insert.hr': '\n---\n',
+};
+
+/**
+ * Every menu click — native (`solomd://menu`) and the Windows title-bar
+ * menubar (`solomd:menu-action`) — lands here. Ids are the bindable action ids
+ * wherever one exists, so a menu item runs exactly what its shortcut runs
+ * (`shortcuts.runAction`); then palette commands by id; the rest are the
+ * menu-only entries below.
+ */
 function dispatchMenuAction(id: string) {
+  if (id.startsWith('recent.open:')) {
+    const path = workspace.recentFiles[Number(id.slice('recent.open:'.length))];
+    if (path) void files.openPath(path);
+    return;
+  }
+  if (id.startsWith('view.mode:')) {
+    settings.setViewMode(id.slice('view.mode:'.length) as ViewMode);
+    return;
+  }
+  if (id.startsWith('theme.set:')) {
+    settings.setTheme(id.slice('theme.set:'.length) as Theme);
+    return;
+  }
+  if (INSERT_SNIPPETS[id]) {
+    window.dispatchEvent(
+      new CustomEvent('solomd:insert-markdown', {
+        detail: { snippet: INSERT_SNIPPETS[id], paneId: tiles.focusedPaneId },
+      }),
+    );
+    return;
+  }
   switch (id) {
-    case 'file.new':
-      files.newFile();
-      break;
-    case 'file.newText':
-      files.newTextFile();
-      break;
-    case 'file.open':
-      files.openFile();
-      break;
     case 'file.openFolder':
       files.openFolder();
-      break;
-    case 'file.import':
-      void files.importDocuments();
-      break;
-    case 'file.save':
-      files.saveActive();
-      break;
-    case 'file.saveAs':
-      files.saveActiveAs();
-      break;
+      return;
     case 'file.openExternal':
       openExternalFile();
-      break;
-    case 'file.print':
-      exporter.exportPdfPrint();
-      break;
-    case 'file.closeTab':
-      if (tabs.activeId) files.closeTabSafe(tabs.activeId);
-      break;
+      return;
+    case 'file.autoSave':
+      settings.toggleAutoSaveOnBlur();
+      return;
+    case 'recent.clear':
+      workspace.clearRecent();
+      return;
     case 'window.new':
       // #280 — this used to dispatch a `solomd:new-window` event that nothing
       // listened for, so the menu item did nothing at all.
@@ -903,71 +923,45 @@ function dispatchMenuAction(id: string) {
         const toasts = (await import('./stores/toasts')).useToastsStore();
         toasts.warning(t('toast.newWindowFailed'));
       });
-      break;
+      return;
     case 'file.exit':
-      // #221 — the Windows in-app menubar dropped the native menu's 退出 item.
-      // Routes through Tauri's close-requested flow → unsaved-tabs confirm,
-      // same as the caption ✕ button.
+      // #221 — routes through Tauri's close-requested flow → unsaved-tabs
+      // confirm, same as the caption ✕ button.
       void getCurrentWindow().close();
-      break;
-    case 'view.toggleTheme':
-      settings.toggleTheme();
-      break;
-    case 'view.toggleFileTree':
-      settings.toggleFileTree();
-      break;
-    case 'view.toggleOutline':
-      if (tabs.activeId) tabs.toggleOutline(tabs.activeId);
-      break;
-    case 'view.cycleView':
-      settings.cycleViewMode();
-      break;
-    // v4.3.0 PR #74 — 3-axis zoom from the native View menu.
-    case 'view.zoomUiIn':
-      settings.zoomIn();
-      break;
-    case 'view.zoomUiOut':
-      settings.zoomOut();
-      break;
-    case 'view.zoomUiReset':
-      settings.resetZoom();
-      break;
-    case 'view.zoomEditorIn':
-      settings.editorFontIn();
-      break;
-    case 'view.zoomEditorOut':
-      settings.editorFontOut();
-      break;
-    case 'view.zoomEditorReset':
-      settings.resetEditorFontSize();
-      break;
+      return;
+    case 'view.darkMode':
+      settings.setTheme(themeFamily(settings.theme) === 'dark' ? 'light' : 'dark');
+      return;
+    // v4.3.0 PR #74 — the preview zoom axis is menu/⌃⌘ only.
     case 'view.zoomPreviewIn':
       settings.previewFontIn();
-      break;
+      return;
     case 'view.zoomPreviewOut':
       settings.previewFontOut();
-      break;
+      return;
     case 'view.zoomPreviewReset':
       settings.resetPreviewFontSize();
-      break;
-    case 'view.cmdPalette':
-      paletteOpen.value = true;
-      break;
-    case 'view.settings':
-      settingsOpen.value = true;
-      break;
-    case 'search.global':
-      toggleGlobalSearch();
-      break;
+      return;
     case 'help.markdown':
       openHelpAt('syntax');
-      break;
+      return;
     case 'help.shortcuts':
       openHelpAt('shortcuts');
-      break;
+      return;
     case 'help.cli':
       openHelpAt('cli');
-      break;
+      return;
+    case 'help.checkUpdate':
+      void updateCheck.manualCheckUpdate();
+      return;
+    case 'help.about':
+      aboutOpen.value = true;
+      return;
+    // AI rewrite reads the selection the way the toolbar button does (it
+    // handles the plain editor, AI-off and empty-selection cases).
+    case 'editor.aiRewrite':
+      window.dispatchEvent(new CustomEvent('solomd:toolbar-ai-rewrite'));
+      return;
     // Same routing as the Ctrl+F shortcut: preview has its own find, every
     // editor mode opens the editor's find/replace bar.
     case 'edit.find':
@@ -976,28 +970,25 @@ function dispatchMenuAction(id: string) {
       } else {
         window.dispatchEvent(new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId } }));
       }
-      break;
-    case 'help.about':
-      aboutOpen.value = true;
-      break;
+      return;
     // Windows unified title bar — the in-app Edit menu (Toolbar.vue). The
-    // native menu used PredefinedMenuItems here; in-app we drive the focused
+    // native menu uses PredefinedMenuItems here; in-app we drive the focused
     // editor directly. `execCommand` covers the Windows editors (plain
     // textarea + contenteditable live blocks); the menubar buttons use
     // `mousedown.prevent` so focus never leaves the editor. (CodeMirror —
     // Vim mode on Windows — keeps its own keyboard-driven undo history.)
     case 'edit.undo':
       document.execCommand('undo');
-      break;
+      return;
     case 'edit.redo':
       document.execCommand('redo');
-      break;
+      return;
     case 'edit.cut':
       document.execCommand('cut');
-      break;
+      return;
     case 'edit.copy':
       document.execCommand('copy');
-      break;
+      return;
     case 'edit.paste':
       // execCommand('paste') is blocked in modern engines; read the clipboard
       // through the Tauri plugin and insert as text at the selection.
@@ -1006,13 +997,21 @@ function dispatchMenuAction(id: string) {
           if (text) document.execCommand('insertText', false, text);
         })
         .catch(() => {});
-      break;
+      return;
     case 'edit.selectAll':
       document.execCommand('selectAll');
-      break;
-    default:
-      console.warn('unknown menu action', id);
+      return;
   }
+  // A bindable action: exactly what its shortcut does. `false` means it
+  // declined (e.g. formatting while a settings field has focus) — that is an
+  // answer, not a reason to try something else.
+  if (shortcuts.runAction(id) !== null) return;
+  const cmd = menuCommands.find((c) => c.id === id);
+  if (cmd) {
+    void cmd.run();
+    return;
+  }
+  console.warn('unknown menu action', id);
 }
 
 /**
@@ -1376,27 +1375,30 @@ onMounted(async () => {
     console.warn('drag-drop not available', e);
   }
 
-  // Auto-check for updates
-  if (!isIOS() && settings.autoCheckUpdate) {
-    try {
-      const { checkForUpdateOnStartup, openReleaseUrl } = await import('./lib/check-update');
-      const result = await checkForUpdateOnStartup();
-      if (result && result.hasUpdate) {
-        const toastsStore = (await import('./stores/toasts')).useToastsStore();
-        const { useI18n } = await import('./i18n');
-        const { t: tr } = useI18n();
-        // #171 — no auto-opening the browser (it yanks the user out of
-        // whatever they're writing). The toast lingers; clicking it opens
-        // the download page.
-        toastsStore.success(
-          tr('settings.updateAvailable', { version: result.latest || '' }),
-          12000,
-          () => { void openReleaseUrl(result.url); },
-        );
-      }
-    } catch { /* silent */ }
-  }
+  // Auto-check for updates — once startup has settled; nobody waits on it,
+  // and it shouldn't share the main thread with the first keystrokes.
+  if (!isIOS() && settings.autoCheckUpdate) runWhenIdle(() => void checkForUpdatesNow());
 });
+
+async function checkForUpdatesNow(): Promise<void> {
+  try {
+    const { checkForUpdateOnStartup, openReleaseUrl } = await import('./lib/check-update');
+    const result = await checkForUpdateOnStartup();
+    if (result && result.hasUpdate) {
+      const toastsStore = (await import('./stores/toasts')).useToastsStore();
+      const { useI18n } = await import('./i18n');
+      const { t: tr } = useI18n();
+      // #171 — no auto-opening the browser (it yanks the user out of
+      // whatever they're writing). The toast lingers; clicking it opens
+      // the download page.
+      toastsStore.success(
+        tr('settings.updateAvailable', { version: result.latest || '' }),
+        12000,
+        () => { void openReleaseUrl(result.url); },
+      );
+    }
+  } catch { /* silent */ }
+}
 
 function onAIRewriteAccept(e: Event) {
   const detail = (e as CustomEvent).detail || {};
@@ -2135,22 +2137,26 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       :has-key="aiHasKey"
       @open-settings="(section?: string) => openSettingsAt(section ?? 'integrations')"
     />
-    <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
-    <QuickSwitcher :open="quickSwitcherOpen" @close="quickSwitcherOpen = false" />
-    <SettingsPanel
-      :open="settingsOpen"
+    <component :is="CommandPaletteC" v-if="CommandPaletteC" :open="paletteLazyOpen" @close="paletteOpen = false" />
+    <component :is="QuickSwitcherC" v-if="QuickSwitcherC" :open="quickSwitcherLazyOpen" @close="quickSwitcherOpen = false" />
+    <component
+      :is="SettingsPanelC"
+      v-if="SettingsPanelC"
+      :open="settingsLazyOpen"
       :initial-section="settingsInitialSection"
       @close="settingsOpen = false; settingsInitialSection = null; refreshAiHasKey()"
     />
-    <MarkdownHelp :open="helpOpen" :tab="helpTab" @close="helpOpen = false" />
-    <RagSearch
-      :open="ragSearchOpen"
+    <component :is="MarkdownHelpC" v-if="MarkdownHelpC" :open="helpLazyOpen" :tab="helpTab" @close="helpOpen = false" />
+    <component
+      :is="RagSearchC"
+      v-if="RagSearchC"
+      :open="ragSearchLazyOpen"
       @close="ragSearchOpen = false"
       @open-settings="(section?: string) => { ragSearchOpen = false; openSettingsAt(section ?? 'writing'); }"
     />
-    <CjkProofread :open="cjkProofreadOpen" @close="cjkProofreadOpen = false" />
-    <AboutDialog :open="aboutOpen" @close="aboutOpen = false" />
-    <AgentSetupWizard v-if="!IS_APP_STORE_BUILD" :open="wizardOpen" @close="wizardOpen = false" />
+    <component :is="CjkProofreadC" v-if="CjkProofreadC" :open="cjkProofreadLazyOpen" @close="cjkProofreadOpen = false" />
+    <component :is="AboutDialogC" v-if="AboutDialogC" :open="aboutLazyOpen" @close="aboutOpen = false" />
+    <component :is="AgentSetupWizardC" v-if="!IS_APP_STORE_BUILD && AgentSetupWizardC" :open="wizardLazyOpen" @close="wizardOpen = false" />
     <UnsavedDialog
       :open="unsavedOpen"
       :mode="unsavedMode"
@@ -2160,8 +2166,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @discard="onUnsavedAction('discard')"
       @cancel="onUnsavedAction('cancel')"
     />
-    <ImageUrlDialog
-      :open="imageUrlDialogOpen"
+    <component
+      :is="ImageUrlDialogC"
+      v-if="ImageUrlDialogC"
+      :open="imageUrlLazyOpen"
       @confirm="onImageUrlConfirm"
       @cancel="imageUrlDialogOpen = false"
     />
@@ -2177,8 +2185,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @cancel="onFileChangedAction('cancel')"
     />
     <Toast />
-    <AndroidFolderPicker
-      :open="androidPickerOpen"
+    <component
+      :is="AndroidFolderPickerC"
+      v-if="AndroidFolderPickerC"
+      :open="androidPickerLazyOpen"
       :start="workspace.currentFolder ?? undefined"
       @pick="onAndroidFolderPick"
       @close="androidPickerOpen = false"

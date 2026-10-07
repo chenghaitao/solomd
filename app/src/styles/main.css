@@ -340,6 +340,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* #367 — while the split divider is dragged, keep the resize cursor wherever
+   the pointer wanders and don't select text in either pane. */
+body.split-divider--dragging,
+body.split-divider--dragging * {
+  cursor: col-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -408,6 +417,12 @@ button:disabled {
 }
 :root.narrow-viewport .pane--editor {
   border-bottom: 1px solid var(--border);
+  /* #367 — the saved side-by-side ratio is a width; stacked, both halves
+     share the height evenly again (the inline style needs !important). */
+  flex: 1 1 0 !important;
+}
+:root.narrow-viewport .split-divider {
+  display: none;
 }
 
 /* Toolbar: the strip already scrolls horizontally (#134), which is what keeps
@@ -930,6 +945,18 @@ mark {
    * one unbreakable run to the layout engine and runs off the page. */
   body.solomd-printing .solomd-print-content {
     overflow-wrap: break-word;
+  }
+  /* #370 — and for table cells. `break-word` above doesn't help there: it
+   * leaves a cell's min-content width at its longest unbreakable run, so an
+   * auto-layout table holding a long number / identifier / URL grows past
+   * the paper and the right side is cut off. `anywhere` (and the older
+   * `word-break: break-word` for WebKit) lets such a run break, so the table
+   * fits the page. Text with normal break points is laid out as before, and
+   * short cells keep `.cell-nowrap` (#271). */
+  body.solomd-printing .solomd-print-content th,
+  body.solomd-printing .solomd-print-content td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   /* #178: paper can't scroll — always wrap code lines in print/PDF so
    * anything wider than the page isn't silently cut off. Applies

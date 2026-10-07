@@ -1,6 +1,7 @@
 import { isTreeSortMode, type TreeSortMode } from '../lib/tree-sort';
 import { defineStore } from 'pinia';
 import type { Theme, ViewMode } from '../types';
+import type { WindowsEditorEngine } from '../lib/platform';
 import { isIOS, isMobile } from '../lib/platform';
 
 const LS_KEY = 'solomd.settings.v1';
@@ -94,10 +95,14 @@ interface Settings {
   /** Hint keys already shown — `bold`, `heading`, … Never shown twice. */
   formatHintsSeen: string[];
   vimMode: boolean;
-  /** Windows only: 'native' textarea (IME-safe, default) or 'codemirror'
-   *  (syntax highlighting, non-jumping live edit) — #328, #344. Vim mode
-   *  forces CodeMirror regardless. Ignored on other platforms. */
-  windowsEditorEngine: 'native' | 'codemirror';
+  /** Windows only: 'auto' (default — CodeMirror on WebView2 154+, the
+   *  IME-safe native textarea below that), 'native' or 'codemirror' (#328,
+   *  #344). Vim mode forces CodeMirror regardless. Ignored elsewhere. */
+  windowsEditorEngine: WindowsEditorEngine;
+  /** True once the user picked native/CodeMirror themselves. Before `auto`
+   *  existed every install stored 'native' (the old default), so a stored
+   *  'native' without this flag is not a choice and becomes 'auto'. */
+  windowsEditorEngineExplicit: boolean;
   uiFontSize: number;
   language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru';
   autoCheckUpdate: boolean;
@@ -255,6 +260,7 @@ interface Settings {
   // editor. Default ON — can be turned off for users who don't like
   // the keyboard interception.
   slashCommandsEnabled: boolean;
+  fenceLanguageSuggestions: boolean;
   // v3.6: PNG export — show "Created with SoloMD · solomd.app" footer
   // under the rendered note. Default ON (mild self-promotion is fine
   // for a free MIT app), but explicitly toggleable in Settings → Export
@@ -325,6 +331,9 @@ interface Settings {
   // (the default). Off, the two panes are independent — no scroll sync, and
   // the preview only re-renders from what was last saved to disk.
   splitLiveSync: boolean;
+  // #367: editor share of the split view, in percent (the preview gets the
+  // rest). Dragging the divider sets it; double-click resets to 50.
+  splitRatio: number;
   // #282: show only these file extensions in the Explorer tree (lower-case,
   // no dot; '' is the no-extension bucket). Empty = show everything. It
   // persists, so the tree carries a permanent banner whenever it is set —
@@ -358,8 +367,9 @@ interface Settings {
   spellcheckLang: string;
   smartQuotes: boolean;
   /** #180 — per-action shortcut overrides. Only what the user changed is
-   *  stored; a `null` value means they unbound the action entirely. */
-  keybindings: Record<string, string | null>;
+   *  stored; a `null` value means they unbound the action entirely, and a
+   *  list keeps several chords (the Typora / Word preset uses one). */
+  keybindings: Record<string, string | string[] | null>;
   // #251 — `c4ca303` (#216) flipped the *default* to false, but `load()` does
   // `{...defaults(), ...parsed}`, so every install that already had `true`
   // saved kept it. Those users went on seeing U+2019 drawn fullwidth by a CJK
@@ -582,7 +592,8 @@ function defaults(): Settings {
     formatHints: true,
     formatHintsSeen: [],
     vimMode: false,
-    windowsEditorEngine: 'native',
+    windowsEditorEngine: 'auto',
+    windowsEditorEngineExplicit: false,
     uiFontSize: 13,
     autoCheckUpdate: true,
     language: (() => {
@@ -669,6 +680,7 @@ function defaults(): Settings {
     pomodoroAutoEngageFocus: true,
     pomodoroDefaultMinutes: 25,
     slashCommandsEnabled: true,
+    fenceLanguageSuggestions: true,
     imageExportBranding: true,
     globalZoom: 1,
     wheelZoomEnabled: true,
@@ -687,6 +699,7 @@ function defaults(): Settings {
     explorerSortByFolder: {} as Record<string, TreeSortMode>,
     distinctSplitPanes: false,
     splitLiveSync: true,
+    splitRatio: 50,
     markdownHardBreaks: true,
     markdownListContinue: true,
     markdownAutoNumber: true,
@@ -760,6 +773,14 @@ function mergePdfDefaults(saved: unknown): PdfDefaults {
   };
 }
 
+/** #367 — keep either side of the split at least a fifth of the width. */
+export const SPLIT_RATIO_MIN = 20;
+export const SPLIT_RATIO_MAX = 80;
+export function clampSplitRatio(n: unknown): number {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 50;
+  return Math.round(Math.max(SPLIT_RATIO_MIN, Math.min(SPLIT_RATIO_MAX, v)) * 10) / 10;
+}
+
 function load(): Settings {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -772,17 +793,28 @@ function load(): Settings {
       merged.pdfDefaults = mergePdfDefaults(parsed.pdfDefaults);
       // #180 — keybindings is a free-form map, so a tampered or older blob
       // could put anything here; keep only string/null values.
-      if (merged.windowsEditorEngine !== 'codemirror') merged.windowsEditorEngine = 'native';
+      // 'codemirror' was always a choice; 'native' only counts as one when the
+      // user picked it after 'auto' existed; anything else follows WebView2.
+      if (merged.windowsEditorEngine === 'native' && parsed.windowsEditorEngineExplicit === true) {
+        merged.windowsEditorEngineExplicit = true;
+      } else if (merged.windowsEditorEngine !== 'codemirror') {
+        merged.windowsEditorEngine = 'auto';
+        merged.windowsEditorEngineExplicit = false;
+      }
       merged.explorerSortByFolder = {};
       if (parsed.explorerSortByFolder && typeof parsed.explorerSortByFolder === 'object') {
         for (const [k, v] of Object.entries(parsed.explorerSortByFolder)) {
           if (isTreeSortMode(v)) merged.explorerSortByFolder[k] = v;
         }
       }
+      merged.splitRatio = clampSplitRatio(merged.splitRatio);
       merged.keybindings = {};
       if (parsed.keybindings && typeof parsed.keybindings === 'object') {
         for (const [k, v] of Object.entries(parsed.keybindings)) {
           if (v === null || typeof v === 'string') merged.keybindings[k] = v;
+          else if (Array.isArray(v) && v.length && v.every((c) => typeof c === 'string')) {
+            merged.keybindings[k] = v as string[];
+          }
         }
       }
       // One-time v4.0 upgrade: any saved settings blob written before
@@ -990,7 +1022,7 @@ export const useSettingsStore = defineStore('settings', {
     /** #180 — `combo` sets an override, `null` unbinds, `undefined` restores
      *  the default (we delete the key so future default changes reach the
      *  user instead of being pinned to whatever shipped today). */
-    setKeybinding(actionId: string, combo: string | null | undefined) {
+    setKeybinding(actionId: string, combo: string | string[] | null | undefined) {
       if (combo === undefined) delete this.keybindings[actionId];
       else this.keybindings[actionId] = combo;
       this.persist();
@@ -1121,8 +1153,10 @@ export const useSettingsStore = defineStore('settings', {
       this.vimMode = !this.vimMode;
       this.persist();
     },
-    setWindowsEditorEngine(engine: 'native' | 'codemirror') {
-      this.windowsEditorEngine = engine === 'codemirror' ? 'codemirror' : 'native';
+    setWindowsEditorEngine(engine: WindowsEditorEngine) {
+      this.windowsEditorEngine =
+        engine === 'codemirror' || engine === 'native' ? engine : 'auto';
+      this.windowsEditorEngineExplicit = this.windowsEditorEngine !== 'auto';
       this.persist();
     },
     toggleAutoCheckUpdate() {
@@ -1364,6 +1398,10 @@ export const useSettingsStore = defineStore('settings', {
       this.slashCommandsEnabled = !this.slashCommandsEnabled;
       this.persist();
     },
+    toggleFenceLanguageSuggestions() {
+      this.fenceLanguageSuggestions = !this.fenceLanguageSuggestions;
+      this.persist();
+    },
     toggleImageExportBranding() {
       this.imageExportBranding = !this.imageExportBranding;
       this.persist();
@@ -1454,6 +1492,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleSplitLiveSync() {
       this.splitLiveSync = !this.splitLiveSync;
+      this.persist();
+    },
+    setSplitRatio(n: number) {
+      this.splitRatio = clampSplitRatio(n);
       this.persist();
     },
     toggleDistinctSplitPanes() {

@@ -15,6 +15,135 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.10] — 2026-10-07
+
+一条线：**同步上游 55 个提交**（横跨上游 4.14.8 / 4.14.9 / 4.14.10 三个版本窗口），把窗口期内的编辑器、
+菜单、工具栏与启动性能修复整体纳入；市场推广 / 赞助 / 遥测 / 商店与 MCP 分发内容一律不落地；
+本地改动（遥测移除、列表续行开关、启动懒加载、i18n 分包）全部保留。
+
+### 上游同步
+
+上游 `3dbcbb0..3a83d7e` 共 **55 个提交**、181 个文件有改动（其中 140 个是 App Store 发版说明）。
+分叉点 `3dbcbb0` 正好是上次同步（4.14.9）合并的上游 tip，两侧边界干净。
+
+**这次落地方式与前几次不同**：不再用 `git merge -s ours` 记录合并 + 定向 cherry-pick，而是直接
+`git merge upstream/main`，**在冲突处逐个取舍，然后把被排除的分发路径整体回退到合并前状态**。
+原因是这一窗口的上游改动高度交织——55 个提交里 31 个纯产品提交集中在**同一批文件**上
+（`Toolbar.vue` / `Editor.vue` / `App.vue` / `settings.ts` / i18n / `platform.ts`），
+且上游这轮 commit 自己就在**反复推翻前一个提交的结论**（见下「编辑器引擎」一条）。
+逐个 cherry-pick 会把同一处冲突解决三遍，且容易漏掉中间态；一次真实 merge 只解决一遍，
+排除项靠最后一步显式的路径回退保证——**结果与「从未进入工作树」等价，且可 grep 证伪**。
+
+**纳入（31 个提交，纯产品代码）**
+
+编辑器 / Windows 实时编辑
+
+| 上游提交 | 内容 |
+|---|---|
+| `ac94b790` | 快捷键：keydown 不带 `code` 时，标点组合键也能匹配上 |
+| `69552b5e` | ⌘F / Ctrl+F 重新在编辑器里打开查找 |
+| `47d278d4` | Windows：Ctrl+J 不再打开 WebView2 的下载页 |
+| `f4025a15` | Windows 实时编辑：Ctrl+Home/End、Ctrl+Up/Down、三击与 Shift+点击可跨段（A3） |
+| `0fee0164` | #374 代码块内多行选择不再跳进可编辑视图 |
+| `51fbc1d0` | #368 在 Markdown 里点选中的文字会重新折叠选择 |
+| `1d924beb` | #373 Vim 按键优先于其他 keymap |
+| `41ef8157` | #376 Windows 右键菜单给出拼写建议 |
+| `de2439df` | #375 可关闭「围栏语言自动补全」 |
+| `da64eaf9` | 行间公式不再被底部裁掉（预览 / Windows 实时编辑 / 导出） |
+
+编辑器引擎（上游在同一窗口里改了三次，最终态如下）
+
+| 上游提交 | 内容 |
+|---|---|
+| `6641c01d` `376e9e7e` `41fd8820` | 新增 `auto` 引擎：WebView2 ≥ 154 用 CodeMirror，否则回退原生 textarea；中途 `376e9e7e` 曾把 CodeMirror 设为 Windows 默认，`41fd8820` 又因搜狗输入法在 WebView2 154 上掉字母而改回**原生为默认**——本 fork 取最终态 |
+
+界面 / 菜单 / 工具栏
+
+| 上游提交 | 内容 |
+|---|---|
+| `e2abcce0` | 七菜单重构（bug/C1），原生菜单与 Windows menubar 共用一棵菜单树 |
+| `27619fcb` | 命令面板里的功能都能从菜单到达 |
+| `06c6c3df` | Typora / Word 快捷键预设（bug/B4）+ Typora 风格编辑命令 |
+| `82d45e8a` | 单行工具栏（测试者提案 C2），五种视图模式收进一个下拉 |
+| `e815c6c8` | #367 编辑区与预览之间的分隔条可拖动 |
+| `b257a8ee` | #370 宽表格在 PDF / 打印 / HTML / 图片导出里换行收进页面 |
+| `92c6b1d6` | 文件树的 × 真正隐藏树；打开文件不再把隐藏的树重新弹出 |
+| `2e2ddffb` | 文件树按「路径写法无关」的键跟随当前打开的文件（新增 `path-key.ts`） |
+
+启动性能（与本地这轮优化撞题，取上游实现）
+
+| 上游提交 | 内容 |
+|---|---|
+| `b42e90d8` | 语法包 / 主题 / 快捷键查询改为按需加载 |
+| `6cf545a0` | 关闭状态的对话框、隐藏面板改为首次打开时才载入（`useLazyComponent`） |
+| `499f9200` | 挂载期不再为工具栏 / 标签条溢出强制布局 |
+
+测试与开发工具（不进发布包）
+
+| 上游提交 | 内容 |
+|---|---|
+| `67a82b94` | `ios-container` 测试改用 `node:test`（与本 fork 约定一致） |
+| `a3233d88` | Gitee 同步往返 e2e 测试（真实同步代码：推→拉→改→推→拉） |
+| `bf49ac1a` `a7b937af` `b6324cca` `f020f728` | Windows 真输入法打字测试台、`?imetrace` 事件追踪（DEV 限定）、`?forceCodeMirror` QA 钩子、UI-steps 驱动 |
+| `8da63163` | 测试者致谢（**仅 App 内 About 对话框的「感谢测试者」一节**；官网 thanks 页属排除项） |
+
+**排除（12 个提交 + 140 个文件）**
+
+| 上游提交 | 内容 | 理由 |
+|---|---|---|
+| `6a9e09f6` `c4a58f3e` `cf037966` | 版本号 4.14.8 / 4.14.9 / 4.14.10 + App Store 发版说明（140 个文件） | 商店分发 |
+| `51a29dd6` `05197291` `015b2a38` `a8e6ec42` | `solomd-mcp` 4.14.8~4.14.10 bundle manifest + Registry `server.json` | MCP 分发 |
+| `3a83d7eb` `bff7ef22` `7111c273` `099cda42` | 官网版本号 / whats-new / llms.txt / llms-full.txt / MS Store 版本 pin | 官网分发 |
+| `8be38f60` | Gitee 镜像只上传本次 release 的资产 | 上游镜像脚本（本 fork 已删 `scripts/release-to-gitee.sh`） |
+
+### 合并取舍（本地特性怎么保下来的）
+
+- **遥测保持删除**：上游本轮新代码里重新出现了 `track()` 调用——`Toolbar.vue` 的 `pickViewMode()` /
+  `toggleLivePreviewFromMenu()` / 主题按钮共 3 处。这些函数本身是新增的（在新 hunk 里，不产生冲突），
+  已逐条摘除，`lib/telemetry.ts` 与 `TelemetryBanner.vue` 不会被重新 import。
+- **星标 / 推广 / 赞助 / 商店评分**：`star-prompt.ts`、`web/src/pages/promote.astro`、`Promote.astro`、
+  `supporters.ts`、`add-supporter.py`、`store_review.rs`（含 `request_store_review` 命令与 App Store
+  评分弹窗）保持不存在；About 对话框只保留「感谢赞助者」与新增的「感谢测试者」，
+  推广者列表与 `📣 帮忙推广` 按钮不落地；`Star on GitHub` 文案维持本 fork 的 `GitHub`。
+- **整目录回退到本 fork**：`web/`（官网）、`app-store/`、`mcp-server/` + `server.json`、
+  `README.md` / `README.zh.md`、`.github/` `.gitee/`、`scripts/update-sponsors-readme.py`。
+  与合并前逐字节零差异。
+- **`Toolbar.vue`**：以上游的单行工具栏为基底（五种视图模式收进下拉），把本 fork 的两个列表开关
+  （项目符号续行 / 自动编号）补回插入下拉所在的 `toolbar__group` 内，并加上 `v-if="isMarkdown"`；
+  上游新引入的 3 处 `track()` 摘除。
+- **`Editor.vue`**：keymap 采用上游的 `baseKeymapCompartment` 结构（应用级和弦从 CodeMirror 的
+  keymap 里过滤掉），本 fork 的 `listContinuationKeymap()` 置于其前以优先于普通换行；
+  导入合并上游的 `EditorMenuSpell` / `spell-suggest`。
+- **`App.vue`**：整体采用上游的懒加载方案——本地此前用 `defineAsyncComponent` 只做了面板懒加载，
+  上游的 `useLazyComponent` 连**关闭状态的对话框**（命令面板、快速切换、设置、搜索、关于…）也一并延迟，
+  是超集，故取上游；本 fork 已自动合并的「删除 `scheduleStarPrompt()` / `track('app_launched')` /
+  `<TelemetryBanner />`」三处删除保持生效。
+- **`main.ts`**：三方合并——iOS 容器重定位（本地保留）、上游新增的 WebView2 版本探测（挂载前必须已知）、
+  本地 i18n 分包语言包加载，统一进一个 `Promise.all` + 1.5s 上界。
+- **`code-languages.ts`**：上游与本地做了**同一件事**（把 13 个 lezer 语法包从 `support()` 改成
+  `load()` 按需加载），取上游版本，注释改为上游措辞。
+- **`ios-container.test.ts`**：上游把该测试改写成 `node:test`（`describe/it`），与本 fork 约定一致，取上游。
+- **`app-menu.ts`**：上游新增模块里唯一带无扩展名相对导入的（`from './keybindings'`），按本 fork 约定
+  补成 `'./keybindings.ts'`，使上游新增的 `app-menu.test.ts`（菜单覆盖测试）能被 `node --test` 直接跑。
+- **版本号**：取 **4.14.10**（与上游同号，按本文件开头的约定）；上游的三个 bump 提交不引入，
+  由 `scripts/bump-version.js 4.14.10` 统一改四处版本源。
+
+### 验证
+
+- `vue-tsc --noEmit` 通过。
+- `vite build` 通过（32.5s）。入口 chunk `index-CeSBQsdm.js` **1,738.17 kB / gzip 530.02 kB**，
+  与合并前本地的 1,737.95 kB 基本持平——说明本轮并入的启动优化与本地已有优化没有互相抵消。
+- 单元测试（fork 的 `node:test` 跑法）：**232 个用例，222 通过，10 失败**。10 个失败全部是
+  **既有问题**（`node --test` 解析不了无扩展名的相对导入），对应测试文件与合并前逐字节一致；
+  本轮新增/改动的测试（`app-menu` `editor-commands` `path-key` `plain-nav` `keybindings` `platform`
+  `ios-container`）**108/108 通过**。
+- Rust 侧 `cargo check` 通过（新增 `menu_spec.rs` 与 `webview_runtime_version` 命令）。
+- 排除项零回流（逐项 grep 校验）：`telemetry` / `TelemetryBanner` / `track(`（除 `settings.ts` 里
+  清理旧字段的注释）/ `starPrompt` / `store_review` / `request_store_review` / `promoters` /
+  `solomd.app/promote` 在 `app/` 下均无新增命中；`git diff main -- web/ app-store/ mcp-server/
+  server.json README.md README.zh.md .github/ .gitee/ docs/MARKETING.md` 输出为空。
+- 无冲突标记残留（全仓库 `*.ts|*.vue|*.rs|*.json|*.md|*.py|*.sh` 扫描）。
+
 ## [4.14.9] — 2026-10-03
 
 一条线：**同步上游 25 个提交**（上游 4.14.4 之后，横跨 4.14.5 / 4.14.6 / 4.14.7 三个版本窗口），
