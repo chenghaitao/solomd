@@ -753,7 +753,10 @@ export function cmKeyOwnedByApp(
   const want = canonicalCmKey(key);
   for (const [combo, actionId] of resolveBindings(overrides, platform)) {
     // AI rewrite is itself a CodeMirror keymap entry, not a window handler.
-    if (actionId === 'editor.aiRewrite') continue;
+    // Find is app-level only in the preview: in the editor its handler
+    // declines so CodeMirror's own ⌘F opens the search panel — filtering that
+    // binding out left ⌘F doing nothing in the editor (4.14.8–4.14.9).
+    if (actionId === 'editor.aiRewrite' || actionId === 'editor.find') continue;
     if (canonicalCmKey(toCodeMirrorKey(combo)) === want) return true;
   }
   return false;

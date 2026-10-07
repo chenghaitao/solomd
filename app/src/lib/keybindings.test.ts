@@ -177,3 +177,10 @@ test('a list override keeps every chord', async () => {
     'Mod+Alt+Slash',
   ]);
 });
+
+test('⌘F stays in CodeMirror: the app find handler defers to it in the editor', async () => {
+  const { cmKeyOwnedByApp } = await import('./keybindings.ts');
+  for (const platform of ['windows', 'mac', 'linux'] as const) {
+    assert.equal(cmKeyOwnedByApp({ key: 'Mod-f' }, {}, platform), false, platform);
+  }
+});
