@@ -1,3 +1,4 @@
+import { samePath } from '../lib/path-key';
 import { inject } from 'vue';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -97,7 +98,7 @@ export function useFiles() {
       return false;
     }
     if (rec.filePath) {
-      const open = tabs.tabs.find((x) => x.filePath === rec.filePath);
+      const open = tabs.tabs.find((x) => samePath(x.filePath, rec.filePath));
       if (open) tabs.activate(open.id);
       else await openPath(rec.filePath, { bypassNewWindow: true });
       return true;
