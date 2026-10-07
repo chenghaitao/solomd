@@ -92,7 +92,7 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 | 上游提交 | 内容 | 理由 |
 |---|---|---|
 | `6a9e09f6` `c4a58f3e` `cf037966` | 版本号 4.14.8 / 4.14.9 / 4.14.10 + App Store 发版说明（140 个文件） | 商店分发 |
-| `51a29dd6` `05197291` `015b2a38` `a8e6ec42` | `solomd-mcp` 4.14.8~4.14.10 bundle manifest + Registry `server.json` | MCP 分发 |
+| `51a29dd6` `05197291` `015b2a38` `a8e6ec42` | `solomd-mcp` 4.14.8~4.14.10 bundle manifest + Registry `server.json` | MCP **分发登记**（不带任何 MCP 源码改动，产品功能见下） |
 | `3a83d7eb` `bff7ef22` `7111c273` `099cda42` | 官网版本号 / whats-new / llms.txt / llms-full.txt / MS Store 版本 pin | 官网分发 |
 | `8be38f60` | Gitee 镜像只上传本次 release 的资产 | 上游镜像脚本（本 fork 已删 `scripts/release-to-gitee.sh`） |
 
@@ -105,9 +105,23 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
   `supporters.ts`、`add-supporter.py`、`store_review.rs`（含 `request_store_review` 命令与 App Store
   评分弹窗）保持不存在；About 对话框只保留「感谢赞助者」与新增的「感谢测试者」，
   推广者列表与 `📣 帮忙推广` 按钮不落地；`Star on GitHub` 文案维持本 fork 的 `GitHub`。
-- **整目录回退到本 fork**：`web/`（官网）、`app-store/`、`mcp-server/` + `server.json`、
-  `README.md` / `README.zh.md`、`.github/` `.gitee/`、`scripts/update-sponsors-readme.py`。
-  与合并前逐字节零差异。
+- **整目录回退到本 fork**：`web/`（官网）、`app-store/`、`README.md` / `README.zh.md`、
+  `.github/` `.gitee/`、`scripts/update-sponsors-readme.py`。与合并前逐字节零差异。
+- **MCP 是产品功能，原样保留**：上游本轮对 `mcp-server/` 的**全部**改动只有
+  `mcp-server/mcpb/manifest.json` 里一个版本字符串，**零行源码改动**——所以 MCP 功能一点没丢：
+  `mcp-server/src/**`、`README.md`、`build.rs`、`tests/`、`Cargo.lock` 与上游逐字节一致
+  （唯一差异是本 fork 自己加的 `[lints.rust] linker_messages = "allow"`），发布链路也照旧——
+  `release.yml` 的 `build-mcp-sidecar.sh` 通过 Tauri `externalBin` 把 `solomd-mcp` **打进应用本体**，
+  每个 release 另出 `solomd-mcp-linux-x64/arm64`、`win-x64/arm64` 独立包，
+  配套 `install-mcp.sh` / `publish-mcp-crate.sh` / `build-mcpb.sh`。
+  被挡在门外的是**上游自己的分发登记信息**，不是功能：`server.json` 里
+  `name = io.github.zhitongblog/solomd`、`identifier` 指向上游 release 资产与其 sha256
+  （fork 未登记任何 MCP Registry），`build-mcpb.sh` 里 `REPO=zhitongblog/solomd` 也是从上游取二进制；
+  而 mcpb manifest 的 `version` 在打包时由 `build-mcpb.sh <X.Y.Z>` 用命令行参数**直接覆盖**
+  （`m["version"] = os.environ["VER"]`，工具清单同样由活的 `tools/list` 重写），
+  所以仓库里这个值只是「上次打包留下的痕迹」，不是构建输入。
+  本次仍把这份 manifest 的版本从冻结的 4.14.4 对齐到 **4.14.10**（它描述的是本 fork 自己出的
+  `.mcpb` 制品，跟着 app 版本走更诚实）；`server.json` 保持冻结——那是上游的 Registry 条目。
 - **`Toolbar.vue`**：以上游的单行工具栏为基底（五种视图模式收进下拉），把本 fork 的两个列表开关
   （项目符号续行 / 自动编号）补回插入下拉所在的 `toolbar__group` 内，并加上 `v-if="isMarkdown"`；
   上游新引入的 3 处 `track()` 摘除。
