@@ -321,6 +321,10 @@ export const sv: I18n = {
     rename: 'Byt namn',
     delete: 'Radera',
     reveal: 'Visa i Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Visa i Utforskaren',
+    revealFileManager: 'Visa i filhanteraren',
     refresh: 'Uppdatera',
     openFolder: 'Öppna mapp…',
     recentFolders: 'Recent folders',

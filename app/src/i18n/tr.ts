@@ -321,6 +321,10 @@ export const tr: I18n = {
     rename: 'Yeniden adlandır',
     delete: 'Sil',
     reveal: 'Finder\'da göster',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Dosya Gezgini’nde göster',
+    revealFileManager: 'Dosya yöneticisinde göster',
     refresh: 'Yenile',
     openFolder: 'Klasör aç…',
     recentFolders: 'Recent folders',

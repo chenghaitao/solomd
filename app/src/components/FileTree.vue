@@ -13,7 +13,7 @@ import { useGithubSyncStore } from '../stores/githubSync';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useTabsStore } from '../stores/tabs';
 import { useI18n } from '../i18n';
-import { isMacOS, isMobile } from '../lib/platform';
+import { isMacOS, isMobile, revealLabelKey } from '../lib/platform';
 import { usePendingDeletes, isDeletePending, UNDO_WINDOW_MS } from '../composables/usePendingDeletes';
 import { isSafPath, fromSafPath, safList, safCreate } from '../lib/saf-fs';
 import {
@@ -2078,7 +2078,7 @@ onBeforeUnmount(() => {
       <template v-if="!isMobile()">
         <div class="ftree__ctx-sep"></div>
         <button class="ftree__ctx-item" @click="revealNode(ctx.node ?? root!)">
-          🔍 {{ t('explorer.reveal') || 'Reveal in Finder' }}
+          🔍 {{ t(revealLabelKey('explorer.reveal')) }}
         </button>
       </template>
     </div>

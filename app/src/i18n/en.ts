@@ -338,6 +338,10 @@ export const en = {
     folderMissingLocate: 'Locate folder…',
     copyRelPathDone: 'Relative path copied.',
     reveal: 'Reveal in Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Show in Explorer',
+    revealFileManager: 'Show in File Manager',
     refresh: 'Refresh',
     openFolder: 'Open folder…',
     closeFolder: 'Close folder',

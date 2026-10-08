@@ -321,6 +321,10 @@ export const it: I18n = {
     rename: 'Rinomina',
     delete: 'Elimina',
     reveal: 'Mostra nel Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Mostra in Esplora file',
+    revealFileManager: 'Mostra nel file manager',
     refresh: 'Aggiorna',
     openFolder: 'Apri cartella…',
     recentFolders: 'Recent folders',
