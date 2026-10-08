@@ -84,6 +84,7 @@ import { useRagStore } from './stores/rag';
 import { IS_APP_STORE_BUILD } from './lib/app-build';
 import { runWhenIdle } from './lib/idle';
 import { MERMAID_INSERT_SNIPPET } from './lib/insert-snippet';
+import { focusActiveEditorSoon } from './lib/editor-focus';
 const UiPreview = defineAsyncComponent(() => import('./components/UiPreview.vue'));
 
 /* v4.6 dev-only UI gallery. `?uikit` renders ONLY the design-system preview
@@ -492,6 +493,17 @@ watch(
   () => tiles.persist(),
 );
 
+// A split focuses the new pane (tiles.splitPane), but nothing moved the
+// keyboard there, so typing right after Ctrl+\ went nowhere. Follow the
+// pane focus into its editor once that editor has mounted.
+watch(
+  () => tiles.allLeaves.length,
+  (n, prev) => {
+    if (n > prev) {
+      focusActiveEditorSoon(() => tiles.focusedPaneId, { onlyIfIdle: false, strict: true, timeoutMs: 2000 });
+    }
+  },
+);
 
 // Sync tabs.activeId changes to the focused pane's leaf.
 // When newTab() or openFromDisk() set activeId, propagate it to the tile leaf.
@@ -1154,6 +1166,10 @@ function scheduleStarPrompt() {
 
 onMounted(async () => {
   scheduleStarPrompt();
+  // Launch: put the keyboard in the editor once it has mounted (the
+  // CodeMirror path never focused itself, so typing went nowhere until a
+  // click). Skipped while a dialog is up or something else has focus.
+  focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 5000 });
   void reconcileIosFolder();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar
@@ -1409,6 +1425,12 @@ onMounted(async () => {
   try {
     unlistenWindowDestroyed = await listen<string>('solomd://window-destroyed', (e) => {
       if (e.payload && isAuxLabel(e.payload)) windowsStore.unregister(e.payload);
+      // Back from the slideshow window: the caret was nowhere and typing
+      // went to <body> until a click. Hand the keyboard back to the editor.
+      if (e.payload?.startsWith('solomd-slideshow-')) {
+        void getCurrentWindow().setFocus().catch(() => {});
+        focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 1500 });
+      }
     });
   } catch (err) {
     console.warn('window-destroyed listener not available', err);
