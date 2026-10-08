@@ -321,6 +321,10 @@ export const uk: I18n = {
     rename: 'Перейменувати',
     delete: 'Видалити',
     reveal: 'Показати у Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Показати у Провіднику',
+    revealFileManager: 'Показати у файловому менеджері',
     refresh: 'Оновити',
     openFolder: 'Відкрити теку…',
     recentFolders: 'Recent folders',

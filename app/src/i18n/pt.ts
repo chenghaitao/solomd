@@ -323,6 +323,10 @@ export const pt: I18n = {
     rename: 'Renomear',
     delete: 'Excluir',
     reveal: 'Mostrar no Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Mostrar no Explorador',
+    revealFileManager: 'Mostrar no gerenciador de arquivos',
     refresh: 'Atualizar',
     openFolder: 'Abrir pasta…',
     recentFolders: 'Recent folders',

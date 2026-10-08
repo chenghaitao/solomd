@@ -321,6 +321,10 @@ export const ko: I18n = {
     rename: '이름 변경',
     delete: '삭제',
     reveal: 'Finder에서 표시',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: '탐색기에서 표시',
+    revealFileManager: '파일 관리자에서 표시',
     refresh: '새로 고침',
     openFolder: '폴더 열기…',
     recentFolders: 'Recent folders',

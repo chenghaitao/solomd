@@ -321,6 +321,10 @@ export const ja: I18n = {
     rename: '名前変更',
     delete: '削除',
     reveal: 'Finder で表示',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'エクスプローラーで表示',
+    revealFileManager: 'ファイルマネージャーで表示',
     refresh: '更新',
     openFolder: 'フォルダを開く…',
     recentFolders: 'Recent folders',

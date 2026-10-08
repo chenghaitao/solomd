@@ -83,6 +83,8 @@ import { usePropertiesStore } from './stores/properties';
 import { useRagStore } from './stores/rag';
 import { IS_APP_STORE_BUILD } from './lib/app-build';
 import { runWhenIdle } from './lib/idle';
+import { MERMAID_INSERT_SNIPPET } from './lib/insert-snippet';
+import { focusActiveEditorSoon } from './lib/editor-focus';
 const UiPreview = defineAsyncComponent(() => import('./components/UiPreview.vue'));
 
 /* v4.6 dev-only UI gallery. `?uikit` renders ONLY the design-system preview
@@ -518,6 +520,18 @@ watch(
   () => tiles.persist(),
 );
 
+// A split focuses the new pane (tiles.splitPane), but nothing moved the
+// keyboard there, so typing right after Ctrl+\ went nowhere. Follow the
+// pane focus into its editor once that editor has mounted.
+watch(
+  () => tiles.allLeaves.length,
+  (n, prev) => {
+    if (n > prev) {
+      focusActiveEditorSoon(() => tiles.focusedPaneId, { onlyIfIdle: false, strict: true, timeoutMs: 2000 });
+    }
+  },
+);
+
 // Sync tabs.activeId changes to the focused pane's leaf.
 // When newTab() or openFromDisk() set activeId, propagate it to the tile leaf.
 watch(
@@ -899,9 +913,34 @@ const INSERT_SNIPPETS: Record<string, string> = {
   'insert.mathBlock': '\n$$\n$|$\n$$\n',
   'insert.mathInline': '$$|$$',
   'insert.table': '\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n',
-  'insert.mermaid': '\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n',
+  'insert.mermaid': MERMAID_INSERT_SNIPPET,
   'insert.hr': '\n---\n',
 };
+
+/**
+ * Undo / Redo from a menu item (the Windows in-app menubar, and the Linux
+ * native menu, where muda has no predefined Undo/Redo). CodeMirror keeps its
+ * own history, which `execCommand('undo')` never reaches, so a focused
+ * CodeMirror editor gets its real undo/redo command; anything else (the plain
+ * Windows editor, a settings field) gets the browser's.
+ */
+async function runEditHistory(kind: 'undo' | 'redo') {
+  const active = document.activeElement;
+  const cmRoot = active instanceof HTMLElement ? active.closest<HTMLElement>('.cm-editor') : null;
+  if (cmRoot) {
+    const [{ EditorView }, { undo, redo }] = await Promise.all([
+      import('@codemirror/view'),
+      import('@codemirror/commands'),
+    ]);
+    const view = EditorView.findFromDOM(cmRoot);
+    if (view) {
+      (kind === 'undo' ? undo : redo)(view);
+      view.focus();
+      return;
+    }
+  }
+  document.execCommand(kind);
+}
 
 /**
  * Every menu click — native (`solomd://menu`) and the Windows title-bar
@@ -1008,10 +1047,8 @@ function dispatchMenuAction(id: string) {
     // `mousedown.prevent` so focus never leaves the editor. (CodeMirror —
     // Vim mode on Windows — keeps its own keyboard-driven undo history.)
     case 'edit.undo':
-      document.execCommand('undo');
-      return;
     case 'edit.redo':
-      document.execCommand('redo');
+      void runEditHistory(id === 'edit.undo' ? 'undo' : 'redo');
       return;
     case 'edit.cut':
       document.execCommand('cut');
@@ -1156,6 +1193,10 @@ function scheduleStarPrompt() {
 
 onMounted(async () => {
   scheduleStarPrompt();
+  // Launch: put the keyboard in the editor once it has mounted (the
+  // CodeMirror path never focused itself, so typing went nowhere until a
+  // click). Skipped while a dialog is up or something else has focus.
+  focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 5000 });
   void reconcileIosFolder();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar
@@ -1429,6 +1470,12 @@ onMounted(async () => {
   try {
     unlistenWindowDestroyed = await listen<string>('solomd://window-destroyed', (e) => {
       if (e.payload && isAuxLabel(e.payload)) windowsStore.unregister(e.payload);
+      // Back from the slideshow window: the caret was nowhere and typing
+      // went to <body> until a click. Hand the keyboard back to the editor.
+      if (e.payload?.startsWith('solomd-slideshow-')) {
+        void getCurrentWindow().setFocus().catch(() => {});
+        focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 1500 });
+      }
     });
   } catch (err) {
     console.warn('window-destroyed listener not available', err);

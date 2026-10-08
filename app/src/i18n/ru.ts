@@ -335,6 +335,10 @@ export const ru: I18n = {
     folderMissingLocate: 'Найти папку…',
     copyRelPathDone: 'Относительный путь скопирован.',
     reveal: 'Показать в Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Показать в Проводнике',
+    revealFileManager: 'Показать в файловом менеджере',
     refresh: 'Обновить',
     openFolder: 'Открыть папку…',
     closeFolder: 'Закрыть папку',

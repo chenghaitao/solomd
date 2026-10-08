@@ -337,6 +337,10 @@ export const zh: I18n = {
     folderMissingLocate: '重新定位文件夹…',
     copyRelPathDone: '相对路径已复制。',
     reveal: '在文件管理器中显示',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: '在资源管理器中显示',
+    revealFileManager: '在文件管理器中显示',
     refresh: '刷新',
     openFolder: '打开文件夹…',
     closeFolder: '关闭文件夹',

@@ -321,6 +321,10 @@ export const nl: I18n = {
     rename: 'Naam wijzigen',
     delete: 'Verwijderen',
     reveal: 'Toon in Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Toon in Verkenner',
+    revealFileManager: 'Toon in bestandsbeheer',
     refresh: 'Vernieuwen',
     openFolder: 'Map openen…',
     recentFolders: 'Recent folders',
