@@ -687,51 +687,62 @@ export function useExport() {
     const source = sel ?? ctx.content;
     const isSelection = sel !== null;
     const tid = toasts.info(isSelection ? 'Capturing selection…' : 'Capturing image…', 0);
+    // Rendering and the clipboard fail for different reasons, and only a
+    // clipboard failure is worth a Save dialog. A render failure used to
+    // open one anyway, render again, fail again — and on Linux the user saw
+    // a Save dialog that wrote nothing.
+    let blob: Blob;
     try {
-      const blob = await markdownToImageBlob(source, ctx.baseName, ctx.filePath, {
+      blob = await markdownToImageBlob(source, ctx.baseName, ctx.filePath, {
         branding: settings.imageExportBranding,
       });
-
-      // Native Clipboard API supports `image/png` on iOS 16+ and all
-      // desktops. Tauri's `writeImage` is unimplemented on iOS so we'd
-      // otherwise fall through to the save-as fallback.
-      if (hasNativeClipboardWrite()) {
-        try {
-          const item = new ClipboardItem({ 'image/png': blob });
-          await navigator.clipboard.write([item]);
-          toasts.dismiss(tid);
-          toasts.success(isSelection ? 'Copied selection as image' : 'Copied as image');
-          return;
-        } catch {
-          // fall through to Tauri plugin
-        }
+    } catch (e) {
+      console.error(e);
+      toasts.dismiss(tid);
+      toasts.error(`Copy image failed: ${e}`);
+      return;
+    }
+    let clipboardError: unknown = null;
+    // Native Clipboard API supports `image/png` on iOS 16+ and all
+    // desktops. Tauri's `writeImage` is unimplemented on iOS so we'd
+    // otherwise fall through to the save-as fallback.
+    if (hasNativeClipboardWrite()) {
+      try {
+        const item = new ClipboardItem({ 'image/png': blob });
+        await navigator.clipboard.write([item]);
+        toasts.dismiss(tid);
+        toasts.success(isSelection ? 'Copied selection as image' : 'Copied as image');
+        return;
+      } catch (e) {
+        clipboardError = e;
+        // fall through to Tauri plugin
       }
-
+    }
+    try {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const img = await Image.fromBytes(bytes);
       await writeImage(img);
       toasts.dismiss(tid);
       toasts.success(isSelection ? 'Copied selection as image' : 'Copied as image');
+      return;
     } catch (e) {
-      console.error(e);
-      toasts.dismiss(tid);
-      // Fallback: save to file instead
-      try {
-        const filename = `${ctx.baseName}.png`;
-        const path = await pickWritePath(filename, [{ name: 'PNG Image', extensions: ['png'] }]);
-        if (path) {
-          const blob2 = await markdownToImageBlob(source, ctx.baseName, ctx.filePath, {
-            branding: settings.imageExportBranding,
-          });
-          const buffer = new Uint8Array(await blob2.arrayBuffer());
-          await invoke('write_binary_file', { path, data: Array.from(buffer) });
-          toasts.success(isIOS() ? iosSavedToast(filename) : 'Clipboard failed — saved as PNG instead');
-        } else {
-          toasts.error(`Copy image failed: ${e}`);
-        }
-      } catch (e2) {
-        toasts.error(`Copy image failed: ${e}`);
+      clipboardError = e;
+    }
+    console.error('[copy image] clipboard unavailable', clipboardError);
+    toasts.dismiss(tid);
+    // Fallback: save the image we already rendered to a file instead.
+    try {
+      const filename = `${ctx.baseName}.png`;
+      const path = await pickWritePath(filename, [{ name: 'PNG Image', extensions: ['png'] }]);
+      if (!path) {
+        toasts.error(`Copy image failed: ${clipboardError}`);
+        return;
       }
+      const buffer = new Uint8Array(await blob.arrayBuffer());
+      await invoke('write_binary_file', { path, data: Array.from(buffer) });
+      toasts.success(isIOS() ? iosSavedToast(filename) : 'Clipboard failed — saved as PNG instead');
+    } catch (e2) {
+      toasts.error(`Copy image failed: ${e2}`);
     }
   }
 
