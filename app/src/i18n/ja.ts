@@ -429,7 +429,7 @@ export const ja: I18n = {
     docxPresetAcademic: '学術 —— 表紙・目次・行間2.0・ページ番号',
     docxPresetHint: 'Word 書き出しの土台。文書ごとに front matter の `docx:` ブロックで個別のキー（cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date）を上書きできます（`pdf:` と同じ書き方）。',
     quickCapture: 'クイックキャプチャのホットキー',
-    quickCaptureHint: 'どのアプリからでも小さな入力欄を開くシステム全体のショートカット。入力して Enter を押すと、アプリを前面に出さずに受信箱へ保存されます。Tauri のアクセラレータ記法（例: CmdOrCtrl+Alt+M）。',
+    quickCaptureHint: 'どのアプリからでも小さな入力欄を開くシステム全体のショートカット。入力して Enter を押すと、アプリを前面に出さずに受信箱へ保存されます。Tauri のアクセラレータ記法（例: CmdOrCtrl+Alt+Shift+M）。',
     quickCaptureFailed: '登録できませんでした: {error}',
     codeBlockWrap: 'コードブロック内で長い行を折り返す',
     codeBlockWrapHint: 'ブロック幅を超えるコード行を横スクロールではなく折り返して表示します。PDF/印刷では常に折り返します。',

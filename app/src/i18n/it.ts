@@ -429,7 +429,7 @@ export const it: I18n = {
     docxPresetAcademic: 'Accademico — copertina, sommario, interlinea doppia, numeri di pagina',
     docxPresetHint: 'Da cosa parte un’esportazione in Word. Un blocco `docx:` nel front matter sovrascrive le singole chiavi (cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date), come `pdf:`.',
     quickCapture: 'Scorciatoia di cattura rapida',
-    quickCaptureHint: 'Una scorciatoia di sistema che apre una piccola finestra ovunque: scrivi, premi Invio e la nota finisce in posta in arrivo senza portare l’app in primo piano. Sintassi acceleratore di Tauri, es. CmdOrCtrl+Alt+M.',
+    quickCaptureHint: 'Una scorciatoia di sistema che apre una piccola finestra ovunque: scrivi, premi Invio e la nota finisce in posta in arrivo senza portare l’app in primo piano. Sintassi acceleratore di Tauri, es. CmdOrCtrl+Alt+Shift+M.',
     quickCaptureFailed: 'Non registrata: {error}',
     codeBlockWrap: 'A capo automatico nei blocchi di codice',
     codeBlockWrapHint: 'Manda a capo le righe di codice più larghe del blocco invece di mostrare una barra di scorrimento orizzontale. PDF/stampa va sempre a capo.',

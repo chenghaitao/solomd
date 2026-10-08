@@ -429,7 +429,7 @@ export const nl: I18n = {
     docxPresetAcademic: 'Academisch — omslag, inhoud, dubbele regelafstand, paginanummers',
     docxPresetHint: 'Waar een Word-export mee begint. Een `docx:`-blok in de front matter overschrijft losse sleutels (cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date), net als `pdf:`.',
     quickCapture: 'Sneltoets voor snelle notitie',
-    quickCaptureHint: 'Een systeembrede sneltoets die overal een klein venster opent: typ, druk op Enter en de notitie belandt in je Inbox zonder dat de app naar voren komt. Tauri-acceleratorsyntaxis, bijv. CmdOrCtrl+Alt+M.',
+    quickCaptureHint: 'Een systeembrede sneltoets die overal een klein venster opent: typ, druk op Enter en de notitie belandt in je Inbox zonder dat de app naar voren komt. Tauri-acceleratorsyntaxis, bijv. CmdOrCtrl+Alt+Shift+M.',
     quickCaptureFailed: 'Niet geregistreerd: {error}',
     codeBlockWrap: 'Lange regels in codeblokken laten teruglopen',
     codeBlockWrapHint: 'Laat coderegels breder dan het blok teruglopen in plaats van een horizontale schuifbalk te tonen. PDF/afdrukken loopt altijd terug.',
