@@ -19,6 +19,7 @@ import { renderMarkdown, extractImageRoot } from '../lib/markdown';
 // Tiny shim: the mermaid bundle itself stays behind a dynamic import inside
 // it, so touching this module costs nothing at startup.
 import { initMermaid } from '../lib/mermaid-lazy';
+import { waitForPrintFonts } from '../lib/print-fonts';
 // Lazy like the three above: it carries KaTeX's stylesheet as a string and
 // is only needed when a note is actually exported to HTML.
 const buildStandaloneHtml: typeof import('../lib/html-export')['buildStandaloneHtml'] =
@@ -504,21 +505,13 @@ export function useExport() {
       }
       // PlantUML fences were printed as code: only the preview rendered them.
       await renderPlantumlForExport(printContent, plantumlServer());
-      // KaTeX loads its big-operator fonts (∫ ∑ √ …, KaTeX_Size1-4) only when
-      // a glyph first needs them. Printing right after mounting captured the
-      // page before they arrived and the ∫ in an integral came out missing.
-      if (printContent.querySelector('.katex')) {
-        try {
-          await Promise.all(
-            ['KaTeX_Main', 'KaTeX_Math', 'KaTeX_AMS', 'KaTeX_Size1', 'KaTeX_Size2', 'KaTeX_Size3', 'KaTeX_Size4']
-              .map((f) => document.fonts.load(`16px ${f}`)),
-          );
-          await document.fonts.ready;
-        } catch {
-          /* print with whatever loaded */
-        }
-      }
     }
+    // KaTeX faces load lazily, and while one is loading WebKit draws its text
+    // invisibly — print then captured math with the ∫ (KaTeX_Size2) or every
+    // italic letter (KaTeX_Math: E, m, c, x, dx) missing. Load the FontFace
+    // objects themselves; see print-fonts.ts for why descriptor strings like
+    // `16px KaTeX_Math` were not enough on WebKitGTK.
+    await waitForPrintFonts(printContent);
 
     // Give KaTeX / images a tick to apply layout before print.
     await new Promise((r) => setTimeout(r, 200));
