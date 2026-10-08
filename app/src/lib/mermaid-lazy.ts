@@ -37,6 +37,7 @@ export interface MermaidRenderer {
 }
 
 let loading: Promise<Mermaid> | null = null;
+let renderSeq = 0;
 
 export function loadMermaid(): Promise<Mermaid> {
   if (!loading) loading = import('mermaid').then((m) => m.default);
@@ -64,6 +65,12 @@ export async function safeRender(
   code: string,
   doc: Document = document,
 ): Promise<RenderResult> {
+  // Callers number their ids per component, so two split panes previewing
+  // the same note both asked for `mmd-1` at once: the first render's cleanup
+  // then removed the second one's work-in-progress `#dmmd-1` and it failed
+  // with "element.firstChild is null". A page-wide suffix keeps every render
+  // (and the `#id` selectors inside its SVG) distinct.
+  const renderId = `${id}-r${++renderSeq}`;
   const host = doc.createElement('div');
   host.setAttribute('aria-hidden', 'true');
   host.setAttribute('data-mermaid-scratch', '1');
@@ -75,10 +82,10 @@ export async function safeRender(
   );
   doc.body.appendChild(host);
   try {
-    return await mermaid.render(id, code, host);
+    return await mermaid.render(renderId, code, host);
   } finally {
     host.remove();
-    removeMermaidLeftovers(id, doc);
+    removeMermaidLeftovers(renderId, doc);
   }
 }
 
