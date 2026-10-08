@@ -492,6 +492,7 @@ watch(
   () => tiles.persist(),
 );
 
+
 // Sync tabs.activeId changes to the focused pane's leaf.
 // When newTab() or openFromDisk() set activeId, propagate it to the tile leaf.
 watch(
@@ -878,6 +879,31 @@ const INSERT_SNIPPETS: Record<string, string> = {
 };
 
 /**
+ * Undo / Redo from a menu item (the Windows in-app menubar, and the Linux
+ * native menu, where muda has no predefined Undo/Redo). CodeMirror keeps its
+ * own history, which `execCommand('undo')` never reaches, so a focused
+ * CodeMirror editor gets its real undo/redo command; anything else (the plain
+ * Windows editor, a settings field) gets the browser's.
+ */
+async function runEditHistory(kind: 'undo' | 'redo') {
+  const active = document.activeElement;
+  const cmRoot = active instanceof HTMLElement ? active.closest<HTMLElement>('.cm-editor') : null;
+  if (cmRoot) {
+    const [{ EditorView }, { undo, redo }] = await Promise.all([
+      import('@codemirror/view'),
+      import('@codemirror/commands'),
+    ]);
+    const view = EditorView.findFromDOM(cmRoot);
+    if (view) {
+      (kind === 'undo' ? undo : redo)(view);
+      view.focus();
+      return;
+    }
+  }
+  document.execCommand(kind);
+}
+
+/**
  * Every menu click — native (`solomd://menu`) and the Windows title-bar
  * menubar (`solomd:menu-action`) — lands here. Ids are the bindable action ids
  * wherever one exists, so a menu item runs exactly what its shortcut runs
@@ -982,10 +1008,8 @@ function dispatchMenuAction(id: string) {
     // `mousedown.prevent` so focus never leaves the editor. (CodeMirror —
     // Vim mode on Windows — keeps its own keyboard-driven undo history.)
     case 'edit.undo':
-      document.execCommand('undo');
-      return;
     case 'edit.redo':
-      document.execCommand('redo');
+      void runEditHistory(id === 'edit.undo' ? 'undo' : 'redo');
       return;
     case 'edit.cut':
       document.execCommand('cut');
