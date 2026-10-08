@@ -83,6 +83,7 @@ import { usePropertiesStore } from './stores/properties';
 import { useRagStore } from './stores/rag';
 import { IS_APP_STORE_BUILD } from './lib/app-build';
 import { runWhenIdle } from './lib/idle';
+import { MERMAID_INSERT_SNIPPET } from './lib/insert-snippet';
 const UiPreview = defineAsyncComponent(() => import('./components/UiPreview.vue'));
 
 /* v4.6 dev-only UI gallery. `?uikit` renders ONLY the design-system preview
@@ -872,7 +873,7 @@ const INSERT_SNIPPETS: Record<string, string> = {
   'insert.mathBlock': '\n$$\n$|$\n$$\n',
   'insert.mathInline': '$$|$$',
   'insert.table': '\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n',
-  'insert.mermaid': '\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n',
+  'insert.mermaid': MERMAID_INSERT_SNIPPET,
   'insert.hr': '\n---\n',
 };
 

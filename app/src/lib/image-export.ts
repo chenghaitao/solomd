@@ -123,8 +123,12 @@ async function processMermaidBlocks(container: HTMLElement) {
       wrap.className = 'mermaid-block';
       wrap.innerHTML = svg;
       pre.replaceWith(wrap);
-    } catch {
-      // silently skip broken mermaid
+    } catch (e) {
+      // Say why where the diagram would have been, like Preview does.
+      const err = document.createElement('pre');
+      err.className = 'mermaid-error';
+      err.textContent = `Mermaid error: ${(e as Error).message}`;
+      pre.replaceWith(err);
     }
   }
 }
