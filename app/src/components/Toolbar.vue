@@ -405,6 +405,8 @@ const floatStyle = computed<Record<string, string | number> | undefined>(() => {
     // click" into "click, scroll, move, click". It still scrolls when the
     // window really is too short.
     maxHeight: `calc(100vh - ${menuPos.value.top}px - 8px)`,
+    // Never wider than the window (see keepMenuOnScreen).
+    maxWidth: 'calc(100vw - 16px)',
   };
   if (menuPos.value.left !== undefined) s.left = `${menuPos.value.left}px`;
   // `.dropdown__menu` carries `left: 0` from its stylesheet; a right-anchored
@@ -420,6 +422,23 @@ function positionMenuFromButton(btn: HTMLElement | null, align: 'left' | 'right'
   } else {
     menuPos.value = { top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 16) };
   }
+  void keepMenuOnScreen();
+}
+/**
+ * The menu is anchored to its button, so a wide menu under a button near the
+ * edge of a narrow window ran off the screen: on a phone with a large display
+ * size the View menu's ✓ marks and icons were cut off on the left. Once it has
+ * rendered, measure it and pin it to whichever edge it crossed.
+ */
+async function keepMenuOnScreen() {
+  await nextTick();
+  const pos = menuPos.value;
+  const el = document.querySelector<HTMLElement>('.dropdown__menu[data-tb-menu], .menubar__menu');
+  if (!pos || !el) return;
+  const r = el.getBoundingClientRect();
+  const margin = 8;
+  if (r.left < margin) menuPos.value = { top: pos.top, left: margin };
+  else if (r.right > window.innerWidth - margin) menuPos.value = { top: pos.top, right: margin };
 }
 
 // Pomodoro popover, opened from the palette. Anchored under the right end of
@@ -1775,7 +1794,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 280px;
+  min-width: min(280px, calc(100vw - 16px));
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -1786,7 +1805,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 .dropdown__menu--narrow {
-  min-width: 200px;
+  min-width: min(200px, calc(100vw - 16px));
 }
 .dropdown__item {
   display: flex;
