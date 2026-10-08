@@ -264,6 +264,9 @@ export const uk: I18n = {
     permGrant: 'Надати доступ',
   },
   plainFind: {
+    wholeWord: "Слово цілком",
+    regexp: "Регулярний вираз",
+    selectAll: 'Усі',
     prev: 'Попереднє (Shift+Enter)',
     next: 'Наступне (Enter)',
     matchCase: 'Враховувати регістр',
@@ -271,7 +274,7 @@ export const uk: I18n = {
     findPlaceholder: 'Знайти',
     replacePlaceholder: 'Замінити',
     replaceOne: 'Замінити',
-    replaceAll: 'Усі',
+    replaceAll: "Замінити все",
   },
   explorer: {
     deleteTitle: 'Видалити',

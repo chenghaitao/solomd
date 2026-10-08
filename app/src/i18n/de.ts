@@ -264,6 +264,9 @@ export const de: I18n = {
     permGrant: 'Zugriff erlauben',
   },
   plainFind: {
+    wholeWord: "Ganzes Wort",
+    regexp: "Regulärer Ausdruck",
+    selectAll: 'Alle',
     prev: 'Zurück (Umschalt+Enter)',
     next: 'Weiter (Enter)',
     matchCase: 'Groß-/Kleinschreibung beachten',
@@ -271,7 +274,7 @@ export const de: I18n = {
     findPlaceholder: 'Suchen',
     replacePlaceholder: 'Ersetzen',
     replaceOne: 'Ersetzen',
-    replaceAll: 'Alle',
+    replaceAll: "Alle ersetzen",
   },
   explorer: {
     deleteTitle: 'Löschen',

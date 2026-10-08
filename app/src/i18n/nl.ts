@@ -264,6 +264,9 @@ export const nl: I18n = {
     permGrant: 'Toegang verlenen',
   },
   plainFind: {
+    wholeWord: "Heel woord",
+    regexp: "Reguliere expressie",
+    selectAll: 'Alle',
     prev: 'Vorige (Shift+Enter)',
     next: 'Volgende (Enter)',
     matchCase: 'Hoofdlettergevoelig',
@@ -271,7 +274,7 @@ export const nl: I18n = {
     findPlaceholder: 'Zoeken',
     replacePlaceholder: 'Vervangen',
     replaceOne: 'Vervangen',
-    replaceAll: 'Alles',
+    replaceAll: "Alles vervangen",
   },
   explorer: {
     deleteTitle: 'Verwijderen',

@@ -264,6 +264,9 @@ export const ru: I18n = {
     permGrant: 'Предоставить доступ',
   },
   plainFind: {
+    wholeWord: "Слово целиком",
+    regexp: "Регулярное выражение",
+    selectAll: 'Все',
     prev: 'Предыдущее (Shift+Enter)',
     next: 'Следующее (Enter)',
     matchCase: 'Учитывать регистр',
@@ -271,7 +274,7 @@ export const ru: I18n = {
     findPlaceholder: 'Найти',
     replacePlaceholder: 'Заменить',
     replaceOne: 'Заменить',
-    replaceAll: 'Все',
+    replaceAll: "Заменить все",
   },
   explorer: {
     heading: 'Проводник',

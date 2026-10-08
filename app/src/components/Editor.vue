@@ -3495,6 +3495,26 @@ function markdownExt() {
  * (lib/list-renumber). Appended to the same transaction, so one undo step
  * takes back the edit and the renumbering together.
  */
+/** The search panel's labels in the UI language (its own strings are English). */
+function searchPanelPhrases(): Record<string, string> {
+  // The plain editor's labels carry their key hint, "Next (Enter)"; the
+  // panel's buttons are bare words.
+  const bare = (key: string) => t(key).replace(/\s*[(（][^)）]*[)）]\s*$/, '');
+  return {
+    Find: t('plainFind.findPlaceholder'),
+    Replace: t('plainFind.replacePlaceholder'),
+    next: bare('plainFind.next'),
+    previous: bare('plainFind.prev'),
+    all: t('plainFind.selectAll'),
+    'match case': t('plainFind.matchCase'),
+    regexp: t('plainFind.regexp'),
+    'by word': t('plainFind.wholeWord'),
+    replace: t('plainFind.replaceOne'),
+    'replace all': t('plainFind.replaceAll'),
+    close: bare('plainFind.close'),
+  };
+}
+
 const listRenumberFilter = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged || !(tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move'))) {
     return tr;
@@ -3646,6 +3666,8 @@ function buildExtensions() {
           bracketMatching(),
           highlightActiveLine(),
           search({ top: true }),
+          // CodeMirror's search panel speaks English unless given phrases.
+          EditorState.phrases.of(searchPanelPhrases()),
           incrementalFindScroll,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ]),

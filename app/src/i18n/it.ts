@@ -264,6 +264,9 @@ export const it: I18n = {
     permGrant: 'Consenti accesso',
   },
   plainFind: {
+    wholeWord: "Parola intera",
+    regexp: "Espressione regolare",
+    selectAll: 'Tutte',
     prev: 'Precedente (Maiusc+Invio)',
     next: 'Successivo (Invio)',
     matchCase: 'Distinguere maiuscole',
@@ -271,7 +274,7 @@ export const it: I18n = {
     findPlaceholder: 'Trova',
     replacePlaceholder: 'Sostituisci',
     replaceOne: 'Sostituisci',
-    replaceAll: 'Tutti',
+    replaceAll: "Sostituisci tutto",
   },
   explorer: {
     deleteTitle: 'Elimina',

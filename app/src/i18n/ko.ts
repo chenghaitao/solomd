@@ -264,6 +264,9 @@ export const ko: I18n = {
     permGrant: '권한 허용',
   },
   plainFind: {
+    wholeWord: "전체 단어",
+    regexp: "정규식",
+    selectAll: '모두 선택',
     prev: '이전 (Shift+Enter)',
     next: '다음 (Enter)',
     matchCase: '대소문자 구분',
@@ -271,7 +274,7 @@ export const ko: I18n = {
     findPlaceholder: '찾기',
     replacePlaceholder: '바꾸기',
     replaceOne: '바꾸기',
-    replaceAll: '모두',
+    replaceAll: "모두 바꾸기",
   },
   explorer: {
     deleteTitle: '삭제',

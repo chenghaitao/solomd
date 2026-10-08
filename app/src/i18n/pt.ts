@@ -266,6 +266,9 @@ export const pt: I18n = {
     permGrant: 'Conceder acesso',
   },
   plainFind: {
+    wholeWord: "Palavra inteira",
+    regexp: "Expressão regular",
+    selectAll: 'Todas',
     prev: 'Anterior (Shift+Enter)',
     next: 'Seguinte (Enter)',
     matchCase: 'Diferenciar maiúsculas',
@@ -273,7 +276,7 @@ export const pt: I18n = {
     findPlaceholder: 'Localizar',
     replacePlaceholder: 'Substituir',
     replaceOne: 'Substituir',
-    replaceAll: 'Tudo',
+    replaceAll: "Substituir tudo",
   },
   explorer: {
     deleteTitle: 'Excluir',

@@ -264,6 +264,9 @@ export const tr: I18n = {
     permGrant: 'İzin ver',
   },
   plainFind: {
+    wholeWord: "Tam sözcük",
+    regexp: "Düzenli ifade",
+    selectAll: 'Tümü',
     prev: 'Önceki (Shift+Enter)',
     next: 'Sonraki (Enter)',
     matchCase: 'Büyük/küçük harf duyarlı',
@@ -271,7 +274,7 @@ export const tr: I18n = {
     findPlaceholder: 'Bul',
     replacePlaceholder: 'Değiştir',
     replaceOne: 'Değiştir',
-    replaceAll: 'Tümü',
+    replaceAll: "Tümünü değiştir",
   },
   explorer: {
     deleteTitle: 'Sil',
