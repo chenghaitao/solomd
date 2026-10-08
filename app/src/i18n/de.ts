@@ -429,7 +429,7 @@ export const de: I18n = {
     docxPresetAcademic: 'Akademisch — Titelseite, Inhalt, doppelter Zeilenabstand, Seitenzahlen',
     docxPresetHint: 'Womit ein Word-Export beginnt. Ein `docx:`-Block im Front Matter überschreibt einzelne Schlüssel (cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date) — genau wie `pdf:`.',
     quickCapture: 'Schnellerfassung-Hotkey',
-    quickCaptureHint: 'Ein systemweiter Tastenbefehl, der überall ein kleines Fenster öffnet: tippen, Enter — die Notiz landet im Posteingang, ohne dass die App nach vorn kommt. Tauri-Accelerator-Syntax, z. B. CmdOrCtrl+Alt+M.',
+    quickCaptureHint: 'Ein systemweiter Tastenbefehl, der überall ein kleines Fenster öffnet: tippen, Enter — die Notiz landet im Posteingang, ohne dass die App nach vorn kommt. Tauri-Accelerator-Syntax, z. B. CmdOrCtrl+Alt+Shift+M.',
     quickCaptureFailed: 'Nicht registriert: {error}',
     codeBlockWrap: 'Lange Zeilen in Codeblöcken umbrechen',
     codeBlockWrapHint: 'Bricht Codezeilen, die breiter als der Block sind, um statt horizontal zu scrollen. PDF/Druck bricht immer um.',

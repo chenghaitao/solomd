@@ -345,6 +345,33 @@ function onUnsavedAction(action: 'save' | 'discard' | 'cancel') {
   }
 }
 
+/** Push every debounced edit out now: the editors' doc→store sync (350 ms)
+ *  and the session-restore snapshot (500 ms). Without it, a close or quit
+ *  landing inside those windows lost the last thing typed. */
+function flushPendingEdits() {
+  window.dispatchEvent(new Event('solomd:flush-content-sync'));
+}
+
+/** Closing a second editor window: ask about each unsaved tab, the way
+ *  closing a single tab does. False = the user cancelled (or a save failed),
+ *  so the window stays. A second ✕ while the dialog is up is ignored. */
+let closePromptOpen = false;
+async function confirmCloseWithUnsavedTabs(): Promise<boolean> {
+  if (closePromptOpen) return false;
+  closePromptOpen = true;
+  try {
+    for (const tab of tabs.tabs.filter((t) => t.content !== t.savedContent)) {
+      tabs.activate(tab.id);
+      const action = await showUnsavedDialog('window', tab.fileName, 1);
+      if (action === 'cancel') return false;
+      if (action === 'save' && !(await files.saveTab(tab))) return false;
+    }
+    return true;
+  } finally {
+    closePromptOpen = false;
+  }
+}
+
 // Expose to child composables (useFiles) via provide/inject
 provide('showUnsavedDialog', showUnsavedDialog);
 (window as any).__solomd_showUnsavedDialog = showUnsavedDialog;
@@ -1365,16 +1392,34 @@ onMounted(async () => {
   }
   tiles.syncActiveTab();
 
-  // Window close
+  // Window close. Rust intercepts the close of every editor window and names
+  // the one being closed in the payload — the event reaches every window, and
+  // each must only act on its own close.
   try {
-    await listen('solomd://close-requested', async () => {
-      tabs.persist?.();
-      tiles.persist();
+    await listen<string>('solomd://close-requested', async (e) => {
+      const me = getCurrentWindow().label;
+      if (e.payload && e.payload !== me) return;
+      // Editors sync their document into the store on a debounce; text typed
+      // just before the close would otherwise miss the persist below.
+      flushPendingEdits();
+      if (me !== 'main') {
+        // Nothing restores a second window's tabs on the next launch, so its
+        // unsaved edits are asked about here instead of silently dropped.
+        if (!(await confirmCloseWithUnsavedTabs())) return;
+        if (isAuxLabel(me)) windowsStore.unregister(me);
+      } else {
+        tabs.persist?.();
+        tiles.persist();
+      }
       await invoke('force_close_window');
     });
   } catch (err) {
     console.warn('close-requested listener failed', err);
   }
+  // Backstop for teardowns that skip close-requested (macOS ⌘Q terminates
+  // the app without a CloseRequested, a reload): flush and persist
+  // synchronously — the persist watcher would run too late here.
+  window.addEventListener('pagehide', onPageHide);
 
   // #103 — backstop registry cleanup. The destroyed window normally
   // unregisters itself via onCloseRequested, but a webview teardown that
@@ -1574,7 +1619,15 @@ window.addEventListener(VIEW_OPEN_EVENT, onOpenView as EventListener);
 window.addEventListener(VIEW_CLOSE_EVENT, onCloseView as EventListener);
 window.addEventListener('solomd:open-settings', onOpenSettingsEvent as EventListener);
 
+function onPageHide() {
+  flushPendingEdits();
+  if (getCurrentWindow().label !== 'main') return;
+  tabs.persist?.();
+  tiles.persist();
+}
+
 onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', onPageHide);
   window.removeEventListener('keydown', onEsc);
   document.removeEventListener('click', onStrayLinkClick);
   document.removeEventListener('auxclick', onStrayLinkClick);
