@@ -15,6 +15,151 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.11] — 2026-10-09
+
+一条线：**同步上游 43 个提交**（上游 4.14.10 之后 → 4.14.11），只取纯产品代码的功能与修复；
+市场推广 / 赞助 / 遥测 / 商店与 MCP 分发登记一律不落地；本地改动（遥测移除、列表续行开关、
+启动懒加载、i18n 分包、文件新鲜度兜底巡检）全部保留。
+
+### 上游同步
+
+上游 `3a83d7e..f0f22279` 共 **43 个提交**、117 个文件有改动。分叉点 `3a83d7e` 正好是上次同步（4.14.10）
+合并的上游 tip，两侧边界干净。
+
+落地方式沿用 4.14.10 的做法：**直接 `git merge upstream/main`，在冲突处逐个取舍**。冲突只有 14 个文件，
+其中 12 个属排除路径（`web/` 与 `server.json` 的整目录回退），**真正需要人工取舍的只有 2 个**
+（`App.vue`、`useFileWatcher.ts`），其余 20 个重叠文件由 git 自动合并。
+
+**纳入（38 个提交，纯产品代码）**
+
+前端 i18n / 查找
+
+| 上游提交 | 内容 |
+|---|---|
+| `8bb2be07` | 查找 / 替换面板跟随 UI 语言 |
+| `1a23236a` | 已打开标签页里的查找面板跟随语言切换 |
+| `665dffae` | 预览搜索的占位符与按钮标题改用真实 i18n 键 |
+| `3a57614e` | 非 macOS 上「在文件管理器中显示」用对名字（Windows 显示"资源管理器"） |
+
+编辑器
+
+| 上游提交 | 内容 |
+|---|---|
+| `44309aa2` | 代码块与加粗 / 斜体可从内部反向切换关闭 |
+| `3778ef13` | Tab 按有序列表标记宽度缩进列表项 |
+| `7a06ed60` | 新建笔记在 CodeMirror 里获得焦点 |
+| `91ba0404` | 分屏两栏重新对齐（5.0 回归）；列表不再把编辑器甩回去 |
+
+快捷键 / 命令
+
+| 上游提交 | 内容 |
+|---|---|
+| `9536421a` | redo 不再启动番茄钟 |
+| `8a8ccc50` | Linux：Ctrl+B 不再在松键时自我撤销 |
+| `5423d44b` | 命令转换读取编辑器当前文本，而不是陈旧副本 |
+| `97429dbb` | 快速捕获默认热键不再抢公式编辑器的 Ctrl+Alt+M |
+
+文件 / 磁盘 / 会话
+
+| 上游提交 | 内容 |
+|---|---|
+| `4fcb1eec` | UTF-16LE/BE 文件另存为 UTF-16，而不是 UTF-8 |
+| `41273552` | 不再弹假的「磁盘文件已变」对话框，也不会在读键中途弹 |
+| `744a38d1` | 退出前最后半秒输入的内容重启后仍在 |
+| `bcde170b` | Windows：退出真的退出、重启总有窗口、第二个窗口丢弃编辑前先询问 |
+| `d807c1b0` | 快速切换不再列出已重命名 / 已删除的文件 |
+
+导入 / 导出
+
+| 上游提交 | 内容 |
+|---|---|
+| `e2078bb6` | DOCX 导入保留加粗、编号列表与任务状态 |
+| `1057e217` | DOCX 链接保留 URL |
+| `c66bee7e` | Word 导出保留数学公式 |
+| `07e45820` | Linux 上文字版 PDF 保留 KaTeX 斜体字母（E, m, c, x, dx） |
+| `1d4ffb28` | Linux 上「导出为图片 / 复制为图片」恢复可用 |
+| `ee1b06e0` | Linux 上粘贴图片可用 |
+
+面板 / 结构 / Mermaid
+
+| 上游提交 | 内容 |
+|---|---|
+| `d803e5fd` | 反向链接支持文件绝对路径链接行，并可跳转 |
+| `271d77c6` | 写新类型定义前先创建 `Types/` |
+| `857fbe6a` | 收件箱切换标记后保存；mtime 精确到秒 |
+| `566872c2` | 坏掉的 mermaid 图不再把错误气泡留在应用下方 |
+| `d89cd697` | 分屏预览同一篇笔记时，两侧的 mermaid 图不再互相破坏 |
+
+菜单 / 焦点 / 工具栏
+
+| 上游提交 | 内容 |
+|---|---|
+| `5e75de6a` | Linux Edit 菜单有 Undo/Redo；原生菜单里的 `&` 正常显示 |
+| `a168ac88` | 启动 / 分屏 / 幻灯片之后编辑器拿到键盘 |
+| `723bb2c5` `154b4723` | 窄屏手机上工具栏菜单不越界（渲染后再测尺寸） |
+
+后端（Rust）
+
+| 上游提交 | 内容 |
+|---|---|
+| `901843c4` | keychain 命令不再冻结窗口 |
+| `f6b7d877` | CJK 校对不再把扩展名和省略号当半角句号 |
+
+MCP（产品功能，原样保留）
+
+| 上游提交 | 内容 |
+|---|---|
+| `27fe16dd` | `export_note` 需要 `--allow-write`，且绝不静默覆盖（`safety.rs` / `tools.rs` / `workspace.rs` + 两个新测试） |
+
+**排除（5 个提交）**
+
+| 上游提交 | 内容 | 理由 |
+|---|---|---|
+| `20feffb7` | 版本号 4.14.11（4 个版本源） | 版本号由本 fork 的 `bump-version.js` 统一改 |
+| `56e41b78` `f0f22279` | App Store 发版说明 14 种语言（28 个文件） | 商店分发 |
+| `cdf48cec` | 官网版本号 / whats-new / llms.txt | 官网分发 |
+| `4ccc6006` | `solomd-mcp` 4.14.11 bundle manifest + Registry `server.json` | manifest 见下；`server.json` 是上游的 Registry 登记条目，冻结 |
+
+### 合并取舍（本地特性怎么保下来的）
+
+- **排除路径整体回退**：`web/`、`app-store/` 用 `git restore --source=HEAD` 回退，与合并前**逐字节零差异**；
+  `server.json` 取本 fork 版本（冻结在上游旧值，本 fork 未登记任何 MCP Registry）。
+- **`mcp-server/mcpb/manifest.json` 保留上游版**：这轮它不只是改版本号，还把 4 个工具
+  （`export_note` / `get_outline` / `read_agent_trace` / `write_note`）的描述同步到新的 mcp-server 源码——
+  正是上面 `27fe16dd` 的产品修复的一部分；版本 `4.14.11` 与本 fork 相同，无需回退。
+- **`App.vue`**：上游新加的 `focusActiveEditorSoon(...)`（产品，焦点修复）与 `scheduleStarPrompt()`
+  （排除，求 star）挤在同一个 hunk 里——**保留焦点修复、摘除 star prompt**。
+- **`useFileWatcher.ts`**：本地 30 秒兜底巡检 `startWatchdog()` 与上游新加的 `keydown` 捕获监听
+  落在同一处，**两者都保留**。
+- **`app-menu.ts`**：上游新增模块里的无扩展名导入 `'./keybindings'`，按本 fork 约定补成
+  `'./keybindings.ts'`，使其新增的 `app-menu.test.ts` 能被 `node --test` 直接跑。
+- **MCP 源码是产品功能，原样保留**：与上几次「只改 manifest、零源码改动」不同，这轮上游对
+  `mcp-server/src/` 有真实修复（`27fe16dd`），全部保留。
+- **顺带补齐无扩展名导入（fork 的 `node --test` 约定）**：`md-format.ts`、`docx-export.ts`、
+  `diagram-export.ts`、`markdown.ts`、`stores/types.ts` 以及两个新测试文件里的相对导入补上 `.ts`，
+  使本轮新增 / 改动的测试可以就地跑通（仓库本就开启 `allowImportingTsExtensions`，多处以 `.ts` 导入）。
+- 其余重叠文件（15 个 i18n、`Editor.vue`、`SettingsPanel.vue`、`Toolbar.vue`、`useExport.ts`、
+  `settings.ts`、`Cargo.toml`、`commands.rs`、`lib.rs`、`runner.rs`）自动合并，本地删除遥测、
+  上游新增功能各落各区，无人工干预。
+
+### 验证
+
+- `vue-tsc --noEmit` 通过（`I18n` 类型由 `en` 推导，键不一致必报错）。
+- `vite build` 通过（22.05s）。入口 chunk `index-DdF9T1vb.js` **1,738.17 kB / gzip 530.02 kB**，
+  与合并前**完全一致**（1,738.17 / 530.02）——说明本轮并入的修复没有改变入口体积。
+- 单元测试（fork 的 `node --test` 跑法）本轮新增 / 改动的 13 个测试文件：**115 / 115 通过**。
+- 本地改动零丢失：`git diff --name-only 3a83d7e..main`（268 个）对
+  `git diff --name-only upstream/main`（282 个）做差集，**被吃掉的一侧为空**。
+- 排除项零回流：`telemetry` / `TelemetryBanner` / `scheduleStarPrompt` / `starPrompt` /
+  `store_review` / `request_store_review` 在 `app/` 下均无新增命中（`telemetry` 仅剩注释、
+  欢迎文档的「无遥测」文案，以及 `settings.ts` 清理旧字段的代码）；`track(` 无任何调用；
+  被删的 8 个文件（`lib/telemetry.ts`、`TelemetryBanner.vue`、`star-prompt.ts`、
+  `web/functions/api/track.ts`、`admin/stats.ts`、`web/ANALYTICS.md`、
+  `scripts/release-to-gitee.sh`、`mirror-gitee.yml`）合并后仍不存在。
+- 本轮新增 i18n 键（`wholeWord` / `regexp` / `selectAll` / `replaceAll` / `revealExplorer` /
+  `revealFileManager` / `quickCaptureHint`）15 种语言齐全。
+- 无冲突标记残留。
+
 ## [4.14.10] — 2026-10-07
 
 一条线：**同步上游 55 个提交**（横跨上游 4.14.8 / 4.14.9 / 4.14.10 三个版本窗口），把窗口期内的编辑器、
