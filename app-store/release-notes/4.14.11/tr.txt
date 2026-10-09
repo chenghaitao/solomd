@@ -1,7 +1,7 @@
 SoloMD 4.14.11, kapsamlı bir test turunda bulunan sorunları düzeltir. Bunların bazıları metni değiştirebiliyor ya da kaybettirebiliyordu, bu yüzden güncellemenizi öneririz.
 
 • CJK Denetimi artık dosya adlarını (文档.md, 压缩包.tar.gz) ve üç noktayı noktalama hatası saymıyor; böylece "Tümünü uygula" bunları yeniden yazamıyor.
-• Word belgesi içe aktarılırken kalın yazı yerinde kalıyor; numaralı listeler, görev listeleri ve bağlantılar geri geliyor. Word'e dışa aktarma görevleri ☐ / ☑ ile işaretliyor.
+• Word belgesi içe aktarılırken kalın yazı yerinde kalıyor; numaralı listeler, görev listeleri ve bağlantılar geri geliyor. Word'e dışa aktarma görevleri [ ] / [x] ile işaretliyor.
 • UTF-16 dosyalar yeniden UTF-16 olarak kaydediliyor; Basitleştirilmiş/Geleneksel dönüştürme az önce yazdıklarınızı artık silmiyor.
 • Yinele (⌘⇧Z) artık aynı anda bir yazma oturumu başlatmıyor.
 • Bul ve değiştir çubuğu uygulamanın dilini izliyor.

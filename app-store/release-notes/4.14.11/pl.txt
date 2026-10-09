@@ -1,7 +1,7 @@
 SoloMD 4.14.11 naprawia problemy wykryte podczas pełnej rundy testów. Niektóre z nich mogły zmieniać lub usuwać tekst, dlatego zalecamy aktualizację.
 
 • Korekta CJK nie traktuje już nazw plików (文档.md, 压缩包.tar.gz) ani wielokropka jako błędów interpunkcji, więc „Zastosuj wszystkie” nie może ich przepisać.
-• Import dokumentu Word zostawia pogrubienie tam, gdzie było, i przywraca listy numerowane, listy zadań oraz linki. Eksport do Word oznacza zadania symbolami ☐ / ☑.
+• Import dokumentu Word zostawia pogrubienie tam, gdzie było, i przywraca listy numerowane, listy zadań oraz linki. Eksport do Word oznacza zadania symbolami [ ] / [x].
 • Pliki UTF-16 są zapisywane z powrotem jako UTF-16; konwersja między chińskim uproszczonym a tradycyjnym nie gubi już właśnie wpisanego tekstu.
 • Ponów (⌘⇧Z) nie rozpoczyna już przy okazji sesji pisania.
 • Pasek Znajdź i zamień jest w języku aplikacji.
