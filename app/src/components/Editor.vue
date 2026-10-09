@@ -235,6 +235,9 @@ function baseKeymap() {
 }
 const richCompartment = new Compartment();
 const spellCheckCompartment = new Compartment();
+// Search panel labels: reconfigured when the UI language changes, or tabs
+// open before a switch kept the old language until restart.
+const searchPhrasesCompartment = new Compartment();
 const focusCompartment = new Compartment();
 const typewriterCompartment = new Compartment();
 const vimCompartment = new Compartment();
@@ -3696,7 +3699,7 @@ function buildExtensions() {
           highlightActiveLine(),
           search({ top: true }),
           // CodeMirror's search panel speaks English unless given phrases.
-          EditorState.phrases.of(searchPanelPhrases()),
+          searchPhrasesCompartment.of(EditorState.phrases.of(searchPanelPhrases())),
           incrementalFindScroll,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ]),
@@ -4471,6 +4474,15 @@ watch(
   (key) => {
     if (IS_APP_STORE_BUILD) return;
     view?.dispatch({ effects: aiKeyCompartment.reconfigure(aiRewriteExtension(key)) });
+  },
+);
+
+watch(
+  () => settings.language,
+  () => {
+    view?.dispatch({
+      effects: searchPhrasesCompartment.reconfigure(EditorState.phrases.of(searchPanelPhrases())),
+    });
   },
 );
 
