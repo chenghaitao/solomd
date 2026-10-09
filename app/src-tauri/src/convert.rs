@@ -86,7 +86,49 @@ fn convert_docx(path: &str) -> Result<String, String> {
         let _ = f.read_to_string(&mut numbering);
     }
 
-    docx_xml_to_markdown(&xml, &docx_ordered_lists(&numbering))
+    // Hyperlink targets live in the relationships part, keyed by r:id.
+    let mut rels = String::new();
+    if let Ok(mut f) = archive.by_name("word/_rels/document.xml.rels") {
+        let _ = f.read_to_string(&mut rels);
+    }
+
+    docx_xml_to_markdown_with_links(&xml, &docx_ordered_lists(&numbering), &docx_link_targets(&rels))
+}
+
+/// `r:id` → URL for external hyperlinks, from document.xml.rels.
+fn docx_link_targets(rels_xml: &str) -> std::collections::HashMap<String, String> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+    let mut out = std::collections::HashMap::new();
+    let mut reader = Reader::from_str(rels_xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e))
+                if e.local_name().as_ref() == b"Relationship" =>
+            {
+                let mut id = None;
+                let mut target = None;
+                let mut is_link = false;
+                for a in e.attributes().flatten() {
+                    let v = String::from_utf8_lossy(&a.value).to_string();
+                    match a.key.as_ref() {
+                        b"Id" => id = Some(v),
+                        b"Target" => target = Some(v),
+                        b"Type" => is_link = v.ends_with("/hyperlink"),
+                        _ => {}
+                    }
+                }
+                if let (true, Some(id), Some(t)) = (is_link, id, target) {
+                    out.insert(id, t);
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
 }
 
 /// `numId`s whose level-0 format is a number (`decimal`, `lowerLetter`, …)
@@ -182,9 +224,18 @@ fn render_runs(runs: &[(String, bool, bool)]) -> String {
     out
 }
 
+#[cfg(test)]
 fn docx_xml_to_markdown(
     xml: &str,
     ordered_lists: &std::collections::HashSet<String>,
+) -> Result<String, String> {
+    docx_xml_to_markdown_with_links(xml, ordered_lists, &Default::default())
+}
+
+fn docx_xml_to_markdown_with_links(
+    xml: &str,
+    ordered_lists: &std::collections::HashSet<String>,
+    links: &std::collections::HashMap<String, String>,
 ) -> Result<String, String> {
     use quick_xml::events::Event;
     use quick_xml::Reader;
@@ -210,6 +261,8 @@ fn docx_xml_to_markdown(
     let mut prev_num_id: Option<String> = None;
     // Next number per (numId, level), reset when the list ends.
     let mut counters: HashMap<(String, usize), usize> = HashMap::new();
+    // An open <w:hyperlink>: where its runs start, and its URL if external.
+    let mut link_start: Option<(usize, Option<String>)> = None;
     let mut buf = Vec::new();
     let val_of = |e: &quick_xml::events::BytesStart| -> Option<String> {
         e.attributes()
@@ -257,6 +310,14 @@ fn docx_xml_to_markdown(
                         table_cells.clear();
                     }
                     b"tc" => runs.clear(),
+                    b"hyperlink" => {
+                        let url = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"r:id")
+                            .and_then(|a| links.get(String::from_utf8_lossy(&a.value).as_ref()).cloned());
+                        link_start = Some((runs.len(), url));
+                    }
                     _ => {}
                 }
             }
@@ -267,6 +328,15 @@ fn docx_xml_to_markdown(
             }
             Ok(Event::End(ref e)) => match e.local_name().as_ref() {
                 b"rPr" => in_run_props = false,
+                b"hyperlink" => {
+                    if let Some((start, url)) = link_start.take() {
+                        if let Some(url) = url {
+                            let text = render_runs(&runs[start.min(runs.len())..]);
+                            runs.truncate(start.min(runs.len()));
+                            runs.push((format!("[{}]({url})", text.trim()), false, false));
+                        }
+                    }
+                }
                 b"p" => {
                     let line = render_runs(&runs).trim().to_string();
                     let is_list = num_id.is_some() || list_style;
@@ -807,6 +877,28 @@ mod docx_import_tests {
             md,
             "- [ ] open task\n- [x] done task\n\n1. first\n2. second\n  1. nested\n\nAfter the list."
         );
+    }
+
+    #[test]
+    fn external_hyperlinks_keep_their_url() {
+        let mut links = std::collections::HashMap::new();
+        links.insert("rId9".to_string(), "https://example.com/target".to_string());
+        let xml = doc(&p(&format!(
+            "{}<w:hyperlink r:id=\"rId9\">{}</w:hyperlink>{}",
+            r("See ", ""),
+            r("the target", ""),
+            r(".", "")
+        )));
+        let md = docx_xml_to_markdown_with_links(&xml, &Default::default(), &links).unwrap();
+        assert_eq!(md, "See [the target](https://example.com/target).");
+    }
+
+    #[test]
+    fn rels_part_maps_hyperlink_ids() {
+        let rels = r#"<Relationships><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/x" TargetMode="External"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#;
+        let m = docx_link_targets(rels);
+        assert_eq!(m.get("rId9").map(String::as_str), Some("https://example.com/x"));
+        assert!(!m.contains_key("rId1"));
     }
 
     #[test]
