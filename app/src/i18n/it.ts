@@ -264,6 +264,9 @@ export const it: I18n = {
     permGrant: 'Consenti accesso',
   },
   plainFind: {
+    wholeWord: "Parola intera",
+    regexp: "Espressione regolare",
+    selectAll: 'Tutte',
     prev: 'Precedente (Maiusc+Invio)',
     next: 'Successivo (Invio)',
     matchCase: 'Distinguere maiuscole',
@@ -271,7 +274,7 @@ export const it: I18n = {
     findPlaceholder: 'Trova',
     replacePlaceholder: 'Sostituisci',
     replaceOne: 'Sostituisci',
-    replaceAll: 'Tutti',
+    replaceAll: "Sostituisci tutto",
   },
   explorer: {
     deleteTitle: 'Elimina',
@@ -318,6 +321,10 @@ export const it: I18n = {
     rename: 'Rinomina',
     delete: 'Elimina',
     reveal: 'Mostra nel Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Mostra in Esplora file',
+    revealFileManager: 'Mostra nel file manager',
     refresh: 'Aggiorna',
     openFolder: 'Apri cartella…',
     recentFolders: 'Recent folders',
@@ -426,7 +433,7 @@ export const it: I18n = {
     docxPresetAcademic: 'Accademico — copertina, sommario, interlinea doppia, numeri di pagina',
     docxPresetHint: 'Da cosa parte un’esportazione in Word. Un blocco `docx:` nel front matter sovrascrive le singole chiavi (cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date), come `pdf:`.',
     quickCapture: 'Scorciatoia di cattura rapida',
-    quickCaptureHint: 'Una scorciatoia di sistema che apre una piccola finestra ovunque: scrivi, premi Invio e la nota finisce in posta in arrivo senza portare l’app in primo piano. Sintassi acceleratore di Tauri, es. CmdOrCtrl+Alt+M.',
+    quickCaptureHint: 'Una scorciatoia di sistema che apre una piccola finestra ovunque: scrivi, premi Invio e la nota finisce in posta in arrivo senza portare l’app in primo piano. Sintassi acceleratore di Tauri, es. CmdOrCtrl+Alt+Shift+M.',
     quickCaptureFailed: 'Non registrata: {error}',
     codeBlockWrap: 'A capo automatico nei blocchi di codice',
     codeBlockWrapHint: 'Manda a capo le righe di codice più larghe del blocco invece di mostrare una barra di scorrimento orizzontale. PDF/stampa va sempre a capo.',

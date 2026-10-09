@@ -24,6 +24,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { forceWinChromePreview, isIOS, isMacOS, isMobile, isWindowsDesktop } from '../lib/platform';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
+import { MERMAID_INSERT_SNIPPET } from '../lib/insert-snippet';
 import { EditorView } from '@codemirror/view';
 
 const { t } = useI18n();
@@ -402,6 +403,8 @@ const floatStyle = computed<Record<string, string | number> | undefined>(() => {
     // click" into "click, scroll, move, click". It still scrolls when the
     // window really is too short.
     maxHeight: `calc(100vh - ${menuPos.value.top}px - 8px)`,
+    // Never wider than the window (see keepMenuOnScreen).
+    maxWidth: 'calc(100vw - 16px)',
   };
   if (menuPos.value.left !== undefined) s.left = `${menuPos.value.left}px`;
   // `.dropdown__menu` carries `left: 0` from its stylesheet; a right-anchored
@@ -417,6 +420,22 @@ function positionMenuFromButton(btn: HTMLElement | null, align: 'left' | 'right'
   } else {
     menuPos.value = { top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 16) };
   }
+}
+/**
+ * The menu is anchored to its button, so a wide menu under a button near the
+ * edge of a narrow window ran off the screen: on a phone with a large display
+ * size the View menu's ✓ marks and icons were cut off on the left. Once it has
+ * rendered, measure it and pin it to whichever edge it crossed (watcher
+ * below, after the open-flag and anchor changes have reached the DOM).
+ */
+function keepMenuOnScreen() {
+  const pos = menuPos.value;
+  const el = document.querySelector<HTMLElement>('.dropdown__menu[data-tb-menu], .menubar__menu');
+  if (!pos || !el) return;
+  const r = el.getBoundingClientRect();
+  const margin = 8;
+  if (r.left < margin) menuPos.value = { top: pos.top, left: margin };
+  else if (r.right > window.innerWidth - margin) menuPos.value = { top: pos.top, right: margin };
 }
 
 // Pomodoro popover, opened from the palette. Anchored under the right end of
@@ -743,6 +762,13 @@ function openByKey(name: DropdownName) {
 }
 const anyToolbarMenuOpen = computed(
   () => newOpen.value || openOpen.value || exportOpen.value || insertOpen.value || aiOpen.value || viewOpen.value,
+);
+watch(
+  () => [menuPos.value, anyToolbarMenuOpen.value, menubarOpen.value],
+  () => {
+    if (anyToolbarMenuOpen.value || menubarOpen.value) keepMenuOnScreen();
+  },
+  { flush: 'post' },
 );
 
 // ── Keyboard access for the toolbar menus ────────────────────────────────────
@@ -1150,7 +1176,7 @@ onBeforeUnmount(() => {
             <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n')">
               <span class="dropdown__name">{{ t('toolbar.insertTable') }}</span>
             </button>
-            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n```mermaid\ngraph TD\n  A[$|$] --> B[End]\n```\n')">
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert(MERMAID_INSERT_SNIPPET)">
               <span class="dropdown__name">{{ t('toolbar.insertMermaid') }}</span>
             </button>
             <div class="dropdown__sep"></div>
@@ -1795,7 +1821,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 280px;
+  min-width: min(280px, calc(100vw - 16px));
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -1806,7 +1832,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 .dropdown__menu--narrow {
-  min-width: 200px;
+  min-width: min(200px, calc(100vw - 16px));
 }
 .dropdown__item {
   display: flex;

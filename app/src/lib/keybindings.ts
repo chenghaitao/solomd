@@ -238,8 +238,46 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'proofread.cjk', label: 'CJK Proofread', category: 'tools', defaults: ['Mod+Shift+J'] },
   { id: 'daily.openToday', label: "Open Today's Daily Note", category: 'tools', defaults: ['Mod+D'] },
   { id: 'inbox.toggle', label: 'Toggle Inbox Flag / Organize', category: 'tools', defaults: ['Mod+E'] },
-  { id: 'pomodoro.startLast', label: 'Start Writing Session (Zen)', category: 'tools', defaults: ['Mod+Shift+Z'] },
+  // Unbound by default. It shipped on ⌘⇧Z, which is redo on macOS (and in
+  // CodeMirror everywhere), so every redo also started a writing session.
+  // Bind it in Settings › Shortcuts.
+  { id: 'pomodoro.startLast', label: 'Start Writing Session (Zen)', category: 'tools', defaults: [] },
 ];
+
+/**
+ * The chords every text field means the same thing by — undo, redo, select
+ * all, clipboard. No app action ships on one, and when the editor has
+ * already acted on one no app action runs for it either (`appRunsAfterEditor`).
+ */
+export const STANDARD_EDITING_CHORDS: readonly KeyCombo[] = [
+  'Mod+Z', 'Mod+Shift+Z', 'Mod+Y', 'Mod+A', 'Mod+C', 'Mod+V', 'Mod+X',
+];
+
+/** File, window and navigation commands act on the app, not the text, so
+ *  they still run when the editor also used the chord (Vim's Ctrl-o, …). */
+const OVERRIDES_EDITOR: ReadonlySet<string> = new Set(['file', 'navigate']);
+/** App-level commands filed under Tools that are not text edits either. */
+const OVERRIDES_EDITOR_IDS: ReadonlySet<string> = new Set([
+  'settings.open', 'help.markdown', 'daily.openToday', 'inbox.toggle',
+]);
+
+/**
+ * Whether the window-level shortcut handler should still run `actionId` for
+ * a keydown CodeMirror's own keymap already handled (it called
+ * preventDefault). App shortcuts listen on `window`, after the editor, so a
+ * chord in both did two things at once: ⌘⇧Z redid the edit *and* started a
+ * Pomodoro session. Editing-level actions defer to the editor; commands
+ * about files, windows and navigation still run.
+ */
+export function appRunsAfterEditor(
+  actionId: string,
+  combo: KeyCombo,
+  platform: 'mac' | 'windows' | 'linux' = currentPlatform(),
+): boolean {
+  if (STANDARD_EDITING_CHORDS.includes(normalizeCombo(combo))) return false;
+  const def = activeActionById(actionId, platform);
+  return !!def && (OVERRIDES_EDITOR.has(def.category) || OVERRIDES_EDITOR_IDS.has(def.id));
+}
 
 /** Keys whose `event.key` is punctuation — spelled by code for stability. */
 const PUNCT_BY_CODE: Record<string, string> = {

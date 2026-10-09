@@ -8,6 +8,7 @@ import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatchi
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { cjkFriendlyEmphasis } from '../lib/cm-cjk-emphasis';
 import { initMermaid } from '../lib/mermaid-lazy';
+import { parseInsertSnippet } from '../lib/insert-snippet';
 // The grammar imports and the `codeLanguages` list they feed now live in
 // `lib/code-languages.ts`: the ``` fence-language picker (#297) derives its
 // catalogue from that same list, so there is only one copy to keep in sync.
@@ -47,7 +48,7 @@ import {
 import { caretRowInfo, caretTopPx, caretPointPx, lastVisualRowStart, firstVisualRowEnd, measureLineHeights, offsetAtPoint } from '../lib/textarea-metrics';
 import { activeParagraphLines, lineAt } from '../lib/focus-paragraph';
 import { transformCase, nextCaseInCycle, caseTargetRange, type CaseMode } from '../lib/text-case';
-import { applyFormat, FORMAT_KINDS, type FormatKind } from '../lib/md-format';
+import { applyFormat, FORMAT_KINDS, listIndentEdit, type FormatKind } from '../lib/md-format';
 import { useFormatHints } from '../composables/useFormatHints';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore, buildEditorFontStack } from '../stores/settings';
@@ -234,6 +235,9 @@ function baseKeymap() {
 }
 const richCompartment = new Compartment();
 const spellCheckCompartment = new Compartment();
+// Search panel labels: reconfigured when the UI language changes, or tabs
+// open before a switch kept the old language until restart.
+const searchPhrasesCompartment = new Compartment();
 const focusCompartment = new Compartment();
 const typewriterCompartment = new Compartment();
 const vimCompartment = new Compartment();
@@ -1259,14 +1263,18 @@ function handlePlainPaste(event: ClipboardEvent) {
 }
 
 function plainInsertText(snippet: string) {
+  // The Insert-menu `$|$` caret markers were inserted literally here before.
+  const parsed = parseInsertSnippet(snippet);
   if (plainLiveEnabled.value) {
     const index = plainActiveBlock.value;
     const el = plainBlockEditors.value[index];
     if (!el) return;
     const start = el.selectionStart ?? 0;
     const end = el.selectionEnd ?? 0;
-    const nextBlock = `${el.value.slice(0, start)}${snippet}${el.value.slice(end)}`;
-    updatePlainBlock(index, nextBlock, start + snippet.length);
+    const nextBlock = `${el.value.slice(0, start)}${parsed.text}${el.value.slice(end)}`;
+    // Blocks re-split after the edit, so only a caret survives here; it goes
+    // after any placeholder label.
+    updatePlainBlock(index, nextBlock, start + parsed.head);
     return;
   }
   const el = plainEditor.value;
@@ -1274,10 +1282,9 @@ function plainInsertText(snippet: string) {
   recordPlainHistory();
   const start = el.selectionStart ?? 0;
   const end = el.selectionEnd ?? 0;
-  const next = `${el.value.slice(0, start)}${snippet}${el.value.slice(end)}`;
+  const next = `${el.value.slice(0, start)}${parsed.text}${el.value.slice(end)}`;
   el.value = next;
-  const caret = start + snippet.length;
-  el.setSelectionRange(caret, caret);
+  el.setSelectionRange(start + parsed.anchor, start + parsed.head);
   plainText.value = next;
   tabs.setContent(props.tab.id, next);
   emitPlainCursorAndSelection();
@@ -2027,6 +2034,11 @@ function computePlainTabEdit(
   const v = el.value;
   const s = el.selectionStart ?? 0;
   const e = el.selectionEnd ?? 0;
+  // F-7 — list items nest at their parent's content column, as in CodeMirror.
+  const list = props.tab.language === 'markdown' ? listIndentEdit(v, s, e, outdent) : null;
+  if (list) {
+    return { value: v.slice(0, list.from) + list.insert + v.slice(list.to), selStart: list.selFrom, selEnd: list.selTo };
+  }
   if (!outdent && s === e) {
     return { value: v.slice(0, s) + INDENT + v.slice(e), selStart: s + INDENT.length, selEnd: s + INDENT.length };
   }
@@ -3507,11 +3519,51 @@ function markdownExt() {
 }
 
 /**
+ * F-7 — Tab / Shift+Tab on a Markdown list item nests it at its parent's
+ * content column and renumbers (lib/md-format `listIndentEdit`); anything
+ * else falls through to indentWithTab.
+ */
+function listIndentCommand(v: EditorView, outdent: boolean): boolean {
+  if (props.tab.language !== 'markdown' || v.state.readOnly) return false;
+  if (v.state.selection.ranges.length > 1) return false;
+  const sel = v.state.selection.main;
+  const edit = listIndentEdit(v.state.doc.toString(), sel.from, sel.to, outdent);
+  if (!edit) return false;
+  v.dispatch({
+    changes: { from: edit.from, to: edit.to, insert: edit.insert },
+    selection: sel.empty ? { anchor: edit.selFrom } : { anchor: edit.selFrom, head: edit.selTo },
+    scrollIntoView: true,
+    userEvent: 'input.indent',
+  });
+  return true;
+}
+
+/**
  * Ordered-list numbers follow a line added or removed by the user — the
  * textarea editors apply the same rule at their commit points
  * (lib/list-renumber). Appended to the same transaction, so one undo step
  * takes back the edit and the renumbering together.
  */
+/** The search panel's labels in the UI language (its own strings are English). */
+function searchPanelPhrases(): Record<string, string> {
+  // The plain editor's labels carry their key hint, "Next (Enter)"; the
+  // panel's buttons are bare words.
+  const bare = (key: string) => t(key).replace(/\s*[(（][^)）]*[)）]\s*$/, '');
+  return {
+    Find: t('plainFind.findPlaceholder'),
+    Replace: t('plainFind.replacePlaceholder'),
+    next: bare('plainFind.next'),
+    previous: bare('plainFind.prev'),
+    all: t('plainFind.selectAll'),
+    'match case': t('plainFind.matchCase'),
+    regexp: t('plainFind.regexp'),
+    'by word': t('plainFind.wholeWord'),
+    replace: t('plainFind.replaceOne'),
+    'replace all': t('plainFind.replaceAll'),
+    close: bare('plainFind.close'),
+  };
+}
+
 const listRenumberFilter = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged || !(tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move'))) {
     return tr;
@@ -3663,6 +3715,8 @@ function buildExtensions() {
           bracketMatching(),
           highlightActiveLine(),
           search({ top: true }),
+          // CodeMirror's search panel speaks English unless given phrases.
+          searchPhrasesCompartment.of(EditorState.phrases.of(searchPanelPhrases())),
           incrementalFindScroll,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ]),
@@ -3673,7 +3727,12 @@ function buildExtensions() {
     // baseKeymap so it wins over the plain newline.
     listContinuationKeymap(() => listContinuationOptions()),
     baseKeymapCompartment.of(baseKeymap()),
-    keymap.of([...historyKeymap, indentWithTab]),
+    keymap.of([
+      ...historyKeymap,
+      { key: 'Tab', run: (v) => listIndentCommand(v, false) },
+      { key: 'Shift-Tab', run: (v) => listIndentCommand(v, true) },
+      indentWithTab,
+    ]),
     lineNumCompartment.of(settings.showLineNumbers ? lineNumbers() : []),
     wrapCompartment.of(settings.wordWrap ? EditorView.lineWrapping : []),
     langCompartment.of(
@@ -3841,6 +3900,7 @@ onMounted(() => {
     parent: host.value,
   });
   maybeRestoreSession();
+  focusFreshCodeMirror();
   // Expose the focused EditorView on `window` for dev-bridge / self-test
   // harnesses. Vite injects `import.meta.env.DEV === true` only in dev
   // builds; production bundles dead-code-eliminate this entire block.
@@ -4286,6 +4346,23 @@ onBeforeUnmount(() => {
 // `setState` reset it to 0.
 const tabCaretMemory = new Map<string, { caret: number; scrollTop: number }>();
 
+/**
+ * F-10 — a document file.new / file.newText just made: no file, nothing in
+ * it, and not a tab this editor has shown before (switching away records it
+ * in tabCaretMemory). Only these take focus on the CodeMirror path; opening
+ * or switching to a document leaves focus where it is, as before.
+ */
+function isFreshUntitledTab(): boolean {
+  const t = props.tab;
+  return !t.filePath && t.content === '' && t.savedContent === '' && !tabCaretMemory.has(t.id);
+}
+
+function focusFreshCodeMirror() {
+  if (!isFreshUntitledTab()) return;
+  // After the palette / menu that ran the command has closed.
+  nextTick(() => view?.focus());
+}
+
 // #169 (Windows) — one synchronous scrollTop assignment is not enough on the
 // plain paths: focusPlainEditor() focuses on nextTick, and the browser then
 // scrolls the caret back into view — line 1 when the user only scrolled and
@@ -4380,6 +4457,7 @@ watch(
       })
     );
     maybeRestoreSession();
+    focusFreshCodeMirror();
     if (saved) {
       // #169 — one synchronous assignment is not enough: async widget renders
       // (tables / images / mermaid) and CM's post-setState measure pass can
@@ -4417,6 +4495,15 @@ watch(
   (key) => {
     if (IS_APP_STORE_BUILD) return;
     view?.dispatch({ effects: aiKeyCompartment.reconfigure(aiRewriteExtension(key)) });
+  },
+);
+
+watch(
+  () => settings.language,
+  () => {
+    view?.dispatch({
+      effects: searchPhrasesCompartment.reconfigure(EditorState.phrases.of(searchPanelPhrases())),
+    });
   },
 );
 
@@ -4799,8 +4886,11 @@ function getViewLine(): number | null {
     return line;
   }
   if (!view) return null;
-  const top = view.scrollDOM.scrollTop;
-  const block = view.lineBlockAtHeight(top);
+  // Block heights are measured from the top of the document; scrollTop also
+  // counts the content's top padding above it (56px in 5.0). Mixing the two
+  // put the split panes that far apart.
+  const top = view.scrollDOM.scrollTop - docTopInScroller(view);
+  const block = view.lineBlockAtHeight(Math.max(0, top));
   const frac =
     block.height > 0 ? Math.max(0, Math.min(0.999, (top - block.top) / block.height)) : 0;
   return view.state.doc.lineAt(block.from).number + frac;
@@ -4822,7 +4912,13 @@ function lineTopY(line: number): number | null {
   }
   if (!view) return null;
   const safe = Math.max(1, Math.min(Math.floor(line), view.state.doc.lines));
-  return view.lineBlockAt(view.state.doc.line(safe).from).top;
+  return view.lineBlockAt(view.state.doc.line(safe).from).top + docTopInScroller(view);
+}
+
+/** Where the document starts in the scroller's scrollTop space — the
+ *  content's top padding. */
+function docTopInScroller(v: EditorView): number {
+  return v.documentTop - v.scrollDOM.getBoundingClientRect().top + v.scrollDOM.scrollTop;
 }
 
 /**
@@ -4862,20 +4958,16 @@ function insertMarkdown(snippet: string): void {
     return;
   }
   if (!view) return;
-  const CURSOR = '$|$';
-  const cursorIdx = snippet.indexOf(CURSOR);
-  const finalText = cursorIdx >= 0 ? snippet.replace(CURSOR, '') : snippet;
+  const parsed = parseInsertSnippet(snippet);
   const sel = view.state.selection.main;
   // Add a leading newline if not already at the start of a line, for block-level snippets.
   const needsLeadingBreak = snippet.startsWith('\n') && sel.from > 0 &&
     view.state.doc.sliceString(sel.from - 1, sel.from) !== '\n';
-  const insertText = needsLeadingBreak ? '\n' + finalText : finalText;
-  const adjust = needsLeadingBreak ? 1 : 0;
+  const insertText = needsLeadingBreak ? '\n' + parsed.text : parsed.text;
+  const base = sel.from + (needsLeadingBreak ? 1 : 0);
   view.dispatch({
     changes: { from: sel.from, to: sel.to, insert: insertText },
-    selection: {
-      anchor: cursorIdx >= 0 ? sel.from + cursorIdx + adjust : sel.from + insertText.length,
-    },
+    selection: { anchor: base + parsed.anchor, head: base + parsed.head },
   });
   view.focus();
 }

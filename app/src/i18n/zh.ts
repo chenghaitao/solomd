@@ -265,6 +265,9 @@ export const zh: I18n = {
     permGrant: '去开启权限',
   },
   plainFind: {
+    wholeWord: "全词匹配",
+    regexp: "正则表达式",
+    selectAll: '全部选中',
     prev: '上一个 (Shift+Enter)',
     next: '下一个 (Enter)',
     matchCase: '区分大小写',
@@ -272,7 +275,7 @@ export const zh: I18n = {
     findPlaceholder: '查找',
     replacePlaceholder: '替换为',
     replaceOne: '替换',
-    replaceAll: '全部',
+    replaceAll: "全部替换",
   },
   explorer: {
     heading: '文件树',
@@ -334,6 +337,10 @@ export const zh: I18n = {
     folderMissingLocate: '重新定位文件夹…',
     copyRelPathDone: '相对路径已复制。',
     reveal: '在文件管理器中显示',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: '在资源管理器中显示',
+    revealFileManager: '在文件管理器中显示',
     refresh: '刷新',
     openFolder: '打开文件夹…',
     closeFolder: '关闭文件夹',
@@ -428,7 +435,7 @@ export const zh: I18n = {
     docxPresetAcademic: '学术 —— 封面、目录、双倍行距、页码',
     docxPresetHint: 'Word 导出从哪套模板开始。单篇文档可以用 front matter 里的 `docx:` 块覆盖其中任意一项（cover、toc、header、pageNumbers、font、fontSize、lineSpacing、title、author、date），写法和 `pdf:` 一样。',
     quickCapture: '快速捕获热键',
-    quickCaptureHint: '一个系统级快捷键，在任何应用里都能唤出一个小窗：输入、回车，笔记就进了收件箱，不用把主窗口切到前台。使用 Tauri 加速键写法，例如 CmdOrCtrl+Alt+M。',
+    quickCaptureHint: '一个系统级快捷键，在任何应用里都能唤出一个小窗：输入、回车，笔记就进了收件箱，不用把主窗口切到前台。使用 Tauri 加速键写法，例如 CmdOrCtrl+Alt+Shift+M。',
     quickCaptureFailed: '未能注册：{error}',
     codeBlockWrap: '代码块内自动换行',
     codeBlockWrapHint: '超出代码块宽度的长行自动折行显示,不再出现横向滚动条。PDF/打印始终自动换行。',

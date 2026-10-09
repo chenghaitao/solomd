@@ -16,8 +16,8 @@
  * the Preview pane uses, so the page still shows it wherever that server is
  * reachable.
  */
-import { initMermaid } from './mermaid-lazy';
-import { isPlantumlLang, plantumlSvgUrl } from './plantuml';
+import { initMermaid } from './mermaid-lazy.ts';
+import { isPlantumlLang, plantumlSvgUrl } from './plantuml.ts';
 
 // Ids must be unique per render across the whole session — mermaid keys
 // internal state off them and reusing one yields an empty diagram.

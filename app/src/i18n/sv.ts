@@ -264,6 +264,9 @@ export const sv: I18n = {
     permGrant: 'Ge åtkomst',
   },
   plainFind: {
+    wholeWord: "Hela ord",
+    regexp: "Reguljärt uttryck",
+    selectAll: 'Alla',
     prev: 'Föregående (Skift+Enter)',
     next: 'Nästa (Enter)',
     matchCase: 'Skiftlägeskänslig',
@@ -271,7 +274,7 @@ export const sv: I18n = {
     findPlaceholder: 'Sök',
     replacePlaceholder: 'Ersätt',
     replaceOne: 'Ersätt',
-    replaceAll: 'Alla',
+    replaceAll: "Ersätt alla",
   },
   explorer: {
     deleteTitle: 'Radera',
@@ -318,6 +321,10 @@ export const sv: I18n = {
     rename: 'Byt namn',
     delete: 'Radera',
     reveal: 'Visa i Finder',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Visa i Utforskaren',
+    revealFileManager: 'Visa i filhanteraren',
     refresh: 'Uppdatera',
     openFolder: 'Öppna mapp…',
     recentFolders: 'Recent folders',
@@ -426,7 +433,7 @@ export const sv: I18n = {
     docxPresetAcademic: 'Akademisk — omslag, innehåll, dubbelt radavstånd, sidnummer',
     docxPresetHint: 'Vad en Word-export utgår från. Ett `docx:`-block i front matter ersätter enskilda nycklar (cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date), precis som `pdf:`.',
     quickCapture: 'Snabbfångst-genväg',
-    quickCaptureHint: 'En systemomfattande genväg som öppnar en liten ruta var som helst: skriv, tryck Enter, och anteckningen hamnar i Inkorgen utan att appen tas fram. Tauri-acceleratorsyntax, t.ex. CmdOrCtrl+Alt+M.',
+    quickCaptureHint: 'En systemomfattande genväg som öppnar en liten ruta var som helst: skriv, tryck Enter, och anteckningen hamnar i Inkorgen utan att appen tas fram. Tauri-acceleratorsyntax, t.ex. CmdOrCtrl+Alt+Shift+M.',
     quickCaptureFailed: 'Inte registrerad: {error}',
     codeBlockWrap: 'Radbryt långa rader i kodblock',
     codeBlockWrapHint: 'Radbryter kodrader som är bredare än blocket i stället för en horisontell rullningslist. PDF/utskrift radbryter alltid.',

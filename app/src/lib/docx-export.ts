@@ -4,6 +4,7 @@
  *
  * Supports: headings (h1-h6), paragraphs, bold, italic, inline code, links,
  * fenced code blocks, ordered/bullet lists, blockquotes, horizontal rules,
+ * math (as LaTeX source),
  * tables, and embedded images (local + remote).
  */
 
@@ -29,17 +30,17 @@ import {
   TableOfContents,
   LineRuleType,
 } from 'docx';
-import { mermaidToPng } from './diagram-export';
-import { md, extractImageRoot, preprocessMarkdown } from './markdown';
+import { mermaidToPng } from './diagram-export.ts';
+import { md, extractImageRoot, preprocessMarkdown } from './markdown.ts';
 import {
   resolveDocxTemplate,
   renderHeaderText,
   type DocxPreset,
   type DocxTemplate,
-} from './docx-template';
-import { resolveImagePath } from './image-resolve';
-import { blobToPng, loadImageBlob } from './image-clipboard';
-import { isPlantumlLang, plantumlSvgUrl } from './plantuml';
+} from './docx-template.ts';
+import { resolveImagePath } from './image-resolve.ts';
+import { blobToPng, loadImageBlob } from './image-clipboard.ts';
+import { isPlantumlLang, plantumlSvgUrl } from './plantuml.ts';
 import type Token from 'markdown-it/lib/token.mjs';
 
 type BlockChild = Paragraph | Table;
@@ -273,6 +274,11 @@ function buildRuns(inlineToken: Token, style: RunStyle = {}): (TextRun | ImageRu
       case 'code_inline':
         push(new TextRun({ text: tok.content, ...toRunOpts({ ...cur, code: true }) }));
         break;
+      case 'math_inline':
+        // LaTeX source in a math font, so it reads as a formula rather than
+        // as stray prose (Word has no KaTeX).
+        push(new TextRun({ text: tok.content, ...toRunOpts(cur), font: MATH_FONT }));
+        break;
       case 'link_open': {
         const href = tok.attrGet('href') ?? '';
         pendingLink = { href, runs: [] };
@@ -299,6 +305,13 @@ function buildRuns(inlineToken: Token, style: RunStyle = {}): (TextRun | ImageRu
         break;
       }
       case 'html_inline': {
+        // A task item's checkbox (markdown.ts task_lists rule): Word has no
+        // checkbox run, so write the ballot glyph — readable in Word, and
+        // what the DOCX importer turns back into `- [ ]` / `- [x]`.
+        if (/task-list-item-checkbox/.test(tok.content || '')) {
+          push(new TextRun({ text: /\bchecked\b/.test(tok.content) ? '☑ ' : '☐ ', ...toRunOpts(cur) }));
+          break;
+        }
         const srcs = htmlImageSrcs(tok.content || '');
         for (const src of srcs) {
           const img = srcImages.get(src);
@@ -311,6 +324,21 @@ function buildRuns(inlineToken: Token, style: RunStyle = {}): (TextRun | ImageRu
     }
   }
   return out;
+}
+
+const MATH_FONT = 'Cambria Math';
+
+/** Display math as its LaTeX source: centred, one line per source line. */
+function mathBlockParagraph(latex: string): Paragraph {
+  const lines = latex.trim().split('\n');
+  return new Paragraph({
+    children: lines.flatMap((line, idx) => [
+      ...(idx > 0 ? [new TextRun({ break: 1 })] : []),
+      new TextRun({ text: line, font: MATH_FONT }),
+    ]),
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 160, after: 160 },
+  });
 }
 
 function toRunOpts(s: RunStyle) {
@@ -515,6 +543,15 @@ async function buildBody(tokens: Token[], imageRoot: string | null, filePath?: s
             })
           );
         }
+        i += 1;
+        break;
+      }
+      case 'math_block':
+      case 'math_block_eqno': {
+        // Word has no KaTeX: keep display math as its LaTeX source, one
+        // centred Cambria Math line per source line, rather than dropping it
+        // (same choice as the CLI exporter, scripts/solomd-export.mjs).
+        out.push(mathBlockParagraph(tok.content || ''));
         i += 1;
         break;
       }

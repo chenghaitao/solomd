@@ -264,6 +264,9 @@ export const pl: I18n = {
     permGrant: 'Przyznaj dostęp',
   },
   plainFind: {
+    wholeWord: "Całe słowo",
+    regexp: "Wyrażenie regularne",
+    selectAll: 'Wszystkie',
     prev: 'Poprzednie (Shift+Enter)',
     next: 'Następne (Enter)',
     matchCase: 'Uwzględnij wielkość liter',
@@ -271,7 +274,7 @@ export const pl: I18n = {
     findPlaceholder: 'Szukaj',
     replacePlaceholder: 'Zamień',
     replaceOne: 'Zamień',
-    replaceAll: 'Wszystkie',
+    replaceAll: "Zamień wszystko",
   },
   explorer: {
     deleteTitle: 'Usuń',
@@ -318,6 +321,10 @@ export const pl: I18n = {
     rename: 'Zmień nazwę',
     delete: 'Usuń',
     reveal: 'Pokaż w Finderze',
+    // The Finder wording above is macOS's; Windows and Linux name their own
+    // file manager (Linux regression run).
+    revealExplorer: 'Pokaż w Eksploratorze',
+    revealFileManager: 'Pokaż w menedżerze plików',
     refresh: 'Odśwież',
     openFolder: 'Otwórz folder…',
     recentFolders: 'Recent folders',
@@ -426,7 +433,7 @@ export const pl: I18n = {
     docxPresetAcademic: 'Akademicki — okładka, spis treści, podwójna interlinia, numery stron',
     docxPresetHint: 'Od czego zaczyna eksport do Worda. Blok `docx:` we front matter nadpisuje pojedyncze klucze (cover, toc, header, pageNumbers, font, fontSize, lineSpacing, title, author, date), tak jak `pdf:`.',
     quickCapture: 'Skrót szybkiego zapisu',
-    quickCaptureHint: 'Skrót systemowy otwierający małe okno w dowolnym miejscu: wpisz, naciśnij Enter, a notatka trafi do skrzynki odbiorczej bez przełączania się do aplikacji. Składnia akceleratora Tauri, np. CmdOrCtrl+Alt+M.',
+    quickCaptureHint: 'Skrót systemowy otwierający małe okno w dowolnym miejscu: wpisz, naciśnij Enter, a notatka trafi do skrzynki odbiorczej bez przełączania się do aplikacji. Składnia akceleratora Tauri, np. CmdOrCtrl+Alt+Shift+M.',
     quickCaptureFailed: 'Nie zarejestrowano: {error}',
     codeBlockWrap: 'Zawijaj długie wiersze w blokach kodu',
     codeBlockWrapHint: 'Zawija wiersze kodu szersze niż blok zamiast pokazywać poziomy pasek przewijania. PDF/druk zawsze zawija.',

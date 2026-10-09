@@ -49,8 +49,8 @@ import frontMatter from 'markdown-it-front-matter';
 import mark from 'markdown-it-mark';
 import cjkFriendly from 'markdown-it-cjk-friendly';
 import yaml from 'js-yaml';
-import { numberEquations } from './equations';
-import { sanitizeRenderedHtml } from './sanitize-html';
+import { numberEquations } from './equations.ts';
+import { sanitizeRenderedHtml } from './sanitize-html.ts';
 
 // NOTE: `@hedgedoc/markdown-it-task-lists` is installed but unusable here —
 // its compiled ESM entry does `import Token from 'markdown-it/lib/token.js'`

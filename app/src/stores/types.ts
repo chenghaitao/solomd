@@ -19,7 +19,7 @@
  */
 import { defineStore } from 'pinia';
 import { invoke } from '@tauri-apps/api/core';
-import { useWorkspaceIndexStore, type IndexEntry } from './workspaceIndex';
+import { useWorkspaceIndexStore, type IndexEntry } from './workspaceIndex.ts';
 import {
   buildRegistry,
   buildSections,
@@ -31,8 +31,8 @@ import {
   type TypeDef,
   type TypeMember,
   type TypeColorKey,
-} from '../lib/types-registry';
-import { patchFrontmatter } from '../lib/frontmatter';
+} from '../lib/types-registry.ts';
+import { patchFrontmatter } from '../lib/frontmatter.ts';
 
 /** Narrow a full IndexEntry to the minimal shape the registry needs. */
 function toTypeEntry(e: IndexEntry): TypeIndexEntry {
@@ -140,6 +140,9 @@ export const useTypesStore = defineStore('types', {
         `---\ntype: Type\n---\n\n# ${trimmed}\n\n` +
         `Notes with \`type: ${trimmed}\` in their frontmatter appear in this ` +
         `type's sidebar section.\n`;
+      // A vault without a Types/ folder yet: write_file does not create
+      // parents. fs_create_dir rejects "already exists", which is fine.
+      await invoke('fs_create_dir', { path: `${folder}${sep}Types` }).catch(() => {});
       await invoke('write_file', { path, content: body, encoding: 'UTF-8' });
       await idx.rescan();
       return path;
