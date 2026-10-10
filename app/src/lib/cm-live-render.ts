@@ -66,6 +66,9 @@ import {
   type LiveInlineHtmlKind,
 } from './html-live-render';
 import { copyPlainText, dedentFenced, dedentIndented } from './code-copy';
+// #395 — URL nodes that are a link *destination* (and so should be hidden)
+// versus URL nodes that are the visible label. Leaf module so it is testable.
+import { isLinkDestinationUrl } from './link-destination';
 
 // ---------------------------------------------------------------------------
 // Marker nodes that we hide off-line. Brackets/parens for links and
@@ -367,13 +370,22 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
           return;
         }
 
-        // ---- URL: hide only when it's the destination part of a real
-        //      `[label](url)` link. Autolinks (`<https://x.com>`) make
-        //      the URL the visible text, so we leave it alone there. ----
+        // ---- URL: hide only the DESTINATION of a `[label](url)` link.
+        //      Two shapes must stay visible:
+        //        • an Autolink (`<https://x.com>`), where the URL IS the text;
+        //        • a URL-shaped *label* (`[https://x.com](https://x.com)`),
+        //          which GFM's Autolink extension tags as a second URL node
+        //          inside the same Link. Hiding that erased the whole visible
+        //          text and left only the text before the link (#395).
+        //      Both cases are told apart by position, not by the parent — see
+        //      isLinkDestinationUrl() below.
         if (name === 'URL') {
-          const parent = node.node.parent;
-          const inLabeledLink = parent && parent.name === 'Link';
-          if (inLabeledLink && !showMarkers && !caretTouches && nTo > nFrom) {
+          if (
+            !showMarkers
+            && !caretTouches
+            && nTo > nFrom
+            && isLinkDestinationUrl(node.node, (a, b) => view.state.doc.sliceString(a, b))
+          ) {
             ranges.push(hideDeco.range(nFrom, nTo));
           }
           return;

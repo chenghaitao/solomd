@@ -178,6 +178,14 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'fmt.task', label: 'Task List', category: 'edit', defaults: ['Mod+Alt+9'] },
   { id: 'fmt.codeblock', label: 'Code Block', category: 'edit', defaults: ['Mod+Alt+K'] },
   { id: 'format.markdown', label: 'Format Markdown', category: 'edit', defaults: ['Mod+Alt+L'] },
+  // #387 — the Insert menu's table entry became a dialog that asks for the
+  // size, and it needed a chord of its own. Every ⌘/Ctrl[+Alt][+Shift]+T is
+  // already spoken for (New Note, Reopen Tab, Edit Table, Toggle Toolbar), and
+  // plain Ctrl+Alt+I is the Typora/Word preset's "Toggle Properties
+  // Inspector", so this is the next one down: I for Insert, in the Ctrl+Alt
+  // family the B4 remap settled on because AMD Software and Microsoft Pinyin
+  // swallow so many Ctrl+Shift chords on Windows.
+  { id: 'insert.table', label: 'Insert Table…', category: 'edit', defaults: ['Mod+Alt+Shift+I'] },
   { id: 'editor.tableEditor', label: 'Edit Table as Grid', category: 'edit', defaults: ['Mod+Alt+T'] },
   { id: 'editor.formulaEditor', label: 'Edit Formula', category: 'edit', defaults: ['Mod+Alt+M'] },
   { id: 'editor.aiRewrite', label: 'AI Rewrite Selection', category: 'edit', defaults: ['Mod+J'] },

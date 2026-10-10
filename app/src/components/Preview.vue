@@ -464,6 +464,12 @@ onBeforeUnmount(() => {
 });
 
 function openSearch() {
+  // #389 — ⌘/Ctrl+F toggles: pressed while the bar is up it closes again
+  // instead of re-focusing a box the user wants gone.
+  if (searchOpen.value) {
+    searchOpen.value = false;
+    return;
+  }
   searchOpen.value = true;
   nextTick(() => searchRef.value?.focusInput());
 }

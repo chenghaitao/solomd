@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useTabsStore } from '../stores/tabs';
+import { useToastsStore } from '../stores/toasts';
 import { useFiles } from '../composables/useFiles';
 import { useI18n } from '../i18n';
 import { revealLabelKey } from '../lib/platform';
 
 const tabs = useTabsStore();
+const toasts = useToastsStore();
 const files = useFiles();
 const { t } = useI18n();
 
@@ -64,7 +67,7 @@ async function closeMany(ids: string[]) {
   }
 }
 
-async function onMenu(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder') {
+async function onMenu(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'copyPath') {
   const m = menu.value;
   closeMenu();
   if (!m) return;
@@ -75,6 +78,21 @@ async function onMenu(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOther
     const path = list[idx]?.filePath;
     if (!path) return;
     try { await revealItemInDir(path); } catch (e) { console.warn('reveal failed', e); }
+    return;
+  }
+  // #385 — copy the tab's absolute path. The label / toast strings come from
+  // the explorer's `copyPath*` keys: the file tree has offered exactly this
+  // action since #120, and reusing them keeps one translation per language
+  // instead of two that could drift apart.
+  if (action === 'copyPath') {
+    const path = list[idx]?.filePath;
+    if (!path) return;
+    try {
+      await writeText(path);
+      toasts.success(t('explorer.copyPathDone') || 'Path copied.');
+    } catch (e) {
+      console.warn('copy path failed', e);
+    }
     return;
   }
   const ids = (() => {
@@ -167,6 +185,7 @@ function onTabsWheel(e: WheelEvent) {
       <li><button :disabled="!menuFlags?.hasSaved" @mousedown.prevent="onMenu('closeSaved')">{{ t('tabMenu.closeSaved') }}</button></li>
       <li><button :disabled="!menuFlags?.hasAll"   @mousedown.prevent="onMenu('closeAll')">{{ t('tabMenu.closeAll') }}</button></li>
       <li class="tab-menu__sep"></li>
+      <li><button :disabled="!menuFlags?.hasFilePath" @mousedown.prevent="onMenu('copyPath')">📋 {{ t('explorer.copyPath') || 'Copy Path' }}</button></li>
       <li><button :disabled="!menuFlags?.hasFilePath" @mousedown.prevent="onMenu('revealInFolder')">{{ t(revealLabelKey('tabMenu.revealInFolder')) }}</button></li>
     </ul>
   </div>

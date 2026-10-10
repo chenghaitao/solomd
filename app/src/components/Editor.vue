@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { EditorState, Compartment, Prec } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { searchKeymap, search, openSearchPanel, getSearchQuery, setSearchQuery } from '@codemirror/search';
+import { searchKeymap, search, openSearchPanel, closeSearchPanel, searchPanelOpen, getSearchQuery, setSearchQuery } from '@codemirror/search';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { cjkFriendlyEmphasis } from '../lib/cm-cjk-emphasis';
@@ -223,14 +223,36 @@ const aiKeyCompartment = new Compartment();
 // B4 — CodeMirror's own default/search keymap, minus every chord an app-level
 // shortcut owns (see `cmKeyOwnedByApp`). Reconfigured when bindings change.
 const baseKeymapCompartment = new Compartment();
+
+/**
+ * #389 — ⌘/Ctrl+F toggles the find panel instead of only opening it: the
+ * second press closes it, so the chord that summoned the box also dismisses
+ * it. `searchKeymap`'s own Mod-f binding always calls `openSearchPanel`, which
+ * is a no-op when the panel is already up, so the key looked dead.
+ */
+function toggleSearchPanel(view: EditorView): boolean {
+  if (searchPanelOpen(view.state)) {
+    closeSearchPanel(view);
+    view.focus();
+  } else {
+    openSearchPanel(view);
+  }
+  return true;
+}
+
 function baseKeymap() {
   const overrides = { ...settings.keybindings };
   return keymap.of(
-    [...defaultKeymap, ...searchKeymap].filter(
-      // #296 — Mod-i is CodeMirror's selectParentSyntax; it would widen the
-      // selection to the whole paragraph before Italic ran.
-      (b) => b.key !== 'Mod-i' && !cmKeyOwnedByApp(b, overrides),
-    ),
+    [...defaultKeymap, ...searchKeymap]
+      // #389 — swap the open-only Mod-f binding for the toggle, before the
+      // app-owned-chord filter below (which deliberately lets Mod-f through:
+      // `editor.find` is app-level only in the preview).
+      .map((b) => (b.key === 'Mod-f' ? { ...b, run: toggleSearchPanel } : b))
+      .filter(
+        // #296 — Mod-i is CodeMirror's selectParentSyntax; it would widen the
+        // selection to the whole paragraph before Italic ran.
+        (b) => b.key !== 'Mod-i' && !cmKeyOwnedByApp(b, overrides),
+      ),
   );
 }
 const richCompartment = new Compartment();
@@ -1544,6 +1566,26 @@ function closePlainFind(toMatch = false) {
   if (toMatch && m && plainFindQuery.value) selectPlainRange(m.start, m.end, true);
 }
 
+/**
+ * Keydown for the whole find bar (its ✕ button and its two fields bubble here).
+ *
+ *   1. Esc — close, handing the editor the current match (it is a text field
+ *      first: the bar can't let the key reach the document).
+ *   2. #389 — Ctrl/⌘+F closes it as well, mirroring the chord that opened it.
+ *      The fields are ordinary inputs, so the editor's own keydown handler
+ *      never sees the chord while one of them has focus.
+ */
+function onPlainFindBarKeydown(event: KeyboardEvent) {
+  const mod = event.ctrlKey || event.metaKey;
+  const isEsc = event.key === 'Escape';
+  const isFindChord =
+    mod && !event.altKey && !event.shiftKey && (event.key === 'f' || event.key === 'F');
+  if (!isEsc && !isFindChord) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closePlainFind(true);
+}
+
 /** Jump to the first match at or after where the caret was when the bar opened. */
 function revealPlainMatchFromAnchor() {
   runPlainSearch();
@@ -2072,7 +2114,9 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   const mod = event.ctrlKey || event.metaKey;
   if (mod && !event.altKey && (event.key === 'f' || event.key === 'F')) {
     event.preventDefault();
-    openPlainFind();
+    // #389 — Ctrl/⌘+F opens the find bar, and pressing it again closes it.
+    if (plainFindOpen.value) closePlainFind(true);
+    else openPlainFind();
     return true;
   }
   if (mod && !event.altKey && (event.key === 'z' || event.key === 'Z')) {
@@ -4126,12 +4170,15 @@ function onEditorCommand(e: Event) {
  */
 function openFind(): void {
   if (usePlainWindowsEditor) {
-    openPlainFind();
+    // #389 — the chord toggles on this path too; the find bar has no
+    // CodeMirror panel to ask, so the ref is the source of truth.
+    if (plainFindOpen.value) closePlainFind(true);
+    else openPlainFind();
     return;
   }
   if (view) {
     view.focus();
-    openSearchPanel(view);
+    toggleSearchPanel(view);
   }
 }
 
@@ -5172,7 +5219,7 @@ const cls = computed(() => ({
       ref="plainFindBar"
       class="plain-find"
       :class="{ 'plain-find--dodge': plainFindDodge }"
-      @keydown.esc.prevent.stop="closePlainFind(true)"
+      @keydown="onPlainFindBarKeydown"
     >
       <div class="plain-find__row">
         <!-- Enter / Shift+Enter step through matches and keep focus here;

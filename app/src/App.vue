@@ -197,6 +197,24 @@ function onImageUrlConfirm(url: string, alt: string) {
     }),
   );
 }
+// "Insert Table" dialog (#387). Reached from the toolbar's Insert menu, the
+// Paragraph menu, the command palette and Ctrl+Alt+Shift+I — all four funnel
+// through the one window event, which the bindable action `insert.table`
+// dispatches. On confirm the generated Markdown rides the same
+// `solomd:insert-markdown` channel the Insert menu's own snippets use, so it
+// lands at the caret in whichever editor the focused pane hosts.
+const insertTableDialogOpen = ref(false);
+function onOpenInsertTableDialog() {
+  insertTableDialogOpen.value = true;
+}
+function onInsertTableConfirm(markdown: string) {
+  insertTableDialogOpen.value = false;
+  window.dispatchEvent(
+    new CustomEvent('solomd:insert-markdown', {
+      detail: { snippet: markdown, paneId: tiles.focusedPaneId },
+    }),
+  );
+}
 // When a caller wants the Settings panel to land on a specific category
 // (e.g. the AI button → `integrations`), set this before opening; the
 // SettingsPanel watches it and switches activeCategory accordingly.
@@ -317,6 +335,8 @@ const { component: AgentSetupWizardC, open: wizardLazyOpen } = useLazyComponent(
   () => import('./components/AgentSetupWizard.vue'), () => wizardOpen.value);
 const { component: ImageUrlDialogC, open: imageUrlLazyOpen } = useLazyComponent(
   () => import('./components/ImageUrlDialog.vue'), () => imageUrlDialogOpen.value);
+const { component: InsertTableDialogC, open: insertTableLazyOpen } = useLazyComponent(
+  () => import('./components/InsertTableDialog.vue'), () => insertTableDialogOpen.value);
 const { component: AndroidFolderPickerC, open: androidPickerLazyOpen } = useLazyComponent(
   () => import('./components/AndroidFolderPicker.vue'), () => androidPickerOpen.value);
 
@@ -905,11 +925,15 @@ const menuCommands = useCommands();
 const updateCheck = useUpdateCheck();
 
 /** Insert-menu snippets (`$|$` marks where the caret lands) — the same
- *  templates the toolbar's Insert menu uses. */
+ *  templates the toolbar's Insert menu uses.
+ *
+ *  `insert.table` is deliberately absent since #387: it is a bindable action
+ *  (`useShortcuts`) that opens the size dialog, and `dispatchMenuAction` falls
+ *  through to it below — a snippet here would shadow that and paste a fixed
+ *  2×2 table again. */
 const INSERT_SNIPPETS: Record<string, string> = {
   'insert.mathBlock': '\n$$\n$|$\n$$\n',
   'insert.mathInline': '$$|$$',
-  'insert.table': '\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n',
   'insert.mermaid': MERMAID_INSERT_SNIPPET,
   'insert.hr': '\n---\n',
 };
@@ -1369,6 +1393,9 @@ onMounted(async () => {
   // can detach it — otherwise every HMR remount stacks another listener.
   window.addEventListener('solomd:open-agent-wizard', onOpenAgentWizard);
   window.addEventListener('solomd:open-image-url-dialog', onOpenImageUrlDialog);
+  // #387 — the bindable action / palette / toolbar all ask for the dialog
+  // through this one event.
+  window.addEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
 
   // Initialize tile layout: validate persisted state or create default
   tiles.validate(tabs.tabs);
@@ -1641,6 +1668,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('solomd:open-settings', onOpenSettingsEvent as EventListener);
   window.removeEventListener('solomd:open-agent-wizard', onOpenAgentWizard);
   window.removeEventListener('solomd:open-image-url-dialog', onOpenImageUrlDialog);
+  window.removeEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
   if (unlistenOpened) {
     unlistenOpened();
     unlistenOpened = null;
@@ -2272,6 +2300,14 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       :open="imageUrlLazyOpen"
       @confirm="onImageUrlConfirm"
       @cancel="imageUrlDialogOpen = false"
+    />
+    <!-- #387 — Insert → Table asks for the column and row counts first. -->
+    <component
+      :is="InsertTableDialogC"
+      v-if="InsertTableDialogC"
+      :open="insertTableLazyOpen"
+      @confirm="onInsertTableConfirm"
+      @cancel="insertTableDialogOpen = false"
     />
     <SessionRestoreDialog />
     <!-- v4.6 F5 — saved-view create/edit modal (self-mounts via window events). -->

@@ -139,6 +139,11 @@ export function useShortcuts(hooks: Hooks = {}) {
       FORMAT_KINDS.map((kind) => [`fmt.${kind}`, () => formatMarkdown(kind)]),
     ),
     'format.markdown': () => runById('format.markdown'),
+    // #387 — opens the size dialog rather than dropping a fixed 2×2 table.
+    // App.vue owns the dialog, so the chord only has to ask for it.
+    'insert.table': () => {
+      window.dispatchEvent(new CustomEvent('solomd:open-insert-table-dialog'));
+    },
     'editor.tableEditor': () => runById('editor.tableEditor'),
     'editor.formulaEditor': () => runById('editor.formulaEditor'),
     'export.copyHtml': () => void exporter.copyAsHtml(),

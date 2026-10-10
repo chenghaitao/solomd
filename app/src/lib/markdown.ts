@@ -186,6 +186,29 @@ export const md = new MarkdownIt({
   .use(mark)
   .use(cjkFriendly);
 
+// ---- #380 — allow `file:` link / image destinations -------------------------
+// `[临时记录](file:///F:\缓存目录\临时记录.md)` used to render as its own
+// literal source text: markdown-it's default validator blocks the scheme
+// outright (`BAD_PROTO_RE = /^(vbscript|javascript|file|data):/`), so the
+// `link` rule threw the destination away and emitted plain text. In a local
+// Markdown editor a local-file link is the *point*, so the scheme is allowed
+// back — and so is the inverted case that the fork already relied on:
+// `rewriteLinkUrls()` (./image-resolve.ts) has always rewritten relative links
+// to `file:///…` on export, producing HTML that SoloMD itself could not
+// re-open. The genuinely dangerous schemes stay blocked, exactly as before.
+//
+// The href is left percent-encoded in the DOM on purpose: a bare `C:\…` href
+// is rejected by the sanitizer's URI allow-list, whereas `file:` passes both
+// markdown-it and DOMPurify (see ALLOWED_URI_REGEXP in ./sanitize-html.ts).
+// `openRenderedLink()` decodes it back into a filesystem path.
+const stockValidateLink = md.validateLink.bind(md);
+md.validateLink = (url: string): boolean => {
+  const str = String(url ?? '').trim().toLowerCase();
+  if (!str) return false;
+  if (str.startsWith('file:')) return true;
+  return stockValidateLink(url);
+};
+
 // ---- Wikilink rule (`[[X]]`, `[[X|alias]]`, `[[X#heading]]`) ---------------
 // Used by F1 (v2.0). Renders into <a class="md-wikilink" data-wikilink-target="X">…</a>.
 // Preview.vue intercepts clicks and resolves through the workspace index.

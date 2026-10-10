@@ -7,10 +7,12 @@
  *   - wikilink            → resolved in-app (`solomd:wiki-open`)
  *   - `#heading`          → left to the browser (in-page jump)
  *   - http(s) / mailto    → the system browser
+ *   - `file:` URL         → the file it names (#380)
  *   - a relative path     → opened against the current file (`openLinkedFile`)
  */
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useFiles } from '../composables/useFiles';
+import { localPathFromHref } from './file-link.ts';
 
 /**
  * Handle a click that landed on (or inside) `anchor`. Returns true when the
@@ -36,6 +38,19 @@ export function openRenderedLink(anchor: HTMLAnchorElement, e: Event, filePath?:
   if (/^(https?|mailto|tel):/i.test(href)) {
     openUrl(href).catch((err) => {
       console.warn('[link] openUrl failed:', href, err);
+    });
+    return true;
+  }
+  // #380 — an absolute local path, typically written as
+  // `[note](file:///F:\dir\note.md)`. Must be tested before the relative-path
+  // branch: `resolveRelativePath()` would happily fold `file:///F:/…` into
+  // garbage segments under the current file's directory. The href is still
+  // percent-encoded here (markdown-it normalises it on the way out), so
+  // `localPathFromHref` does the decoding back to a real filesystem path.
+  const localPath = localPathFromHref(href);
+  if (localPath) {
+    useFiles().openLinkedFile(localPath, { bypassNewWindow: true }).catch((err) => {
+      console.warn('[link] openLinkedFile failed:', localPath, err);
     });
     return true;
   }

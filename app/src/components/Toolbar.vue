@@ -498,6 +498,16 @@ function openImageUrlDialog() {
   window.dispatchEvent(new CustomEvent('solomd:open-image-url-dialog'));
 }
 
+/**
+ * #387 — "Table" opens the size dialog (mounted in App.vue) instead of pasting
+ * a fixed 2×2 template. The dialog owns the counts and the Markdown; this menu
+ * only has to close itself and ask.
+ */
+function openInsertTable() {
+  insertOpen.value = false;
+  window.dispatchEvent(new CustomEvent('solomd:open-insert-table-dialog'));
+}
+
 function shortPath(p: string) {
   const parts = p.split(/[\\/]/);
   return parts[parts.length - 1] || p;
@@ -1173,8 +1183,11 @@ onBeforeUnmount(() => {
               <span class="dropdown__name">{{ t('toolbar.insertMathInline') }}</span>
             </button>
             <div class="dropdown__sep"></div>
-            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert('\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n')">
+            <!-- #387 — asks for the column and row counts before inserting,
+                 rather than pasting a fixed 2×2 table. -->
+            <button class="dropdown__item dropdown__item--single dropdown__item--kbd" role="menuitem" tabindex="-1" @mousedown.prevent="openInsertTable">
               <span class="dropdown__name">{{ t('toolbar.insertTable') }}</span>
+              <kbd v-if="chord('insert.table')" class="dropdown__kbd">{{ chord('insert.table') }}</kbd>
             </button>
             <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="dispatchInsert(MERMAID_INSERT_SNIPPET)">
               <span class="dropdown__name">{{ t('toolbar.insertMermaid') }}</span>

@@ -368,6 +368,17 @@ export function useCommands(): Command[] {
     },
 
     {
+      // #387 — was a palette entry that pasted a fixed 2×2 template; it now
+      // asks for the size first. Same id as the menu item and the bindable
+      // action, so the chord, the menu and the palette stay one behaviour.
+      id: 'insert.table',
+      title: 'Insert Table…',
+      shortcut: kb('insert.table'),
+      hint: 'Choose the number of columns and rows, then insert a Markdown table',
+      run: () => window.dispatchEvent(new CustomEvent('solomd:open-insert-table-dialog')),
+    },
+
+    {
       id: 'editor.formulaEditor',
       title: 'Edit Formula…',
       shortcut: kb('editor.formulaEditor'),

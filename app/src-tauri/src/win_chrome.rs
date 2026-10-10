@@ -26,6 +26,48 @@
 //!
 //! Only the main window is subclassed — auxiliary windows keep their maximize
 //! button as a plain HTML button (no snap flyout there, JS handles the click).
+//!
+//! ## Why `shadow: false` (#378)
+//!
+//! `shadow: true` does not mean "ask DWM for a drop shadow" — tao implements it
+//! by *inflating the window*: the HWND is made `SM_CXSIZEFRAME +
+//! SM_CXPADDEDBORDER` wider on both sides and taller at the bottom (~8px at
+//! 100% DPI), `WM_NCCALCSIZE` insets the client rect by those same amounts, and
+//! DWM fills the resulting margin with the shadow. Verified in tao **0.34.8**
+//! — the version `Cargo.lock` actually pins; see `util::calculate_insets_for_dpi`
+//! and `event_loop.rs`'s `WM_NCCALCSIZE` arm, plus `window_state.rs` for the
+//! style bits below. Two consequences:
+//!
+//!   * with the shadow on, the visible window is smaller than its HWND, so
+//!     anything positioning itself against the real window rect lands off by
+//!     that margin; and
+//!   * tao's `WM_NCHITTEST` for the `MARKER_UNDECORATED_SHADOW` case claims the
+//!     top strip and *skips* its own edge hit-testing (the `else` binds to the
+//!     inner `if`), so the other three edges depend on DWM's frame instead.
+//!
+//! With the shadow off the client rect is the window rect and tao runs its full
+//! edge hit-test (all four edges resize through the same code path). The window
+//! would then have no visible edge at all, so the app shell draws a one-pixel
+//! hairline instead — see the `#app` rule in src/styles/main.css.
+//!
+//! ### Known limitation: the band under the native save panel (2026-10-10)
+//!
+//! `shadow: false` does **not** stop Windows from drawing a frame — it only
+//! stops tao from reserving room for one. tao never calls into DWM:
+//! `to_window_styles()` unconditionally ORs `WS_CAPTION | WS_SYSMENU |
+//! WS_EX_WINDOWEDGE` into the styles handed to `CreateWindowExW`, and strips
+//! `WS_CAPTION` only for *child* windows (the strip inside
+//! `to_adjusted_window_styles()` feeds `AdjustWindowRectEx`, never the create
+//! call). The OS therefore still sees a captioned, resizable frame window whose
+//! client area tao fakes out to full bleed via `WM_NCCALCSIZE`. Whenever the
+//! frame is re-negotiated — bringing up the modal native save panel disables
+//! our owner window for exactly that moment — a flat grey band can flash along
+//! the bottom edge and then clear itself after a few seconds.
+//!
+//! That artefact is framework-level, not ours: nothing in this module and no CSS
+//! rule paints it, and other Tauri/Rust apps on Win11 behave the same, so it is
+//! deliberately left alone. Do **not** "fix" it by dropping `WS_CAPTION` /
+//! `WS_THICKFRAME`: Win11 Snap Layouts is built on the window staying captioned.
 
 #![cfg(target_os = "windows")]
 

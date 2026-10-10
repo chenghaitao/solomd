@@ -5,6 +5,10 @@
  */
 
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+// `.ts` extension, not the usual extension-less style: this module is covered
+// by src/lib/image-resolve.test.ts, which the fork's `node --test` runner loads
+// directly (see the note in markdown.ts).
+import { localPathFromHref } from './file-link.ts';
 
 /**
  * Normalize a filesystem path so `convertFileSrc` produces a URL the
@@ -114,6 +118,15 @@ export function resolveImagePath(
 ): string {
   if (!src) return src;
   if (/^(https?|data|blob|asset|tauri):/i.test(src)) return src;
+  // #380 — with `file:` destinations now accepted by the markdown validator
+  // (`![](file:///F:/pics/a.png)` renders as an <img> instead of literal text),
+  // unwrap the URL before the relative-path logic below gets a chance to fold
+  // it into a bogus sibling of the current note. Plain absolute paths fall
+  // through unchanged.
+  if (/^file:/i.test(src)) {
+    const unwrapped = localPathFromHref(src);
+    if (unwrapped) return unwrapped;
+  }
 
   let p = cleanLocalImageSrc(src);
 
