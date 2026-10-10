@@ -61,7 +61,7 @@ href 刻意保留 `file:` 前缀（裸 `C:\…` 会被 sanitizer 的 `ALLOWED_UR
 
 - **导出保存面板底部的残留阴影**：`app/src-tauri/tauri.windows.conf.json` 的 `shadow: true` → **`false`**。
   tao 的 `shadow` 不是「让 DWM 画个阴影」，而是**把 HWND 撑大**（左右 / 下各 +`SM_CXSIZEFRAME + SM_CXPADDEDBORDER`
-  ≈ 8px，上 1px），再用 `WM_NCCALCSIZE` 把客户区缩回去 —— 可见窗口因此比 HWND 小一圈，那圈边距就是残留带的来源。
+  ≈ 8px，上 1px），再用 `WM_NCCALCSIZE` 把客户区缩回去 —— 可见窗口因此比 HWND 小一圈。
   关掉后窗口没有任何描边，故在 `src/styles/main.css` 给 `#app` 补 `box-shadow: inset 0 0 0 1px var(--border)`
   （inset 不占布局）。
 - **「弹窗时无法拖动标题栏」是预期行为，保留**：`tauri-plugin-dialog` 的 `save()` 总是把调用它的 webview 作为
