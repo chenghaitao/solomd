@@ -806,18 +806,32 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content--fit) table {
   width: 100%;
 }
+/* #384 — zebra striping: across a wide reading column a bare grid makes it
+   easy to lose the row you are on. `tbody` only, so the header never takes a
+   stripe, and mixed against `--text` so one rule works on both themes. */
+:where(.preview-content) tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+}
 /* #367 — a table wider than the column scrolls on its own instead of
    pushing the whole preview sideways (where the headings and prose scroll
-   away with it). `display: block` + `max-content` is the GitHub recipe: a
-   narrow table still sizes to its content, a wide one is capped at the column
-   and gets its own horizontal scrollbar. On screen only and only in the
-   preview pane — print/PDF overlays reuse `.preview-content` and must not
-   clip. Fit-width mode keeps its full-width tables (the block box would stop
-   them stretching); there the pane itself still scrolls. */
+   away with it). `display: block` turns the table itself into the scroll
+   container: the anonymous table box generated inside it fills the block, so
+   a normal table spans the column and a too-wide one is capped at the column
+   and gets its own horizontal scrollbar.
+   #384 — the block used to be sized `max-content`, which shrank *every*
+   table to its content and left a short table floating mid-column once the
+   reader turned "fit width" off and pinned the column to a fixed width. It
+   is `100%` now, so tables line up with the prose; the anonymous box still
+   measures its columns by content, and `overflow-x` still catches a table
+   that cannot fit.
+   On screen only and only in the preview pane — print/PDF overlays reuse
+   `.preview-content` and must not clip. Fit-width mode keeps its full-width
+   tables (the block box would stop them stretching); there the pane itself
+   still scrolls. */
 @media screen {
   .preview-host .preview-content:not(.preview-content--fit) table {
     display: block;
-    width: max-content;
+    width: 100%;
     max-width: 100%;
     overflow-x: auto;
   }
@@ -989,17 +1003,38 @@ defineExpose({ scrollToLine, openSearch });
   padding: 64px 32px 96px;
   font-family: var(--font-reading);
   /* #143 — scale with the user's preview font size instead of a fixed 18px
-     (the setting looked dead in reading mode). 1.2× keeps reading mode's
-     slightly-larger-than-preview feel at the 15px default (= the old 18px). */
-  font-size: calc(var(--content-font-size, 15px) * 1.2);
+     (the setting looked dead in reading mode).
+     #384 — the extra 1.2× that used to sit here is gone. At the 15px default
+     it rendered reading mode at 18px against the editor's own 14px, which
+     readers reported as the same document "suddenly larger" on switching.
+     Reading mode now inherits the preview size unchanged: its identity comes
+     from the serif face, the wider column and the looser leading, not from a
+     bigger font. */
+  font-size: var(--content-font-size, 15px);
   line-height: 1.8;
   color: var(--text);
+  /* #384 — a soft shadow down both sides reads the column as a "page" resting
+     on the canvas (the PDF-reader look) without darkening the surrounding
+     area. Mixing against `--text` keeps it a dark shadow in light themes and a
+     light halo in dark ones, so the edge stays visible either way with no
+     theme-specific override. The negative spread stops the gradient bleeding
+     out past the column's top and bottom edges; the two one-pixel solid
+     shadows above the blur give the edge itself a defined line. */
+  box-shadow:
+    -1px 0 0 0 color-mix(in srgb, var(--text) 10%, transparent),
+    1px 0 0 0 color-mix(in srgb, var(--text) 10%, transparent),
+    -14px 0 22px -14px color-mix(in srgb, var(--text) 22%, transparent),
+    14px 0 22px -14px color-mix(in srgb, var(--text) 22%, transparent);
 }
 /* #117 — let the Fit-Width toggle widen reading mode too (full-bleed reading
    column instead of the fixed 720px). Needs higher specificity than the plain
    `.preview-content--reading` rule above, which appears later in source. */
 .preview-content--reading.preview-content--fit {
   max-width: none;
+  /* #384 — drop the side shadow when the column is full-bleed: there is no
+     canvas either side of it for a "page" edge to sit against, so the shadow
+     would only smear along the window borders. */
+  box-shadow: none;
 }
 :where(.preview-content--reading) h1,
 :where(.preview-content--reading) h2,
