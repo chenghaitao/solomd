@@ -15,6 +15,74 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [4.14.12] — 2026-10-10
+
+一条线：**一次修完 9 个待办 issue**（全部是本 fork 自研，本版**不含任何上游同步**），外加设置界面的中文补全。
+改动集中在编辑器 / 表格 / 文件链接三条线，另含一处窗口外观修正。
+
+### 文件链接（#380）
+
+| 面 | 内容 |
+|---|---|
+| `lib/markdown.ts` | 覆写 markdown-it 的 `validateLink`：其默认 `BAD_PROTO_RE` 把 `file:` 与 `javascript:` / `data:` 一起拒绝，本地文件链接连 `<a>` 都生成不出来，退化成原文。改为放行 `file:`，仍拦 `javascript:` / `vbscript:` / `data:text` |
+| `lib/file-link.ts`（新） | `localPathFromHref()`：markdown-it 会把 href 百分号编码（手写的 `\` → `%5C`），点击时解码回真实路径 |
+| `lib/image-resolve.ts` | 同样解包 `file:`，否则 `![](file:///F:/a.png)` 会从"显示原文"变成"坏图" |
+
+href 刻意保留 `file:` 前缀（裸 `C:\…` 会被 sanitizer 的 `ALLOWED_URI_REGEXP` 拦掉，`file:` 两边都放行）。
+新测试 `file-link.test.ts`（7 例）+ `markdown-file-link.test.ts`（5 例，走 `renderMarkdown()` 全链路）。
+
+### 编辑器
+
+| issue | 内容 |
+|---|---|
+| #395 | 实时编辑模式下 `[label](url)` 的 url 半边被多隐藏了一份：GFM autolink 把 URL 形状的 label 也标成 `Link` 内的 `URL` 节点。判据改为按位置判断（前一兄弟是 `LinkMark` 且文本为 `(`），抽成叶子模块 `lib/link-destination.ts` + 8 例回归测试 |
+| #389 | Ctrl+F 改为**切换**：已打开时再按一次关闭并把焦点还给编辑器。CodeMirror keymap、plain 模式查找条、预览搜索三处行为统一。坑：同一元素上多个 `@keydown` 会被 Vue 合并成数组并可能互相遮蔽，Esc 与 Ctrl+F 需合并进一个 handler |
+
+### 表格
+
+| issue | 内容 |
+|---|---|
+| #390 / #381 | 表格编辑器在「有改动但未应用」就关闭时提醒。以打开时序列化的 `baseline` 判脏（不能拿 `props.source` 比，否则未对齐的原始表格一打开就算脏）；Esc / 背板点击 / ✕ / Cancel 全部走 `requestClose()`，脏则弹「应用 / 丢弃 / 取消」浮层。**#381 无需额外代码** —— 它的关闭路径即本轮改掉的同一条 |
+| #382 | 表头**上方**新增一行「列号条」（真 `<tr>`，列宽自然跟随，不必跟横向滚动做同步），支持单击选单列 / `Shift` 扩选区间 / `Ctrl` 加选；对齐按钮改为「所选列对齐全部一致才高亮」。模型层新增纯函数 `setAlignMany(t, cols, align)`（越界索引跳过、无变化时返回原对象，避免弄脏 #390 的基线） |
+| #387 | 插入表格改为对话框，可填行 / 列数（列 1–20、数据行 1–100，**表头另计**）。按用户要求**不做**「根据窗口调整表格」与「为新表格记住此尺寸」。新增 `lib/insert-table.ts` + `InsertTableDialog.vue`；`insert.table` 从 `INSERT_SNIPPETS` 移除（否则会 shadow 掉可绑定动作），四处入口（工具栏 / Paragraph 菜单 / 命令面板 / 快捷键）统一走 `solomd:open-insert-table-dialog` |
+
+新快捷键 `insert.table` 默认 **`Mod+Alt+Shift+I`**（`Mod+Alt+I` 已被 Typora 预设占用）。
+
+### 标签页 / 设置
+
+- **#385**：标签页右键菜单加「复制路径」，复用已有的 `explorer.copyPath` 键（15 个语言均已翻译，无需新增）。
+- **设置中文未翻译**：`zh.ts` 与 `en.ts` 逐键比对（walk 两棵树，`zh[k] === en[k]` 即未译），未译数 **128 → 27**。
+  剩下的 27 处是品牌名（Pandoc / CodeMirror / GitHub / SM.MS）、快捷键（S / N / Del）、占位示例
+  （`https://…`、`/Users/me/...`）与字面 Markdown 片段，**按设计保留英文**。
+  本轮另新增 11 个键（表格编辑器脏检查 / 插入表格对话框 / 列选择），**15 个语言文件全部铺上真翻译**
+  （`zh: I18n` 是全量类型，少一个文件 `vue-tsc` 就报错）。
+
+### 窗口外观（#378）
+
+- **导出保存面板底部的残留阴影**：`app/src-tauri/tauri.windows.conf.json` 的 `shadow: true` → **`false`**。
+  tao 的 `shadow` 不是「让 DWM 画个阴影」，而是**把 HWND 撑大**（左右 / 下各 +`SM_CXSIZEFRAME + SM_CXPADDEDBORDER`
+  ≈ 8px，上 1px），再用 `WM_NCCALCSIZE` 把客户区缩回去 —— 可见窗口因此比 HWND 小一圈，那圈边距就是残留带的来源。
+  关掉后窗口没有任何描边，故在 `src/styles/main.css` 给 `#app` 补 `box-shadow: inset 0 0 0 1px var(--border)`
+  （inset 不占布局）。
+- **「弹窗时无法拖动标题栏」是预期行为，保留**：`tauri-plugin-dialog` 的 `save()` 总是把调用它的 webview 作为
+  owner（`set_parent`），面板因此对主窗口模态。曾实现的「无 owner 非模态面板」已**整体回退**
+  （`export_dialog.rs` / `save-panel.ts` 已删，四处调用点还原为 `saveDialog()`），别再往这个方向改。
+- **2026-10-10 二次调查结论（不改代码）**：关掉 `shadow` 后仍偶发的底部灰带是**框架层现象** —— 原生保存面板
+  弹出时主窗口被禁用，Windows/DWM 在这一刻重算边框而露出的原生带，数秒后自愈。取证见
+  `.workbuddy/memory/2026-10-10.md`（续二）：灰带 ≈30px 且完全平坦、`#B7B6B2`、带内无任何本应用文字，
+  全仓 CSS/JS 无规则可产生它；在本机其他 Rust/Tauri 应用同样复现，**用户已确认不处理**。
+  事实与「将来若要修」的方向已写进 `win_chrome.rs` 模块注释（`shadow: false` 一节末尾的 Known limitation）
+  与 `MEMORY.md`，**尤其不能摘 `WS_CAPTION` / `WS_THICKFRAME`** —— Win11 Snap Layouts 依赖它。
+
+### 验证
+
+- `vue-tsc --noEmit` 干净；`vite build` 入口 chunk **1,738.17 kB / gzip 530.02 kB**，与 4.14.11 基线一致（无包体回归）。
+- `node --experimental-strip-types --test "src/lib/*.test.ts"`：**344 用例 / 336 通过 / 8 失败**，
+  8 个全是仓库既有的失败（无扩展名相对导入，`node --test` 无法解析），与本版改动无关。
+  本轮顺带把 `markdown-table.test.ts` 的导入补上 `.ts`，使它由失败转为 16/16 全绿。
+
+---
+
 ## [4.14.11] — 2026-10-09
 
 一条线：**同步上游 43 个提交**（上游 4.14.10 之后 → 4.14.11），只取纯产品代码的功能与修复；
