@@ -3,12 +3,19 @@
  * v2.4 — Public reading mode.
  *
  * Maximally clean single-doc preview: no editor pane, no toolbar, no
- * file tree, no statusbar — just centered prose. A small floating ✕
- * button (top right) restores the user's previous view mode.
+ * file tree, no statusbar — just centered prose. A floating pen button
+ * restores the user's previous view mode.
  *
  * Reuses `Preview.vue`'s renderer via the `skin: 'reading'` prop, so
  * we don't duplicate the markdown / mermaid / image-overlay pipeline.
- */
+ *
+ * Control order, left to right: `[✕ close][–][□][pen exit]`. Reading mode
+ * must mirror the window caption buttons (the frameless toolbar that owns
+ * the real ones is unmounted here), and one of them is the app-wide ✕ that
+ * quits. It is deliberately parked at the far LEFT with the other two window
+ * buttons, keeping it as far as possible from the pen on the far right —
+ * the two are the ones readers confuse, so separation beats matching the
+ * platform's right-hand caption row here. */
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import Preview from './Preview.vue';
@@ -80,6 +87,15 @@ onBeforeUnmount(() => {
     <div class="reading-view__controls">
       <button
         v-if="winControls"
+        class="reading-view__winbtn reading-view__winbtn--close"
+        :title="t('menubar.close')"
+        :aria-label="t('menubar.close')"
+        @click="winClose"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" /></svg>
+      </button>
+      <button
+        v-if="winControls"
         class="reading-view__winbtn"
         :title="t('menubar.minimize')"
         :aria-label="t('menubar.minimize')"
@@ -97,15 +113,6 @@ onBeforeUnmount(() => {
       >
         <svg v-if="isMaximized" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><path d="M2.5 0.5h7v7" /><rect x="0.5" y="2.5" width="7" height="7" /></svg>
         <svg v-else width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9" /></svg>
-      </button>
-      <button
-        v-if="winControls"
-        class="reading-view__winbtn reading-view__winbtn--close"
-        :title="t('menubar.close')"
-        :aria-label="t('menubar.close')"
-        @click="winClose"
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" /></svg>
       </button>
       <button
         class="reading-view__close"
