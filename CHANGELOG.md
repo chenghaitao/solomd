@@ -9,10 +9,77 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 - **版本号沿用上游的序号**，因此可能与上游重号（上游先占了 4.14.0 / 4.14.1，本 fork 用
   4.14.1 / 4.14.2 / 4.14.3 与之区分）。自 5.0.0 起与上游同号 —— 本 fork 就是"上游 5.0.0 减去
-  推广/遥测/商店分发，再加上本地自研修复"。
+  推广/遥测/商店分发，再加上本地自研修复"。**上游已合并但尚未发版的小补丁，本 fork 会先走一个小版本号
+  （如 5.0.0 → 5.0.1）**，因此有时会跑在上游前面。
 - 拉取上游一律 `git fetch upstream --no-tags`：两边都有 `v4.13.3` 标签，带 `--tags` 会被拒或被
   `--force` 悄悄改写本地标签。
 - 本 fork 的 release 由 CI 产出，默认是 **draft**，需要在 GitHub 上手动 Publish 才对外可见。
+
+---
+
+## [5.0.1] — 2026-10-13
+
+一条线：**同步上游 3 个提交**（5.0.0 发版之后的补丁：文件树两处 + MCP 反链一处）。**零冲突**。
+
+### 上游同步
+
+上游 `03d38a68..353f95aa`：**3 个提交**、**4 个文件**、+155 / −18。
+分叉点 `03d38a68` 正是上次同步（5.0.0）合并的上游 tip，两侧边界干净。
+这 4 个文件 fork 侧**从未改过**（`git log 03d38a68..HEAD -- <4 files>` 为空），
+因此 `git merge upstream/main` **一次干净通过，无冲突**，无异于常规重放。
+
+| 上游提交 | 内容 | 落地文件 |
+|---|---|---|
+| `fix(file-tree): toggle folder when clicking chevron caret directly (#401)` | 直接点文件夹行上的 ▸ 箭头即可展开 / 收起（原先只有点行主体才响应） | `app/src/components/FileTree.vue` |
+| `fix(file-tree): do not switch workspace when opening files inside it or clicking tree (#402)` | 在树里打开文件、或点击树本身时不再误切工作区 | `app/src/composables/useFiles.ts` |
+| `fix(mcp): get_backlinks finds [[folder/note]] and [[note.md]], skips fenced code (#407)` | 反链匹配与 App 侧解析器对齐（大小写不敏感、带 / 不带扩展名、文件夹路径按整段匹配）；`extract_wikilinks` 不再扫围栏代码块 | `mcp-server/src/tools.rs`、`mcp-server/src/workspace.rs` |
+
+`#407` 的意义：`get_backlinks` 原先拿**原始链接目标**对比**原始笔记名**，所以 `[[projects/sub/deep]]`
+不算 `deep` 的反链，而传 `list_notes` 返回的 `deep.md` 也匹配不到任何东西。现在按 `#278` 起 App 侧
+解析器的同一套规则匹配。
+
+**排除项**：本轮上游未触及 `web/` / `app-store/` / `server.json` / 推广 / 遥测，无需回退；
+合并后排除项**零回流**。MCP 源码属**产品功能**，原样跟进。
+
+### 已发现的既有缺陷（不属本次同步，本轮未修）
+
+`mcp-server` 的 `safety::tests::resolve_new_refuses_parent_dir_components` 在 **Windows 上必失败**：
+
+```
+thread 'safety::tests::...' panicked at src\safety.rs:167:9:
+assertion failed: resolve_new(&ws, &abs).is_err()
+```
+
+**根因**（已用 `rustc` 探针实测）：`env::temp_dir()` 得到 8.3 短路径 `C:\Users\ADMINI~1\…`，
+经 `canonicalize()` 返回 **verbatim 路径 `\\?\C:\…`**；而 Rust 的 `Path::components()`
+对 verbatim 前缀**不做分隔符解析** —— 余下整条路径被当作**单个 `Normal` 组件**返回：
+
+| 输入 | `components()` | `has_parent_dir` |
+|---|---|---|
+| `\\?\C:\…\dotdot/sub/../../x.md` | `[Prefix, RootDir, Normal(…7 段…), Normal("dotdot/sub/../../x.md")]` | **false** |
+| `C:\…\ws\sub\..\..\x.md`（非 verbatim） | `[Prefix, RootDir, … , ParentDir, ParentDir, Normal("x.md")]` | true |
+| `../x.md` | `[ParentDir, Normal("x.md")]` | true |
+
+于是 `resolve_new()` 开头那行遍历拦截
+
+```rust
+if raw.components().any(|c| matches!(c, Component::ParentDir)) { return Err(...) }
+```
+
+对 verbatim 路径**静默失效**。上游 CI 只跑 `app/src-tauri` 的 `cargo test --lib/--bin`，
+**不跑 `mcp-server`**，所以这个失败在 CI 里从未暴露。
+按 fork 立场「MCP 源码原样保留、跟进上游修复」，本轮**不擅自改**，另行向上游报。
+
+### 验证
+
+- `vue-tsc --noEmit` **干净**。
+- `vite build` 入口 chunk **1,738.17 kB / gzip 530.02 kB**，与 5.0.0 基线**逐字节一致**（无包体回归）。
+- `bash app/scripts/run-tests.sh`：**482 用例 / 482 通过 / 0 失败**。
+- `cargo test`（`mcp-server`）：**34 通过 / 1 失败** —— 唯一失败即上述 Windows verbatim 既有缺陷，
+  `safety.rs` 与合并前**逐字节相同**，可确认与本次同步无关。
+- 排除项零回流：`git diff HEAD~1 HEAD -- web app-store server.json .github/workflows/` 为空；
+  `TelemetryBanner.vue` 未回归。
+- 版本号四处一致（`app/package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`）= **5.0.1**。
 
 ---
 
