@@ -61,6 +61,15 @@ export function isMacOS(): boolean {
   return /Macintosh|Mac OS X/.test(ua);
 }
 
+/**
+ * True where shortcuts are spelled with ⌘ — macOS and iOS/iPadOS (an iPad
+ * with a keyboard uses ⌘ too). For shortcut *labels*; `isMacOS()` stays the
+ * macOS-desktop-only check for window chrome.
+ */
+export function usesCommandKey(): boolean {
+  return isMacOS() || isIOS();
+}
+
 export function isMobile(): boolean {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
@@ -96,6 +105,18 @@ export function revealLabelKey(macKey: string): string {
 
 export function forceWinChromePreview(): boolean {
   return typeof location !== 'undefined' && location.search.includes('forceWinChrome');
+}
+
+/**
+ * `?forceKeyboardBar` — dev-only QA hook (same idea as `?forcePlain` /
+ * `?forceWinChrome`) that mounts the touch formatting bar (KeyboardBar.vue)
+ * in a desktop browser and treats the software keyboard as open, so the bar
+ * can be driven without a phone. Compiled out of production builds.
+ */
+export function forceKeyboardBarPreview(): boolean {
+  // `?.` — node's test runner has no import.meta.env.
+  const dev = !!import.meta.env?.DEV;
+  return dev && typeof location !== 'undefined' && location.search.includes('forceKeyboardBar');
 }
 
 /** Windows desktop editor detection, including the forcePlain QA hook. */

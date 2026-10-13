@@ -12,6 +12,7 @@
 import { initMermaid } from './mermaid-lazy';
 import { sanitizeModernColors } from './export-colors';
 import { renderMarkdown, extractImageRoot } from './markdown';
+import { loadRenderDeps } from './render-deps';
 import { rewriteImageUrls } from './image-resolve';
 
 export interface ImageExportOptions {
@@ -140,6 +141,7 @@ export async function markdownToImageBlob(
   filePath?: string,
   opts: ImageExportOptions = {},
 ): Promise<Blob> {
+  await loadRenderDeps(); // rendered once — no placeholder math / plain code
   const rawHtml = renderMarkdown(source || '');
   const html = rewriteImageUrls(rawHtml, extractImageRoot(source || ''), filePath);
 

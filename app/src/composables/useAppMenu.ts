@@ -1,9 +1,9 @@
 import { useSettingsStore } from '../stores/settings';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useI18n } from '../i18n';
-import { buildAppMenu, type MenuPlatform, type TopMenu } from '../lib/app-menu';
-import { themeFamily, themeLabels } from '../lib/themes';
-import { hasGitBackend, isMacOS } from '../lib/platform';
+import { buildAppMenu, menuLabelsByAction, type MenuPlatform, type TopMenu } from '../lib/app-menu';
+import { themeFamily, themeOptions } from '../lib/themes';
+import { hasGitBackend, isMacOS, isWindowsDesktop, usesCommandKey } from '../lib/platform';
 import { useTabsStore } from '../stores/tabs';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { isMasBuild } from '../lib/check-update';
@@ -19,7 +19,7 @@ export function useAppMenu() {
   const workspace = useWorkspaceStore();
   const tabs = useTabsStore();
   const { t } = useI18n();
-  const macKeys = isMacOS();
+  const macKeys = usesCommandKey();
 
   function menuFor(platform: MenuPlatform): TopMenu[] {
     return buildAppMenu({
@@ -31,7 +31,7 @@ export function useAppMenu() {
       platform,
       macKeys,
       recent: [...workspace.recentFiles],
-      themes: themeLabels,
+      themes: themeOptions(t),
       state: {
         autoSave: settings.autoSaveOnBlur,
         viewMode: settings.viewMode,
@@ -41,7 +41,7 @@ export function useAppMenu() {
         livePreview: settings.livePreview,
         fitWidth: settings.previewFitWidth,
         dark: themeFamily(settings.theme as Theme) === 'dark',
-        theme: settings.theme,
+        theme: settings.followSystemTheme ? 'system' : settings.theme,
         wordWrap: settings.wordWrap,
         lineNumbers: settings.showLineNumbers,
         autoGit: settings.autoGitEnabled,
@@ -66,5 +66,27 @@ export function useAppMenu() {
     });
   }
 
-  return { menuFor };
+  /**
+   * Name lookup for the shortcut lists (Settings › Shortcuts, the shortcut
+   * sheet): the menu's own name where the command has a top-level menu item,
+   * else the palette's — minus its "View:" prefix, which in a list grouped
+   * under 视图 / View only repeats the heading. Other prefixes ("Fold:",
+   * "Editor:") say something and stay. Call inside a computed.
+   */
+  function shortcutNamer(): (id: string, fallback: string) => string {
+    const fromMenu = menuLabelsByAction(menuFor(isMacOS() ? 'mac' : isWindowsDesktop() ? 'windows' : 'linux'));
+    const viewPrefix = /^(.*?[:：]\s*)/.exec(t('cmd.view.cycleView'))?.[1] ?? '';
+    return (id, fallback) => {
+      const menu = fromMenu.get(id);
+      if (menu) return menu;
+      const key = `cmd.${id}`;
+      const palette = t(key);
+      if (!palette || palette === key) return fallback;
+      return viewPrefix && id.startsWith('view.') && palette.startsWith(viewPrefix)
+        ? palette.slice(viewPrefix.length)
+        : palette;
+    };
+  }
+
+  return { menuFor, shortcutNamer };
 }

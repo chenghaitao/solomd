@@ -1,7 +1,7 @@
 import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
-import { Extension } from '@codemirror/state';
+import { Extension, Prec } from '@codemirror/state';
 
 function mkTheme(
   bg: string,
@@ -16,7 +16,9 @@ function mkTheme(
       '&': { backgroundColor: bg, color: fg },
       '.cm-content': { caretColor: cursor },
       '.cm-cursor, .cm-dropCursor': { borderLeftColor: cursor },
-      '.cm-selectionBackground, ::selection': { backgroundColor: `${selection} !important` },
+      // 5.0 §5 — selection is the accent wash for every theme (--accent-soft
+      // derives from each theme's --accent); `selection` stays as a fallback.
+      '.cm-selectionBackground, ::selection': { backgroundColor: `var(--accent-soft, ${selection}) !important` },
       '.cm-gutters': { backgroundColor: bg, color: gutter, border: 'none' },
       '.cm-activeLineGutter': { color: cursor },
     },
@@ -161,10 +163,30 @@ export function mermaidThemeFor(theme: Theme): 'dark' | 'default' {
  * dark panels, so text went dark on dark. The built-in's CodeMirror theme also
  * kept its own white editor background.
  */
+// 5.0 §2 — the default dark theme keeps One Dark's syntax colours but sits on
+// the app's own surface (--bg #1C1C1E), not One Dark's blue-grey #282c34,
+// which read as a different window from the header and sidebar around it.
+let darkSurface: Extension | null = null;
+function oneDarkOnAppSurface(): Extension {
+  darkSurface ??= [
+    oneDark,
+    Prec.high(
+      EditorView.theme(
+        {
+          '&': { backgroundColor: 'var(--bg)', color: 'var(--text)' },
+          '.cm-gutters': { backgroundColor: 'var(--bg)', color: 'var(--text-3)', border: 'none' },
+        },
+        { dark: true },
+      ),
+    ),
+  ];
+  return darkSurface;
+}
+
 export function cmThemeFor(theme: Theme, customTheme = false): Extension {
-  if (customTheme) return themeFamily(theme) === 'dark' ? oneDark : [];
+  if (customTheme) return themeFamily(theme) === 'dark' ? oneDarkOnAppSurface() : [];
   switch (theme) {
-    case 'dark': return oneDark;
+    case 'dark': return oneDarkOnAppSurface();
     case 'nord': return nordTheme();
     case 'solarized-light': return solarizedLightTheme();
     case 'solarized-dark': return solarizedDarkTheme();
@@ -191,3 +213,21 @@ export const themeLabels: { value: Theme; label: string }[] = [
   { value: 'github-light', label: 'GitHub Light' },
   { value: 'dracula', label: 'Dracula' },
 ];
+
+/**
+ * D6 — the theme choices as offered in Settings and the View › Theme menu:
+ * "System" (follow the OS appearance) first, then every built-in theme, with
+ * the two generic names localized (the rest are proper names).
+ */
+export function themeOptions(t: (key: string) => string): { value: Theme | 'system'; label: string }[] {
+  return [
+    { value: 'system', label: t('settings.themeSystem') },
+    ...themeLabels.map((th) =>
+      th.value === 'light'
+        ? { ...th, label: t('settings.themeLight') }
+        : th.value === 'dark'
+          ? { ...th, label: t('settings.themeDark') }
+          : th,
+    ),
+  ];
+}

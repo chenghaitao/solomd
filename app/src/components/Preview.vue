@@ -4,6 +4,8 @@ import { initMermaid } from '../lib/mermaid-lazy';
 import { mermaidThemeFor } from '../lib/themes';
 import { openRenderedLink } from '../lib/link-open';
 import { renderMarkdown, extractImageRoot } from '../lib/markdown';
+import { togglePreviewTask } from '../lib/preview-task-toggle';
+import { useRenderDepsVersion } from '../composables/useRenderDepsVersion';
 import { plantumlSvgUrl } from '../lib/plantuml';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
 import { openImageOverlay, type OverlayStrings } from '../lib/image-overlay';
@@ -131,6 +133,41 @@ function cancelMathEdit() {
   mathEdit.value = null;
 }
 
+// ── Clickable task checkboxes ──
+// renderMarkdown emits them `disabled` so exported HTML/PDF stay static; the
+// in-app preview of a real tab re-enables them and writes the toggle back to
+// the tab (the editor follows the store, as for the math edit above).
+function enableTaskCheckboxes() {
+  if (!host.value || !props.tabId) return;
+  for (const box of Array.from(host.value.querySelectorAll<HTMLInputElement>('input.task-list-item-checkbox'))) {
+    box.disabled = false;
+  }
+}
+
+function onTaskCheckboxClick(e: MouseEvent) {
+  const box = e.target as HTMLElement;
+  if (!(box instanceof HTMLInputElement) || !box.classList.contains('task-list-item-checkbox')) return;
+  if (!props.tabId || !host.value) {
+    e.preventDefault();
+    return;
+  }
+  // The click has already flipped `checked`; the state the user saw is the opposite.
+  const wasChecked = !box.checked;
+  const all = Array.from(host.value.querySelectorAll('input.task-list-item-checkbox'));
+  const li = box.closest('li.task-list-item');
+  const dataLine = Number(li?.getAttribute('data-line') || 0);
+  // The editor syncs into the store on a debounce; flush first so the toggle
+  // is applied to what is on screen, not to text a few keystrokes old.
+  window.dispatchEvent(new Event('solomd:flush-content-sync'));
+  const tab = tabs.tabs.find((x) => x.id === props.tabId);
+  const next = togglePreviewTask(tab?.content ?? props.source ?? '', dataLine, all.indexOf(box), wasChecked);
+  if (next === null) {
+    e.preventDefault();
+    return;
+  }
+  tabs.setContent(props.tabId, next);
+}
+
 function onMathKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') { e.preventDefault(); cancelMathEdit(); }
   else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveMathEdit(); }
@@ -138,6 +175,7 @@ function onMathKeydown(e: KeyboardEvent) {
 
 let mermaidIdSeq = 0;
 
+const renderDepsVersion = useRenderDepsVersion();
 
 const html = computed(() => {
   // #141 — establish a reactive dep on the hard-breaks toggle so flipping the
@@ -149,6 +187,8 @@ const html = computed(() => {
   void settings.markdownAutoNumberHeadings;
   // #216 — and for the smart-quotes toggle (md singleton rule state).
   void settings.smartQuotes;
+  // And for KaTeX / highlight.js arriving after the first render.
+  void renderDepsVersion.value;
   const source = props.source || '';
   return rewriteImageUrls(renderMarkdown(source), extractImageRoot(source), props.filePath);
 });
@@ -415,6 +455,7 @@ watch(html, async () => {
   await processWhiteboards();
   attachImageOverlayHandlers();
   attachCodeCopyButtons();
+  enableTaskCheckboxes();
 });
 
 // Toggling PlantUML (or changing the server) must re-render: the markdown
@@ -432,6 +473,7 @@ watch(
     await processWhiteboards();
     attachImageOverlayHandlers();
     attachCodeCopyButtons();
+    enableTaskCheckboxes();
   },
 );
 
@@ -454,12 +496,15 @@ onMounted(async () => {
   await processWhiteboards();
   attachImageOverlayHandlers();
   attachCodeCopyButtons();
+  enableTaskCheckboxes();
   host.value?.addEventListener('click', handleLinkClick);
+  host.value?.addEventListener('click', onTaskCheckboxClick);
   host.value?.addEventListener('dblclick', onPreviewDblClick);
 });
 
 onBeforeUnmount(() => {
   host.value?.removeEventListener('click', handleLinkClick);
+  host.value?.removeEventListener('click', onTaskCheckboxClick);
   host.value?.removeEventListener('dblclick', onPreviewDblClick);
 });
 
@@ -603,7 +648,7 @@ defineExpose({ scrollToLine, openSearch });
         'cb-numbered-on': settings.codeBlockLineNumbers,
         'cb-wrap-on': settings.codeBlockWrap,
       }"
-      :style="{ '--preview-max-width': `${settings.previewMaxWidth || 760}px` }"
+      :style="{ '--preview-max-width': `${settings.previewMaxWidth || 680}px` }"
       v-html="html"
     ></article>
 
@@ -660,9 +705,11 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content) {
   /* v4.10 #165 — column width is user-tunable (previewMaxWidth setting sets
      the var on the article); 760px was the old hardcoded value. */
-  max-width: var(--preview-max-width, 760px);
+  max-width: var(--preview-max-width, 680px);
   margin: 0 auto;
-  padding: 28px 36px 64px;
+  /* 5.0 §5 — same column and top margin as the editor (content-box: the max
+     width is the text measure). */
+  padding: 56px 32px 30vh;
   color: var(--text);
   /* #133 — honor the editor `fontFamily` setting (set as `--content-font-family`
      in App.vue) so the rendered pane matches the editor in split view. Falls
@@ -670,8 +717,8 @@ defineExpose({ scrollToLine, openSearch });
   font-family: var(--content-font-family, var(--font-ui));
   /* v4.3.0 PR #74 — preview-only font size; driven by settings.previewFontSize
      via the `--content-font-size` CSS custom property set in App.vue. */
-  font-size: var(--content-font-size, 15px);
-  line-height: 1.7;
+  font-size: var(--content-font-size, 16px);
+  line-height: 1.8;
   /* #293 — prose must never push past the column. Text pasted out of Word, a
      web page or a chat transcript often joins its words with NO-BREAK SPACE
      (U+00A0) instead of U+0020; the reporter's file had 119 of them against 23
@@ -685,45 +732,57 @@ defineExpose({ scrollToLine, openSearch });
 }
 .preview-content--fit {
   max-width: none;
-  padding: 28px 16px 64px;
+  padding: 56px 32px 30vh;
 }
+/* 5.0 §2 type scale — H1 30/650/1.25 −0.015em, H2 20/620, H3 17/600 at the
+   16px default; in em so the font-size setting scales them. Same values as
+   the live editor (lib/cm-live-render.ts) and the Windows block editor. */
 :where(.preview-content) h1,
 :where(.preview-content) h2,
 :where(.preview-content) h3,
-:where(.preview-content) h4 {
-  font-weight: 700;
-  line-height: 1.25;
+:where(.preview-content) h4,
+:where(.preview-content) h5,
+:where(.preview-content) h6 {
+  font-weight: 600;
+  line-height: 1.3;
   margin: 1.6em 0 0.5em;
 }
 :where(.preview-content) h1 {
-  font-size: 2em;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.3em;
+  font-size: 1.875em;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 1.2em 0 0.6em;
 }
 :where(.preview-content) h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.25em;
+  font-size: 1.25em;
+  font-weight: 620;
 }
-:where(.preview-content) h3 { font-size: 1.2em; }
-:where(.preview-content) p { margin: 0.8em 0; }
+:where(.preview-content) h3 { font-size: 1.0625em; }
+:where(.preview-content) > :first-child { margin-top: 0; }
+:where(.preview-content) p { margin: 0.9em 0; }
 :where(.preview-content) a {
-  color: var(--accent);
-  text-decoration: none;
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-text) 35%, transparent);
+  text-underline-offset: 3px;
 }
-:where(.preview-content) a:hover { text-decoration: underline; }
+:where(.preview-content) a:hover { text-decoration-color: currentColor; }
 :where(.preview-content) code {
   font-family: var(--font-mono);
-  font-size: 0.9em;
-  background: var(--bg-hover);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
+  font-size: 0.875em;
+  color: var(--text);
+  background: var(--fill-1);
+  padding: 0.12em 0.35em;
+  border-radius: var(--r-xs);
 }
 :where(.preview-content) pre {
   font-family: var(--font-mono);
-  background: var(--bg-hover);
+  font-size: 0.8125em;
+  line-height: 1.6;
+  background: var(--bg-elev);
   padding: 14px 16px;
-  border-radius: 6px;
+  border-radius: var(--r-lg);
   overflow-x: auto;
 }
 /* #195 / v4.11.18 — the copy-button chrome now lives in styles/main.css so
@@ -731,6 +790,7 @@ defineExpose({ scrollToLine, openSearch });
  * live-edit mode all render the identical affordance. */
 :where(.preview-content) pre code {
   font-family: var(--font-mono);
+  font-size: inherit;
   background: transparent;
   padding: 0;
 }
@@ -790,15 +850,19 @@ defineExpose({ scrollToLine, openSearch });
   -webkit-user-select: none;
 }
 :where(.preview-content) blockquote {
-  border-left: 3px solid var(--accent);
   margin: 1em 0;
-  padding: 0.2em 1em;
-  color: var(--text-muted);
+  padding: 12px 16px;
+  background: var(--bg-elev);
+  border-radius: var(--r-lg);
+  color: var(--text-2);
 }
+:where(.preview-content) blockquote > :first-child { margin-top: 0; }
+:where(.preview-content) blockquote > :last-child { margin-bottom: 0; }
 :where(.preview-content) ul,
 :where(.preview-content) ol {
   padding-left: 1.6em;
 }
+:where(.preview-content) li::marker { color: var(--text-3); }
 :where(.preview-content) table {
   border-collapse: collapse;
   margin: 1em 0;
@@ -843,7 +907,7 @@ defineExpose({ scrollToLine, openSearch });
 }
 :where(.preview-content) hr {
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--hairline);
   margin: 2em 0;
 }
 :where(.preview-content) img {
@@ -930,7 +994,7 @@ defineExpose({ scrollToLine, openSearch });
 }
 /* Wikilinks (F1, v2.0) */
 .preview-content .md-wikilink {
-  color: var(--accent, #ff9f40);
+  color: var(--accent-text);
   background: color-mix(in srgb, var(--accent, #ff9f40) 10%, transparent);
   padding: 1px 5px;
   border-radius: 4px;
@@ -938,12 +1002,6 @@ defineExpose({ scrollToLine, openSearch });
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s;
-}
-.preview-content .md-wikilink::before {
-  content: '🔗';
-  font-size: 0.75em;
-  margin-right: 3px;
-  opacity: 0.6;
 }
 .preview-content .md-wikilink:hover {
   background: color-mix(in srgb, var(--accent, #ff9f40) 22%, transparent);
@@ -998,7 +1056,7 @@ defineExpose({ scrollToLine, openSearch });
   );
   /* v4.10 #165 — reading column follows the same width setting as the
      preview pane (720px was the old hardcoded serif column). */
-  max-width: var(--preview-max-width, 720px);
+  max-width: var(--preview-max-width, 680px);
   margin: 0 auto;
   padding: 64px 32px 96px;
   font-family: var(--font-reading);
@@ -1036,38 +1094,10 @@ defineExpose({ scrollToLine, openSearch });
      would only smear along the window borders. */
   box-shadow: none;
 }
-:where(.preview-content--reading) h1,
-:where(.preview-content--reading) h2,
-:where(.preview-content--reading) h3,
-:where(.preview-content--reading) h4 {
-  font-family: var(--font-reading);
-  letter-spacing: -0.005em;
-}
-:where(.preview-content--reading) h1 {
-  font-size: 2.2em;
-  margin-top: 0;
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-:where(.preview-content--reading) h2 {
-  font-size: 1.55em;
-  border-bottom: 0;
-  padding-bottom: 0;
-  margin: 2em 0 0.5em;
-}
-:where(.preview-content--reading) p {
-  margin: 1em 0;
-}
-:where(.preview-content--reading) blockquote {
-  border-left: 3px solid var(--border);
-  color: var(--text-muted);
-  font-style: italic;
-}
 /* Tighten max-width on phones; on iPad keep the comfy reading column. */
 @media (max-width: 540px) {
   .preview-content--reading {
     padding: 32px 18px 64px;
-    font-size: 17px;
   }
 }
 

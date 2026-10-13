@@ -1,9 +1,10 @@
+import { createTypeRequested } from '../lib/create-type-request';
 import { FORMAT_KINDS } from '../lib/md-format';
 import { invoke } from '@tauri-apps/api/core';
 import { useFiles } from './useFiles';
 import { useSettingsStore } from '../stores/settings';
 import { shortcutLabel } from '../lib/keybindings';
-import { isMacOS, isMobile } from '../lib/platform';
+import { isMobile, usesCommandKey } from '../lib/platform';
 import { useTabsStore } from '../stores/tabs';
 import { useTilesStore } from '../stores/tiles';
 import { useExport } from './useExport';
@@ -49,7 +50,7 @@ export function useCommands(): Command[] {
   // #180 — the palette must show the chord that actually works today, not
   // the one that shipped: a rebound action would otherwise advertise a key
   // that now does something else.
-  const mac = isMacOS();
+  const mac = usesCommandKey();
   const kb = (actionId: string) => shortcutLabel(actionId, settings.keybindings, mac) || undefined;
   const tabs = useTabsStore();
   const tiles = useTilesStore();
@@ -230,7 +231,7 @@ export function useCommands(): Command[] {
     },
     { id: 'view.toggleNeighborhood', title: 'View: Toggle Neighborhood Pane', hint: 'Per-note relationship explorer — frontmatter wikilink groups, inverse relationships, and backlinks; click to open, ⌘/Ctrl-click to pivot', run: () => settings.toggleNeighborhood() },
     { id: 'view.toggleTypesPanel', title: 'View: Toggle Types Pane', hint: 'Type-driven sidebar — notes with `type:<Name>` grouped into collapsible first-class sections (types-as-lenses)', run: () => settings.toggleTypesPanel() },
-    { id: 'type.create', title: 'Types: New Type…', hint: 'Create a type-definition note (`type: Type`) so its members get a first-class sidebar section', run: () => { if (!settings.showTypesPanel) settings.toggleTypesPanel(); window.dispatchEvent(new CustomEvent('solomd:create-type')); } },
+    { id: 'type.create', title: 'Types: New Type…', hint: 'Create a type-definition note (`type: Type`) so its members get a first-class sidebar section', run: () => { settings.rightSidebarHidden = false; if (!settings.showTypesPanel) settings.toggleTypesPanel(); createTypeRequested.value = true; } },
     { id: 'view.toggleHistoryPanel', title: 'View: Toggle History Pane', hint: 'Show / hide the per-note version history pane (does not disable Auto-Git)', run: () => settings.toggleHistoryPanel() },
     { id: 'view.toggleInspector', title: 'View: Toggle Properties Inspector', shortcut: kb('view.toggleInspector'), hint: 'Edit the active note’s YAML frontmatter as typed properties (text / number / date / status / tags / relation)', run: () => settings.toggleInspector() },
     { id: 'view.resetSidebarPanes', title: 'View: Reset Sidebar Pane Heights', hint: 'Clear stored per-pane heights so the right sidebar returns to even-share flex layout', run: () => settings.clearRightSidebarPaneHeights() },
@@ -337,12 +338,22 @@ export function useCommands(): Command[] {
 
     {
       id: 'editor.find',
-      title: 'Find / Replace in note…',
+      title: 'Find…',
       shortcut: kb('editor.find'),
       hint: 'Open the find & replace bar in the current editor',
       run: () =>
         window.dispatchEvent(
           new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId } }),
+        ),
+    },
+    {
+      id: 'editor.replace',
+      title: 'Replace…',
+      shortcut: kb('editor.replace'),
+      hint: 'Open the find & replace bar with the caret in the replace field',
+      run: () =>
+        window.dispatchEvent(
+          new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId, replace: true } }),
         ),
     },
 

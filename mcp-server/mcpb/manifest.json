@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "solomd-mcp",
   "display_name": "SoloMD",
-  "version": "4.14.11",
+  "version": "5.0.0",
   "description": "Read and search a folder of Markdown notes from an MCP client: notes, full-text search, backlinks, tags, tasks, outlines and version history.",
   "long_description": "The MCP server that ships with SoloMD, a free, open-source Markdown editor (solomd.app). It works on any plain folder of .md files, with or without the editor installed. Tools list and read notes, search them (literal or regex), follow wikilink backlinks, collect tags and checkbox tasks, return heading outlines, export a note to HTML, Markdown, text or Word, and read SoloMD's per-note AutoGit history and diffs. This bundle is read-only: writing, appending and rolling back need the server started with --allow-write, which you can add to the arguments yourself.",
   "author": {
@@ -72,10 +72,6 @@
     {
       "name": "autogit_rollback",
       "description": "Restore a note's content from a specific AutoGit commit by overwriting the working tree. Requires --allow-write. The rollback is itself a new save (and thus a new AutoGit commit), so the prior history is preserved. Pass `workspace` (alias or absolute path) to target a non-default workspace; omit it to use the first registered workspace."
-    },
-    {
-      "name": "export_note",
-      "description": "Export a Markdown note to html / md / txt / docx. Engine-parity with the SoloMD GUI export. Requires --allow-write (it writes a file). Args: `path` (workspace-relative), `format` (default html), optional `output_path` (default: sibling file next to `path` with format-appropriate extension; may be outside the workspace, but then its folder must exist), optional `overwrite` (default false: an existing output file is never replaced unless this is true), optional `number_headings` (promote plain-text numbered sections like 6.2 / 6.2.1 to headings, default false). Returns the absolute output path. Needs Node.js and a SoloMD source checkout with `pnpm install` run in app/."
     },
     {
       "name": "get_backlinks",

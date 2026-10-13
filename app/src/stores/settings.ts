@@ -2,7 +2,7 @@ import { isTreeSortMode, type TreeSortMode } from '../lib/tree-sort';
 import { defineStore } from 'pinia';
 import type { Theme, ViewMode } from '../types';
 import type { WindowsEditorEngine } from '../lib/platform';
-import { isIOS, isMobile } from '../lib/platform';
+import { isMobile } from '../lib/platform';
 import {
   QUICK_CAPTURE_DEFAULT_SHORTCUT,
   migrateQuickCaptureShortcut,
@@ -27,8 +27,16 @@ export function buildEditorFontStack(face: string): string {
   return `${quoted}, ${CJK_FALLBACK}, "JetBrains Mono", Menlo, Consolas, monospace`;
 }
 
+/** 5.0 default editor face: the "System Sans" preset in Settings (same value,
+ *  so the picker shows it selected) — SF Pro + PingFang on Apple, Segoe UI +
+ *  YaHei on Windows via buildEditorFontStack's CJK tail. */
+export const DEFAULT_EDITOR_FONT = '-apple-system, "Segoe UI", system-ui, sans-serif';
+
 interface Settings {
   theme: Theme;
+  /** D6 — follow the OS light/dark appearance. While on, `theme` holds the
+   *  resolved 'light' | 'dark', so every reader of `theme` keeps working. */
+  followSystemTheme: boolean;
   viewMode: ViewMode;
   // #87(3) — if set, this view mode is forced on every launch, overriding
   // the persisted last-used `viewMode`. `null` (default) keeps the existing
@@ -40,6 +48,8 @@ interface Settings {
   showLineNumbers: boolean;
   // #193 — non-blinking (solid) caret in the editor.
   solidCursor: boolean;
+  // 5.0 — floating format bar over a text selection (desktop only).
+  selectionBubble: boolean;
   // #353 — keep Markdown markers (`#`, `**`, …) visible in the CodeMirror
   // live views instead of hiding them off the caret line, so clicking a line
   // doesn't reflow it. Styling (heading size, bold) still applies.
@@ -563,13 +573,20 @@ function defaults(): Settings {
     window.matchMedia('(prefers-color-scheme: dark)').matches;
   return {
     theme: prefersDark ? 'dark' : 'light',
-    viewMode: 'edit',
+    // New installs follow the OS; load() keeps it off for a stored blob that
+    // predates the option, so an existing explicit choice is never undone.
+    followSystemTheme: true,
+    // 5.0 (docs/v5-ui-spec.md §5) — new installs open in live edit, in the
+    // system face at 16px, without line numbers. Saved settings are never
+    // rewritten: these only fill keys a stored blob does not have.
+    viewMode: 'liveEdit',
     startupViewMode: null,
-    fontSize: 14,
-    fontFamily: 'JetBrains Mono',
+    fontSize: 16,
+    fontFamily: DEFAULT_EDITOR_FONT,
     wordWrap: true,
-    showLineNumbers: true,
+    showLineNumbers: false,
     solidCursor: false,
+    selectionBubble: true,
     alwaysShowMarkers: false,
     highlightCurrentLine: false,
     codeFontFamily: '',
@@ -587,7 +604,9 @@ function defaults(): Settings {
     // share the narrow width (the doc becomes an unreadable sliver), so the
     // right sidebar starts hidden. The editor + file tree behave as mutually
     // exclusive full-width views (opening a file collapses the tree).
-    rightSidebarHidden: isMobile(),
+    // 5.0 — writing first: a new install opens on the text alone; the right
+    // sidebar is one click (or ⌘⌥B) away. Saved settings are untouched.
+    rightSidebarHidden: true,
     livePreview: true,
     spellCheck: true,
     focusMode: false,
@@ -623,10 +642,10 @@ function defaults(): Settings {
       } catch { return 'en'; }
     })() as 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru',
     previewFitWidth: false,
-    previewMaxWidth: 760,
+    previewMaxWidth: 680,
     plantumlEnabled: false,
     plantumlServer: 'https://www.plantuml.com/plantuml',
-    limitEditorWidth: false,
+    limitEditorWidth: true,
     customCssPath: '',
     restoreSession: true,
     perWorkspaceTabs: true,
@@ -656,7 +675,7 @@ function defaults(): Settings {
     agentAllowWrite: false,
     agentToolLoopCap: 8,
     sideSidebarWidth: 260,
-    fileTreeWidth: 240,
+    fileTreeWidth: 260,
     aiEnabled: false,
     aiProvider: 'openai',
     aiModel: '',
@@ -669,14 +688,11 @@ function defaults(): Settings {
     showInspector: false,
     rightSidebarPaneHeights: {},
     ragEnabled: false,
-    readingByDefaultOnMobile: (() => {
-      try {
-        return isIOS();
-      } catch {
-        return false;
-      }
-    })(),
-    lastNonReadingViewMode: 'edit',
+    // 5.0 — off for new installs: the phone editor screen has its own preview
+    // button, and reading mode's full-screen takeover hid the nav (back to
+    // 笔记, the bottom bar). Saved settings keep the user's choice.
+    readingByDefaultOnMobile: false,
+    lastNonReadingViewMode: 'liveEdit',
     showWritingStats: true,
     showWorkspaceDailyTotal: false,
     pdfDefaults: defaultPdfDefaults(),
@@ -714,7 +730,7 @@ function defaults(): Settings {
     pdfPageSizeAutoMigrated: true,
     markdownAutoNumberHeadings: false,
     rsPaneOrder: ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'neighborhood', 'types', 'history', 'inspector', 'agent'],
-    previewFontSize: 15,
+    previewFontSize: 16,
     attachmentMode: 'shared',
     assetsDirName: '_assets',
     attachmentCustomPath: './images/${filename}/',
@@ -884,14 +900,52 @@ function load(): Settings {
       // Drop them once; nothing reads them any more.
       delete (merged as unknown as Record<string, unknown>).telemetryEnabled;
       delete (merged as unknown as Record<string, unknown>).telemetryNoticeAck;
+      // D6 — a theme outside the built-in list (e.g. a hand-edited or
+      // MCP-written 'system') rendered as a bare white page; reset it to the
+      // default, and treat a literal 'system' as the follow-OS option.
+      if (typeof parsed.followSystemTheme !== 'boolean') merged.followSystemTheme = false;
+      if ((parsed.theme as string) === 'system') merged.followSystemTheme = true;
+      if (!isTheme(merged.theme)) merged.theme = systemTheme();
+      if (merged.followSystemTheme) merged.theme = systemTheme();
       return merged;
     }
   } catch {}
   return defaults();
 }
 
+const THEMES: readonly Theme[] = [
+  'light', 'dark', 'nord', 'solarized-light', 'solarized-dark', 'monokai', 'github-light', 'dracula',
+];
+export function isTheme(v: unknown): v is Theme {
+  return typeof v === 'string' && (THEMES as readonly string[]).includes(v);
+}
+function systemTheme(): Theme {
+  const dark =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return dark ? 'dark' : 'light';
+}
+
+// D6 — live-follow the OS appearance switch while "System" is selected.
+let systemThemeListening = false;
+function listenSystemTheme() {
+  if (systemThemeListening || typeof window === 'undefined' || !window.matchMedia) return;
+  systemThemeListening = true;
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    const s = useSettingsStore();
+    if (s.followSystemTheme && s.theme !== systemTheme()) {
+      s.theme = systemTheme();
+      s.persist();
+    }
+  });
+}
+
 export const useSettingsStore = defineStore('settings', {
-  state: (): Settings => load(),
+  state: (): Settings => {
+    listenSystemTheme();
+    return load();
+  },
   actions: {
     persist() {
       try {
@@ -902,8 +956,19 @@ export const useSettingsStore = defineStore('settings', {
         localStorage.setItem(LS_KEY, JSON.stringify(rest));
       } catch {}
     },
-    setTheme(theme: Theme) {
-      this.theme = theme;
+    /** 'system' follows the OS appearance; anything not a built-in theme is
+     *  ignored (it used to be stored as-is and render a bare page). */
+    setTheme(theme: Theme | 'system') {
+      if (theme === 'system') {
+        this.followSystemTheme = true;
+        this.theme = systemTheme();
+      } else if (isTheme(theme)) {
+        this.followSystemTheme = false;
+        this.theme = theme;
+      } else {
+        console.warn('[settings] ignoring unknown theme', theme);
+        return;
+      }
       this.persist();
     },
     toggleTheme() {
@@ -1001,6 +1066,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleSolidCursor() {
       this.solidCursor = !this.solidCursor;
+      this.persist();
+    },
+    toggleSelectionBubble() {
+      this.selectionBubble = !this.selectionBubble;
       this.persist();
     },
     toggleAlwaysShowMarkers() {
@@ -1269,7 +1338,7 @@ export const useSettingsStore = defineStore('settings', {
     setFileTreeWidth(w: number) {
       // Reasonable bounds — narrower than 180 hides text, wider than 600
       // eats too much editor space.
-      const clean = Math.max(180, Math.min(600, Math.round(w) || 240));
+      const clean = Math.max(180, Math.min(600, Math.round(w) || 260));
       this.fileTreeWidth = clean;
       this.persist();
     },
@@ -1336,9 +1405,24 @@ export const useSettingsStore = defineStore('settings', {
       this.rightSidebarPaneHeights = { ...this.rightSidebarPaneHeights, [paneId]: clean };
       this.persist();
     },
-    clearRightSidebarPaneHeights() {
+    /** Double-click on one splitter: even out the pane heights only. */
+    resetRightSidebarPaneHeights() {
       this.rightSidebarPaneHeights = {};
       this.persist();
+    },
+    /** E3 — "Reset sidebar layout": pane heights, pane order and the sidebar
+     *  width all go back to their defaults (it used to reset heights only,
+     *  leaving a reordered, 400 px sidebar looking un-reset). */
+    resetRightSidebarLayout() {
+      const d = defaults();
+      this.rightSidebarPaneHeights = {};
+      this.rsPaneOrder = [...d.rsPaneOrder];
+      this.sideSidebarWidth = d.sideSidebarWidth;
+      this.persist();
+    },
+    /** The view.resetSidebarPanes command's entry point (useCommands.ts). */
+    clearRightSidebarPaneHeights() {
+      this.resetRightSidebarLayout();
     },
     setAutoGitDebounceSeconds(n: number) {
       this.autoGitDebounceSeconds = Math.max(5, Math.min(600, Math.round(n) || 30));
@@ -1548,18 +1632,20 @@ export const useSettingsStore = defineStore('settings', {
       this.persist();
     },
     resetRsPaneOrder() {
-      this.rsPaneOrder = ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'neighborhood', 'types', 'history', 'inspector', 'agent'];
+      this.rsPaneOrder = [...defaults().rsPaneOrder];
       this.persist();
     },
     /** v4.3.0 PR #74 — preview-only font size. Editor font is the existing
      *  `setFontSize`; this one drives `--content-font-size` (Preview.vue). */
     setPreviewFontSize(n: number) {
-      this.previewFontSize = Math.max(10, Math.min(32, Math.round(n || 15)));
+      this.previewFontSize = Math.max(10, Math.min(32, Math.round(n || defaults().previewFontSize)));
       this.persist();
     },
-    previewFontIn() { this.setPreviewFontSize((this.previewFontSize || 15) + 1); },
-    previewFontOut() { this.setPreviewFontSize((this.previewFontSize || 15) - 1); },
-    resetPreviewFontSize() { this.setPreviewFontSize(15); },
+    // The fallbacks and the reset read defaults(): literals here went stale
+    // when 5.0 moved both sizes to 16 (regression run F-9).
+    previewFontIn() { this.setPreviewFontSize((this.previewFontSize || defaults().previewFontSize) + 1); },
+    previewFontOut() { this.setPreviewFontSize((this.previewFontSize || defaults().previewFontSize) - 1); },
+    resetPreviewFontSize() { this.setPreviewFontSize(defaults().previewFontSize); },
     /** v4.3.5 — flip between `shared` (`_assets/`) and `per-file`
      *  (`<basename>.assets/`) attachment storage layouts. */
     setAttachmentMode(mode: 'shared' | 'per-file' | 'custom') {
@@ -1627,9 +1713,9 @@ export const useSettingsStore = defineStore('settings', {
     },
     /** v4.3.0 PR #74 — editor-only font size convenience wrappers. The
      *  underlying field is the existing `fontSize`. */
-    editorFontIn() { this.setFontSize((this.fontSize || 14) + 1); },
-    editorFontOut() { this.setFontSize((this.fontSize || 14) - 1); },
-    resetEditorFontSize() { this.setFontSize(14); },
+    editorFontIn() { this.setFontSize((this.fontSize || defaults().fontSize) + 1); },
+    editorFontOut() { this.setFontSize((this.fontSize || defaults().fontSize) - 1); },
+    resetEditorFontSize() { this.setFontSize(defaults().fontSize); },
     // v4.6 F6 — Inbox workflow toggles.
     toggleInboxWorkflow() {
       this.inboxWorkflowEnabled = !this.inboxWorkflowEnabled;

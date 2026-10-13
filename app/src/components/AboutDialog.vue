@@ -4,6 +4,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { DsModal } from '../ui';
 import BrandMark from './BrandMark.vue';
+import Icons from './Icons.vue';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
@@ -98,32 +99,36 @@ async function visit(url: string) {
 
       <div class="about__links">
         <button class="about__link" @click="visit(links.website)">
-          <span class="about__link-icon">🌐</span>
+          <Icons class="about__link-icon" name="globe" :size="16" />
           <div>
             <div class="about__link-title">Website / 官网</div>
             <div class="about__link-url">solomd.app</div>
           </div>
+          <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>
         <button class="about__link" @click="visit(links.github)">
-          <span class="about__link-icon">⭐</span>
+          <Icons class="about__link-icon" name="star" :size="16" />
           <div>
             <div class="about__link-title">GitHub</div>
             <div class="about__link-url">zhitongblog/solomd</div>
           </div>
+          <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>
         <button class="about__link" @click="visit(links.releases)">
-          <span class="about__link-icon">📦</span>
+          <Icons class="about__link-icon" name="sparkle" :size="16" />
           <div>
             <div class="about__link-title">What's New / 更新日志</div>
             <div class="about__link-url">solomd.app/whats-new</div>
           </div>
+          <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>
         <button class="about__link" @click="visit(links.sponsor)">
-          <span class="about__link-icon">❤️</span>
+          <Icons class="about__link-icon" name="heart" :size="16" />
           <div>
             <div class="about__link-title">Sponsor / 赞助</div>
             <div class="about__link-url">GitHub · Alipay · WeChat</div>
           </div>
+          <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>
       </div>
 
@@ -145,6 +150,8 @@ async function visit(url: string) {
 </template>
 
 <style scoped>
+/* 5.0 About: centred brand block, then the links as one System-Settings
+   style group card (rows split by hairlines, chevron on the right). */
 .about {
   text-align: center;
 }
@@ -154,7 +161,8 @@ async function visit(url: string) {
 .about__brand {
   display: flex;
   justify-content: center;
-  margin-bottom: 6px;
+  margin-top: -8px;
+  margin-bottom: 4px;
 }
 .brand {
   width: 64px;
@@ -163,15 +171,16 @@ async function visit(url: string) {
 }
 
 .about__name {
-  margin: 14px 0 2px;
-  font-size: 22px;
-  font-weight: 700;
+  margin: 12px 0 2px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 .about__version {
-  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
   margin-bottom: 14px;
 }
 .about__tagline {
@@ -181,73 +190,89 @@ async function visit(url: string) {
   line-height: 1.6;
 }
 .about__tagline-zh {
-  color: var(--text-muted);
+  color: var(--text-2);
 }
 .about__desc {
   font-size: 12px;
-  color: var(--text-muted);
-  margin: 0 0 22px;
+  color: var(--text-2);
+  margin: 0 0 20px;
   line-height: 1.6;
 }
 .about__desc-zh {
-  color: var(--text-faint);
+  color: var(--text-3);
 }
 
 .about__links {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
+  background: var(--bg-elev);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  text-align: left;
 }
 .about__link {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
+  min-height: 44px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: default;
   text-align: left;
   color: var(--text);
-  transition: all 0.15s;
   font: inherit;
 }
+.about__link + .about__link {
+  box-shadow: inset 0 var(--hair-w) 0 var(--hairline);
+}
 .about__link:hover {
-  border-color: var(--accent);
-  background: var(--bg-hover);
+  background: var(--fill-1);
+}
+.about__link:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent-ring);
+}
+.about__link > div {
+  flex: 1;
+  min-width: 0;
 }
 .about__link-icon {
-  font-size: 18px;
   flex-shrink: 0;
+  color: var(--accent-text);
+}
+.about__link-chev {
+  flex-shrink: 0;
+  color: var(--text-3);
 }
 .about__link-title {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text);
 }
 .about__link-url {
-  font-size: 10px;
-  color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
   margin-top: 1px;
 }
 
 .about__sponsors {
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   font-size: 12px;
   line-height: 1.6;
 }
 .about__sponsors-title {
-  color: var(--text-faint);
+  color: var(--text-3);
   margin-bottom: 2px;
 }
 .about__sponsors-names {
-  color: var(--text-muted);
+  color: var(--text-2);
 }
 .about__footer {
-  font-size: 10px;
-  color: var(--text-faint);
+  font-size: 11px;
+  color: var(--text-3);
   line-height: 1.7;
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch, watchEffect, computed, provide, nextTick, defineAsyncComponent } from 'vue';
 import { useLazyComponent } from './composables/useLazyComponent';
+import { macTitleBar, winTitleBar } from './lib/chrome';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -13,7 +14,7 @@ import { openNewWindow } from './lib/new-window';
 import { ensureSpellDict } from './lib/spell-suggest';
 import Toolbar from './components/Toolbar.vue';
 import TileRoot from './components/TileRoot.vue';
-import StatusBar from './components/StatusBar.vue';
+import StatsPill from './components/StatsPill.vue';
 import Outline from './components/Outline.vue';
 import BacklinksPanel from './components/BacklinksPanel.vue';
 const NeighborhoodPanel = defineAsyncComponent(() => import('./components/NeighborhoodPanel.vue'));
@@ -40,9 +41,10 @@ import { INBOX_OPEN_EVENT, INBOX_CLOSE_EVENT } from './composables/useInboxView'
 // v4.6.1 F2 — Type lens (center-pane filtered view of one type's members).
 const TypeLensView = defineAsyncComponent(() => import('./components/TypeLensView.vue'));
 import { TYPE_LENS_OPEN_EVENT, TYPE_LENS_CLOSE_EVENT } from './composables/useTypeLens';
-import FileTree from './components/FileTree.vue';
+import Sidebar from './components/Sidebar.vue';
+import PhoneTabBar from './components/PhoneTabBar.vue';
+import { usePhoneStore } from './stores/phone';
 // v4.6 F5 — Saved filtered views (sidebar panel + filtered list + editor).
-import ViewsPanel from './components/ViewsPanel.vue';
 import ViewNoteList from './components/ViewNoteList.vue';
 import ViewEditorDialog from './components/ViewEditorDialog.vue';
 import { VIEW_OPEN_EVENT, VIEW_CLOSE_EVENT } from './composables/useSavedViews';
@@ -51,6 +53,8 @@ import ReadingView from './components/ReadingView.vue';
 import UnsavedDialog from './components/UnsavedDialog.vue';
 import FileChangedDialog from './components/FileChangedDialog.vue';
 import Toast from './components/Toast.vue';
+import KeyboardBar from './components/KeyboardBar.vue';
+import { forceKeyboardBarPreview } from './lib/platform';
 import { useTabsStore } from './stores/tabs';
 import { useSettingsStore, buildEditorFontStack, setRightSidebarShell } from './stores/settings';
 import { useWindowsStore, isAuxLabel } from './stores/windows';
@@ -61,7 +65,7 @@ import { useShortcuts } from './composables/useShortcuts';
 import { useFileWatcher } from './composables/useFileWatcher';
 import { loadCustomTheme } from './lib/custom-theme';
 import { isIOS, isMacOS, isAndroid, isMobile, isWindowsDesktop } from './lib/platform';
-import { useViewport } from './composables/useViewport';
+import { useViewport, useTabletOverlay } from './composables/useViewport';
 import { toNativeSpec } from './lib/app-menu';
 import { themeFamily } from './lib/themes';
 import type { Theme, ViewMode } from './types';
@@ -128,9 +132,7 @@ async function requestAndroidStorage() {
     // running process — see android_restart_app).
     localStorage.setItem('solomd:android-storage-pending', '1');
     await invoke('android_request_all_files_access');
-    toasts.info(
-      '打开「允许管理所有文件 / All files access」后返回,App 会自动重启以让权限生效。',
-    );
+    toasts.info(t('toast.androidAllFilesReturn'));
   } catch (e) {
     toasts.error(String(e));
   }
@@ -220,6 +222,13 @@ function onInsertTableConfirm(markdown: string) {
 // SettingsPanel watches it and switches activeCategory accordingly.
 const settingsInitialSection = ref<string | null>(null);
 function openSettingsAt(section: string | null = null) {
+  // Every "AI isn't set up yet" path (toolbar AI, rewrite overlay, agent
+  // panel) lands here with `integrations`. Until the wizard has been seen,
+  // that first reach for AI gets the guided setup instead of a settings page.
+  if (section === 'integrations' && !IS_APP_STORE_BUILD && !settings.agentWizardSeen) {
+    wizardOpen.value = true;
+    return;
+  }
   settingsInitialSection.value = section;
   settingsOpen.value = true;
 }
@@ -748,6 +757,8 @@ watchEffect(() => {
 let themeAppliedOnce = false;
 watchEffect(() => {
   document.documentElement.setAttribute('data-theme', dataThemeFor(settings.theme, !!settings.customCssPath));
+  // 5.0 tokens: the exact default palette stays out of a marketplace theme's way.
+  document.documentElement.toggleAttribute('data-custom-theme', !!settings.customCssPath);
   const overriddenBy = settings.customCssPath;
   if (!themeAppliedOnce) {
     themeAppliedOnce = true;
@@ -971,6 +982,14 @@ async function runEditHistory(kind: 'undo' | 'redo') {
  * menu-only entries below.
  */
 function dispatchMenuAction(id: string) {
+  // The table's working copy belongs to its original note/view. Native menu
+  // accelerators must not close or change that view underneath the dialog.
+  if (tableEditor.session) {
+    if (id === 'file.closeTab' || id === 'file.exit') {
+      window.dispatchEvent(new Event('solomd:table-close-request'));
+    }
+    return;
+  }
   if (id.startsWith('recent.open:')) {
     const path = workspace.recentFiles[Number(id.slice('recent.open:'.length))];
     if (path) void files.openPath(path);
@@ -1061,6 +1080,9 @@ function dispatchMenuAction(id: string) {
         window.dispatchEvent(new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId } }));
       }
       return;
+    case 'edit.replace':
+      shortcuts.runAction('editor.replace');
+      return;
     // Windows unified title bar — the in-app Edit menu (Toolbar.vue). The
     // native menu uses PredefinedMenuItems here; in-app we drive the focused
     // editor directly. `execCommand` covers the Windows editors (plain
@@ -1137,6 +1159,13 @@ try {
 // `autoSaveOnBlur` setting (default off) inside autoSaveDirtyTabs().
 function onWindowBlur() {
   void files.autoSaveDirtyTabs();
+  // 5.0 — selections and the sidebar highlight go neutral grey while the
+  // window is in the background, as in Finder / Notes (tokens.css
+  // --select-inactive).
+  document.documentElement.classList.add('window-inactive');
+}
+function onWindowFocus() {
+  document.documentElement.classList.remove('window-inactive');
 }
 
 /**
@@ -1268,6 +1297,7 @@ onMounted(async () => {
   document.addEventListener('auxclick', onStrayLinkClick);
   window.addEventListener('wheel', onWheelZoom, { passive: false, capture: true });
   window.addEventListener('blur', onWindowBlur);
+  window.addEventListener('focus', onWindowFocus);
   window.addEventListener('solomd:open-help', onOpenHelpEvent as EventListener);
   window.addEventListener('solomd:open-global-search', onOpenSearchEvent as EventListener);
   window.addEventListener('solomd:open-cjk-proofread', onOpenCjkProofreadEvent as EventListener);
@@ -1378,16 +1408,11 @@ onMounted(async () => {
     tabs.newTab();
   }
 
-  // v4.0 first-run agent setup wizard. Fires after the welcome tour on a
-  // fresh install — once. Re-openable from Settings → AI ("Run setup
-  // wizard again") for users who skipped it. We wait one tick so the
-  // welcome tour overlay (if any) shows first. App Store builds skip
-  // entirely (Apple 3.1.1 — no AI surface).
-  if (!IS_APP_STORE_BUILD && !settings.agentWizardSeen) {
-    setTimeout(() => {
-      wizardOpen.value = true;
-    }, isFreshLaunch ? 800 : 0);
-  }
+  // The agent setup wizard no longer opens by itself at first launch: 5.0
+  // starts on the page, and a modal about AI providers was the first thing
+  // a new user saw — covering the phone home screen entirely. It now opens
+  // the first time someone reaches for AI before setting it up (see
+  // `openSettingsAt`), and stays re-openable from Settings → AI.
   // Settings → AI's "Run setup wizard again" button asks here. Registered
   // as a named handler (see `onOpenAgentWizard` below) so onBeforeUnmount
   // can detach it — otherwise every HMR remount stacks another listener.
@@ -1411,6 +1436,10 @@ onMounted(async () => {
     await listen<string>('solomd://close-requested', async (e) => {
       const me = getCurrentWindow().label;
       if (e.payload && e.payload !== me) return;
+      if (tableEditor.session) {
+        window.dispatchEvent(new Event('solomd:table-close-request'));
+        return;
+      }
       // Editors sync their document into the store on a debounce; text typed
       // just before the close would otherwise miss the persist below.
       flushPendingEdits();
@@ -1651,6 +1680,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('auxclick', onStrayLinkClick);
   window.removeEventListener('wheel', onWheelZoom, { capture: true } as EventListenerOptions);
   window.removeEventListener('blur', onWindowBlur);
+  window.removeEventListener('focus', onWindowFocus);
   window.removeEventListener('solomd:open-help', onOpenHelpEvent as EventListener);
   window.removeEventListener('solomd:open-global-search', onOpenSearchEvent as EventListener);
   window.removeEventListener('solomd:open-cjk-proofread', onOpenCjkProofreadEvent as EventListener);
@@ -1748,6 +1778,110 @@ const showSearchPane = computed(() => searchOpen.value);
 // #168 — phone shell: one flag drives the CSS and the behaviour.
 const { isNarrow } = useViewport();
 
+// 5.0 §8 — phone shell: home (笔记) / search / editor as full-screen views.
+const phone = usePhoneStore();
+// 5.0 §7 — iPad portrait: the sidebar floats over the text and steps aside
+// once a note is picked.
+const { isTabletOverlay } = useTabletOverlay();
+// DEV-only: `?layoutdebug` prints the chrome's geometry on screen, for
+// checking layouts in iOS Simulator Safari, which can't be scripted.
+const layoutDebug = ref('');
+if (import.meta.env.DEV && location.search.includes('layoutdebug')) {
+  let lastTap = '-';
+  for (const type of ['pointerdown', 'touchstart', 'click'] as const) {
+    document.addEventListener(type, (e) => {
+      const t = e.target as HTMLElement | null;
+      const pt = 'clientX' in e ? `${Math.round((e as PointerEvent).clientX)},${Math.round((e as PointerEvent).clientY)}` : '';
+      lastTap = `${type} ${pt} ${t?.tagName?.toLowerCase()}.${(t?.className && typeof t.className === 'string' ? t.className : '').split(' ')[0]}`;
+    }, true);
+  }
+  setInterval(() => {
+    const r = (sel: string) => {
+      const e = document.querySelector(sel);
+      if (!e) return '-';
+      const b = e.getBoundingClientRect();
+      return `${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}x${Math.round(b.height)}`;
+    };
+    layoutDebug.value = [
+      `mode=${settings.viewMode} rdm=${settings.readingByDefaultOnMobile} view=${phone.view} narrow=${isNarrow.value} vv=${Math.round(window.visualViewport?.height ?? 0)} ih=${innerHeight}`,
+      `scrollY=${Math.round(scrollY)} body=${document.body.scrollTop} html=${document.documentElement.scrollTop}`,
+      `app ${r('.app')}`,
+      `toolbar ${r('.main-col .toolbar')}`,
+      `content ${r('.content')}`,
+      `tap ${lastTap}`,
+    ].join('\n');
+  }, 500);
+}
+function phoneShowEditor() {
+  if (isNarrow.value) phone.show('editor');
+  if (isTabletOverlay.value && settings.showFileTree) settings.toggleFileTree();
+}
+// Opening or switching to a note is what moves a phone to the editor — but
+// not the session restore at launch: a cold start lands on 笔记, the way
+// Notes does. (Opening a file from another app still goes straight to it,
+// through 'solomd:file-opened' below.)
+let phoneTabWatchArmed = false;
+onMounted(() => setTimeout(() => { phoneTabWatchArmed = true; }, 1500));
+watch(() => tabs.activeId, () => {
+  if (!phoneTabWatchArmed) return;
+  // An empty Untitled that appears on its own — opening a folder starts its
+  // session with one — is not the user opening a note: picking a folder
+  // landed on a blank editor instead of the folder's notes. New notes and
+  // opened files announce themselves through 'solomd:file-opened'.
+  const t = tabs.activeTab;
+  if (t && !t.filePath && t.content === '') return;
+  phoneShowEditor();
+});
+// On a phone, reading mode is the editor screen's preview: the full-screen
+// reader would drop the nav bar and leave no way back to 笔记.
+watch(
+  () => [isNarrow.value, settings.viewMode] as const,
+  ([narrow, mode]) => {
+    if (narrow && mode === 'reading') settings.setViewMode('preview');
+  },
+  { immediate: true },
+);
+window.addEventListener('solomd:file-opened', phoneShowEditor);
+// Android's back button: the WebView goes back in its history and only
+// finishes the activity when there is none — and the phone shell never made
+// any, so Back from a note quit the app. Leaving 笔记 for the editor or
+// search pushes one entry; Back pops it and returns to 笔记. The in-app ‹
+// button pops it too, so the two stay in step.
+let phoneHistoryOps = 0; // history.back() calls of ours whose popstate is still due
+watch(
+  () => phone.view,
+  (v, old) => {
+    if (!isNarrow.value) return;
+    if (old === 'home' && v !== 'home') {
+      history.pushState({ solomdPhone: v }, '');
+    } else if (v === 'home' && old !== 'home' && history.state?.solomdPhone) {
+      phoneHistoryOps++;
+      history.back();
+    }
+  },
+);
+window.addEventListener('popstate', () => {
+  if (phoneHistoryOps > 0) {
+    phoneHistoryOps--;
+    return;
+  }
+  if (isNarrow.value && phone.view !== 'home') {
+    window.dispatchEvent(new Event('solomd:close-menus'));
+    phone.show('home');
+  }
+});
+// Back to 笔记 leaves any centre-pane page (inbox, Bases, type lens, saved
+// view) so the next note opens as a note.
+watch(
+  () => phone.view,
+  (v) => {
+    if (v !== 'home') return;
+    inboxViewOpen.value = false;
+    basesOpen.value = false;
+    typeLensOpen.value = false;
+  },
+);
+
 /**
  * Whether any pane in the right strip could draw something right now,
  * ignoring the master hide flag. Most panes need a workspace folder and
@@ -1809,7 +1943,10 @@ setRightSidebarShell({
  */
 const narrowDrawer = computed<'left' | 'right' | null>(() => {
   if (!isNarrow.value) return null;
-  if (settings.showFileTree || settings.showViewsPanel) return 'left';
+  // 5.0: no left drawer on a phone — the file tree is the 笔记 home screen
+  // and the sidebar is not rendered there at all. `showFileTree` (on by
+  // default) still read as an open drawer, so the editor sat under the
+  // scrim, dimmed, with the first tap spent dismissing nothing.
   if (showRightSidebar.value) return 'right';
   return null;
 });
@@ -2025,6 +2162,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       'app--reading': settings.viewMode === 'reading',
       'app--mobile': isMobile(),
       'app--narrow': isNarrow,
+      'app--tablet-overlay': isTabletOverlay && !isNarrow,
       'app--drawer-left': narrowDrawer === 'left',
       'app--drawer-right': narrowDrawer === 'right',
     }"
@@ -2039,13 +2177,20 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       <ReadingView />
     </template>
     <template v-else>
+      <!-- 5.0 window (docs/v5-ui-spec.md §3): on Windows a 44px frameless title
+           bar spans the window; below it — and on every other platform at the
+           top — the sidebar runs full height beside a column holding the 52px
+           header and the workspace. On macOS the traffic lights sit in the
+           sidebar's top inset, or over the header when the sidebar is hidden. -->
       <Toolbar
+        v-if="winTitleBar"
+        variant="titlebar"
         @open-palette="paletteOpen = true"
         @open-settings="openSettingsAt()"
         @open-help="helpOpen = true"
         @open-search="toggleGlobalSearch()"
       />
-      <div class="workspace">
+      <div class="shell">
         <!-- #168 — on a phone the side panes float over the editor instead of
              stealing its width; this catches the tap that dismisses them. -->
         <div
@@ -2054,10 +2199,41 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
           aria-hidden="true"
           @click="closeNarrowDrawer"
         />
-        <div v-if="settings.showFileTree || settings.showViewsPanel" class="left-stack">
-          <FileTree v-if="settings.showFileTree" />
-          <ViewsPanel v-if="settings.showViewsPanel" />
+        <div
+          v-if="isTabletOverlay && !isNarrow && settings.showFileTree"
+          class="workspace__scrim"
+          aria-hidden="true"
+          @click="settings.toggleFileTree()"
+        />
+        <!-- 5.0 §8 — phone: 笔记 home / search screens with the bottom bar. -->
+        <div v-if="isNarrow && phone.view !== 'editor'" class="phone-screen">
+          <Sidebar
+            v-if="phone.view === 'home'"
+            variant="phone"
+            @open-settings="openSettingsAt()"
+            @open-quick-switcher="quickSwitcherOpen = true"
+            @filter-tag="(tag: string) => { searchPrefill = `#${tag}`; phone.show('search'); }"
+          />
+          <GlobalSearch v-else class="phone-search" :prefill="searchPrefill" @close="phone.show('home')" />
+          <PhoneTabBar @open-settings="openSettingsAt()" />
         </div>
+        <Sidebar
+          v-if="settings.showFileTree && !isNarrow"
+          class="left-stack"
+          :mac-inset="macTitleBar"
+          @toggle="settings.toggleFileTree()"
+          @open-settings="openSettingsAt()"
+          @open-quick-switcher="quickSwitcherOpen = true"
+          @filter-tag="onFilterTag"
+        />
+        <div v-show="!isNarrow || phone.view === 'editor'" class="main-col">
+      <Toolbar
+        @open-palette="paletteOpen = true"
+        @open-settings="openSettingsAt()"
+        @open-help="helpOpen = true"
+        @open-search="toggleGlobalSearch()"
+      />
+      <div class="workspace">
         <aside
           v-if="showRightSidebar && settings.outlineSide === 'left'"
           class="side-sidebar side-sidebar--left"
@@ -2081,7 +2257,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
                 class="rs-pane-grip"
                 :title="t('rsPane.dragToReorder')"
                 @pointerdown="startPaneReorder($event, p.id)"
-              >⋮⋮</div>
+              />
               <GlobalSearch
                 v-if="p.id === 'search'"
                 :prefill="searchPrefill"
@@ -2123,6 +2299,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
           <TypeLensView v-else-if="typeLensOpen" :type-name="typeLensName" />
           <ViewNoteList v-else-if="viewPaneVisible" />
           <TileRoot v-else :node="tiles.root" @cursor="onCursor" @selection="onSelection" />
+          <StatsPill v-if="!basesOpen && !inboxViewOpen && !typeLensOpen && !viewPaneVisible" :line="cursorLine" :col="cursorCol" :selection-text="selectionText" />
         </div>
         <aside
           v-if="showRightSidebar && settings.outlineSide !== 'left'"
@@ -2147,7 +2324,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
                 class="rs-pane-grip"
                 :title="t('rsPane.dragToReorder')"
                 @pointerdown="startPaneReorder($event, p.id)"
-              >⋮⋮</div>
+              />
               <GlobalSearch
                 v-if="p.id === 'search'"
                 :prefill="searchPrefill"
@@ -2184,7 +2361,8 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
           </template>
         </aside>
       </div>
-      <StatusBar :line="cursorLine" :col="cursorCol" :selection-text="selectionText" />
+        </div>
+      </div>
       <!-- Grid editor for the table under the caret. The pane that found the
            table supplies the write-back closure, so this stays pane-agnostic. -->
       <TableEditor
@@ -2321,6 +2499,9 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @cancel="onFileChangedAction('cancel')"
     />
     <Toast />
+    <pre v-if="layoutDebug" class="layout-debug">{{ layoutDebug }}</pre>
+    <!-- 5.0 — format bar above the software keyboard (phones / tablets). -->
+    <KeyboardBar v-if="isMobile() || forceKeyboardBarPreview()" />
     <component
       :is="AndroidFolderPickerC"
       v-if="AndroidFolderPickerC"
@@ -2410,6 +2591,55 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   padding-right: env(safe-area-inset-right, 0);
   box-sizing: border-box;
 }
+/* 5.0 shell: sidebar column (full height) | main column (header + workspace). */
+.shell {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+.layout-debug {
+  position: fixed;
+  left: 8px;
+  top: 40%;
+  z-index: 99999;
+  margin: 0;
+  padding: 6px 8px;
+  font: 11px/1.4 var(--font-mono);
+  background: rgba(0, 0, 0, 0.75);
+  color: #0f0;
+  border-radius: 6px;
+  pointer-events: none;
+}
+/* 5.0 §7 — iPad portrait: the sidebar floats over the editor. */
+.app--tablet-overlay .shell > .left-stack {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  box-shadow: var(--sh-modal);
+}
+/* 5.0 §8 — a phone home / search screen fills the window. */
+.phone-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+.phone-screen > .phone-search {
+  flex: 1;
+  min-height: 0;
+}
+.main-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
 .workspace {
   flex: 1;
   display: flex;
@@ -2432,6 +2662,15 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
  * ============================================================ */
 .app--narrow .workspace {
   position: relative;
+}
+.app--narrow .shell > .left-stack {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: min(86vw, 320px);
+  box-shadow: var(--sh-modal);
 }
 .app--narrow .left-stack,
 .app--narrow .side-sidebar {
@@ -2498,13 +2737,13 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   width: 260px;
   flex: 0 0 260px;
   min-width: 240px;
-  background: var(--bg-soft, var(--bg));
+  background: var(--bg);
 }
 .side-sidebar--left {
-  border-right: 1px solid var(--border);
+  border-right: var(--bd-hair);
 }
 .side-sidebar--right {
-  border-left: 1px solid var(--border);
+  border-left: var(--bd-hair);
 }
 /* Drag handle for live-resize. Sits on the inner edge of the sidebar
    (right edge of left sidebar, left edge of right sidebar) as a 5px
@@ -2526,8 +2765,8 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   left: -4px;
 }
 .side-sidebar__resize:hover {
-  background: var(--accent, #6366f1);
-  opacity: 0.5;
+  background: var(--accent);
+  opacity: 0.35;
 }
 /* v4.3.0 PR #75 — right-click context menu floats over the workspace via
    <Teleport to="body">. Toolbar's master-toggle is the canonical hide
@@ -2614,41 +2853,66 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   border-left: 0;
   border-right: 0;
 }
-/* v4.3.0 issue #57b — drag grip + drop-target highlight for right-sidebar
-   reordering. Grip is intentionally subtle (8px dotted strip at the top of
-   each pane); hovering surfaces it more clearly. Only the grip is draggable
-   so text selection inside the pane still works. */
+/* v4.3.0 issue #57b — drag grip for right-sidebar reordering. 5.0: no
+   longer a strip that takes height; a six-dot handle floats over the top
+   edge of the pane header, centred, and only appears while the pointer is
+   over that pane. Only the grip starts a drag, so text selection inside
+   the pane still works. */
+.rs-pane-host {
+  position: relative;
+}
 .rs-pane-grip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 10px;
-  flex: 0 0 10px;
-  color: var(--text-faint);
-  font-size: 8px;
-  letter-spacing: 2px;
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  z-index: 3;
+  width: 28px;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: var(--r-xs);
+  color: var(--text-3);
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
   /* #131 — pointer-driven reorder: stop the browser turning a vertical drag on
      the grip into a scroll/pan gesture so pointermove tracking stays clean. */
   touch-action: none;
-  background: transparent;
-  transition: background 120ms, color 120ms;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+/* 3 × 2 dots, 2 px, on a 4 px pitch. */
+.rs-pane-grip::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  background-image: radial-gradient(circle, currentColor 0.9px, transparent 1.3px);
+  background-size: 4px 4px;
+  background-position: 0 0;
+}
+.rs-pane-host:hover > .rs-pane-grip,
+.rs-pane-grip:focus-visible {
+  opacity: 1;
 }
 .rs-pane-grip:hover {
-  background: var(--bg-hover);
-  color: var(--text-muted);
+  background: var(--fill-1);
+  color: var(--text-2);
 }
 .rs-pane-grip:active {
   cursor: grabbing;
+  background: var(--fill-2);
 }
 .rs-pane-host--dragging {
   opacity: 0.4;
 }
 .rs-pane-host--drop-target {
-  outline: 2px dashed var(--accent);
-  outline-offset: -2px;
+  outline: 0;
+  box-shadow: inset 0 2px 0 var(--accent);
+  background: var(--accent-soft);
 }
 /* Make sure the grip + content layout share vertical space cleanly. */
 .rs-pane-host > .rs-pane-grip + :deep(*) {

@@ -1,10 +1,11 @@
 import { createApp, defineAsyncComponent } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
-import { isLang, loadLocale } from './i18n';
+import { followHtmlLang, isLang, loadLocale } from './i18n';
 import { useSettingsStore } from './stores/settings';
 import { reanchorIosContainerPaths } from './lib/ios-container';
 import { isWindowsDesktop } from './lib/platform';
+import { preloadRenderDeps } from './lib/render-deps';
 import './styles/cjk-font.css';
 import './styles/main.css';
 import './styles/hljs-theme.css';
@@ -37,6 +38,7 @@ if (import.meta.env.DEV && /[?&]imetrace\b/.test(location.search)) {
 const app = createApp(rootComponent);
 const pinia = createPinia();
 app.use(pinia);
+followHtmlLang();
 
 // The locale dictionaries are code-split — only English is bundled, the other
 // 13 are chunks (they were ~1.1 MB inside the entry chunk before). Await the
@@ -70,4 +72,9 @@ void Promise.all([
   loadLocale(isLang(settings.language) ? settings.language : 'en').catch(() => {}),
 ]).finally(() => {
   app.mount('#app');
+  // KaTeX + highlight.js are their own chunks (lib/render-deps.ts): fetch and
+  // compile them once the first frame is up, so they are almost always ready
+  // before a formula or code fence is on screen. The capture box never
+  // renders markdown; the slideshow awaits them itself.
+  if (rootComponent === App) preloadRenderDeps();
 });

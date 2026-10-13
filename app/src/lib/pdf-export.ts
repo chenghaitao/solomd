@@ -15,6 +15,7 @@
 import { initMermaid } from './mermaid-lazy';
 import { sanitizeModernColors } from './export-colors';
 import { renderMarkdown, extractImageRoot } from './markdown';
+import { loadRenderDeps } from './render-deps';
 import type { ResolvedPdfOptions } from './pdf-options';
 import { rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
 import { blobToPng, loadImageBlob } from './image-clipboard';
@@ -327,6 +328,7 @@ export async function capturePdfRaster(
   filePath?: string,
   plantumlServer?: string | null,
 ): Promise<PdfRasterCapture> {
+  await loadRenderDeps(); // rendered once — no placeholder math / plain code
   const rawHtml = renderMarkdown(source || '');
   // v4.3.0 issue #77 — also rewrite link hrefs so local-file links
   // don't bake in `http://tauri.localhost/...` URLs.

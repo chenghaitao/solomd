@@ -5,6 +5,7 @@ import Preview from './Preview.vue';
 import { useSettingsStore, clampSplitRatio, SPLIT_RATIO_MIN, SPLIT_RATIO_MAX } from '../stores/settings';
 import { useI18n } from '../i18n';
 import { useTilesStore } from '../stores/tiles';
+import { useTabsStore } from '../stores/tabs';
 import type { Tab } from '../types';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
 
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 
 const settings = useSettingsStore();
 const tiles = useTilesStore();
+const tabs = useTabsStore();
 const { t } = useI18n();
 
 const editorRef = ref<InstanceType<typeof Editor> | null>(null);
@@ -62,10 +64,35 @@ const editorImplementationKey = computed(() => {
 });
 
 function onCursor(line: number, col: number) {
+  // A12 — remember the caret per tab so a relaunch can put it back.
+  if (props.tab) tabs.setCursor(props.tab.id, line, col);
   if (isFocused.value) {
     emit('cursor', line, col);
   }
 }
+
+// A12 — put the caret back where it was in the previous session, once per
+// restored tab, the first time that tab is shown in the focused pane's
+// editor (preview-only mode keeps it pending until an editor shows it).
+// `setCaret(line, col)` is used when the editor exposes it; otherwise the
+// existing `gotoLine` lands on the right line (column 1).
+function restoreLaunchCursor() {
+  const tab = props.tab;
+  if (!tab || !isFocused.value || !showEditor.value) return;
+  const tabId = tab.id;
+  setTimeout(() => {
+    const ed = editorRef.value as unknown as {
+      setCaret?: (line: number, col: number) => void;
+      gotoLine?: (line: number) => void;
+    } | null;
+    if (!ed || props.tab?.id !== tabId) return;
+    const c = tabs.takeLaunchCursor(tabId);
+    if (!c) return;
+    if (ed.setCaret) ed.setCaret(c.line, c.col);
+    else ed.gotoLine?.(c.line);
+  }, 150);
+}
+watch(() => [props.tab?.id, isFocused.value, showEditor.value], restoreLaunchCursor);
 
 function onSelection(text: string) {
   if (isFocused.value) {
@@ -447,6 +474,7 @@ watch(() => props.tab?.id, async () => {
 
 onMounted(() => {
   setTimeout(bindScrollSync, 300);
+  restoreLaunchCursor();
   window.addEventListener('solomd:outline-goto', onOutlineGotoEvent);
   window.addEventListener('solomd:insert-markdown', onInsertMarkdownEvent);
   window.addEventListener('solomd:insert-image-path', onInsertImagePathEvent);
@@ -527,8 +555,8 @@ function onEditorFindEvent(e: Event) {
   // No paneId → the focused pane handles it.
   if (paneId && paneId !== props.paneId) return;
   if (!paneId && !isFocused.value) return;
-  const ed = editorRef.value as unknown as { openFind?: () => void } | null;
-  ed?.openFind?.();
+  const ed = editorRef.value as unknown as { openFind?: (replace?: boolean) => void } | null;
+  ed?.openFind?.(!!(e as CustomEvent).detail?.replace);
 }
 
 /** Formula editor — same focused-pane routing as find. */
@@ -636,24 +664,27 @@ function onPreviewSearchEvent(e: Event) {
   height: 100%;
 }
 .pane--editor + .pane--preview {
-  border-left: 1px solid var(--border);
+  border-left: var(--bd-hair);
 }
 /* The divider is the line between the panes now; without this the preview
    host's own left border doubles it. */
 .split-divider + .pane--preview :deep(.preview-host) {
   border-left: none;
 }
-/* #367 — 1px of layout (the line between the panes) with a 9px invisible
-   hit zone over it, so the editor's `splitRatio`% stays exact. */
+/* #367 / 5.0 — a hairline with a small, always-visible grip in the middle
+   (docs/v5-ui-spec.md, split board). 1px of layout so the editor's
+   `splitRatio`% stays exact; the ::before is a 9px invisible hit zone. Hover
+   and drag deepen the line and the grip rather than painting the accent —
+   the divider is furniture, not a call to action. */
 .split-divider {
-  flex: 0 0 1px;
+  flex: 0 0 var(--hair-w, 1px);
   position: relative;
   z-index: 6;
-  background: var(--border);
+  background: var(--hairline);
   cursor: col-resize;
   touch-action: none;
   outline: none;
-  transition: background 0.15s;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .split-divider::before {
   content: '';
@@ -668,22 +699,23 @@ function onPreviewSearchEvent(e: Event) {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 3px;
+  width: 5px;
   height: 28px;
   transform: translate(-50%, -50%);
-  border-radius: 2px;
-  background: var(--text-faint);
-  opacity: 0;
-  transition: opacity 0.15s;
+  border-radius: 3px;
+  background: var(--fill-2);
+  transition: background var(--dur-fast) var(--ease-out), height var(--dur-fast) var(--ease-out);
 }
 .split-divider:hover,
-.split-divider:focus-visible,
 .split-divider--active {
-  background: var(--accent);
+  background: var(--fill-2);
 }
 .split-divider:hover::after,
-.split-divider:focus-visible::after,
 .split-divider--active::after {
-  opacity: 0.9;
+  background: var(--text-3);
+  height: 36px;
+}
+.split-divider:focus-visible::after {
+  background: var(--accent);
 }
 </style>

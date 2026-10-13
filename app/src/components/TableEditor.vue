@@ -21,7 +21,7 @@
  * does (click, Shift-click for a range, Ctrl/Cmd-click to add one), and the
  * alignment buttons then act on the whole selection at once.
  */
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   parseTable,
   serializeTable,
@@ -48,6 +48,11 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const model = ref<TableModel>(parseTable(props.source) ?? emptyTable());
+/** Upstream 5.0 — the app asks the editor to close (tab close, ⌘W); routed
+ *  through this fork's guarded `requestClose()` below so the prompt still
+ *  stands between a stray close and a lost table. */
+onMounted(() => window.addEventListener('solomd:table-close-request', requestClose));
+onBeforeUnmount(() => window.removeEventListener('solomd:table-close-request', requestClose));
 /** Which column the row/column buttons act on. -1 while the caret is in the
  *  header, which is still a column — the row index is what differs. */
 const focused = ref<{ row: number; col: number }>({ row: -1, col: 0 });
@@ -272,11 +277,12 @@ function discardAndClose() {
 
 /**
  * Tab moves to the next cell rather than out of the dialog, which is what a
- * grid is expected to do; Escape cancels. Enter inside a cell is swallowed
+ * grid is expected to do; Escape / close-tab request a guarded close. Enter inside a cell is swallowed
  * because a newline would split the row across two table lines.
  */
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
+  if (e.isComposing) return;
+  if (e.key === 'Escape' || ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'w')) {
     e.preventDefault();
     // While the prompt is up, Esc dismisses the prompt — not the whole editor,
     // which is the tab-away reflex that #390 exists to stop.
@@ -306,7 +312,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="tbl__backdrop" @click.self="requestClose" @keydown="onKeydown">
-    <div class="tbl" role="dialog" aria-modal="true">
+    <div class="tbl" role="dialog" aria-modal="true" :inert="showDiscardPrompt">
       <header class="tbl__head">
         <span class="tbl__title">{{ t('tableEditor.heading') }}</span>
         <span class="tbl__size">{{ colCount }} × {{ model.rows.length }}</span>

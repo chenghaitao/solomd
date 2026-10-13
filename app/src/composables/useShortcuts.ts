@@ -13,6 +13,7 @@ import { FORMAT_KINDS, type FormatKind } from '../lib/md-format';
 import { MARKDOWN_ONLY_COMMANDS, type EditorCommand } from '../lib/editor-commands';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
+import { tableEditor } from '../lib/table-editor-bus';
 
 interface Hooks {
   openPalette?: () => void;
@@ -194,6 +195,19 @@ export function useShortcuts(hooks: Hooks = {}) {
         new CustomEvent('solomd:preview-search', { detail: { paneId: tiles.focusedPaneId } }),
       );
     },
+    // Opens the same find bar with the caret in the replace field. The
+    // preview has no replace, so there it is the preview's find.
+    'editor.replace': () => {
+      if (settings.viewMode === 'preview' && tabs.activeTab?.language === 'markdown') {
+        window.dispatchEvent(
+          new CustomEvent('solomd:preview-search', { detail: { paneId: tiles.focusedPaneId } }),
+        );
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent('solomd:editor-find', { detail: { paneId: tiles.focusedPaneId, replace: true } }),
+      );
+    },
     'tab.prev': () => activateTabByOffset(-1),
     'tab.next': () => activateTabByOffset(1),
     'tile.splitRight': () => tiles.splitPane(tiles.focusedPaneId, 'horizontal'),
@@ -235,13 +249,24 @@ export function useShortcuts(hooks: Hooks = {}) {
     const bindings = resolveBindings(settings.keybindings);
     const actionId = bindings.get(combo);
     if (!actionId) return;
+    // Includes keys from the teleported close-confirmation dialog and the
+    // Windows IME keyup fallback. Leave the table's source note/view intact.
+    if (tableEditor.session) {
+      e.preventDefault();
+      if (actionId === 'file.closeTab') {
+        window.dispatchEvent(new Event('solomd:table-close-request'));
+      }
+      return;
+    }
     // A chord CodeMirror's own keymap already handled (it calls
     // preventDefault) belongs to the editor: ⌘⇧Z redoing *and* starting a
     // Pomodoro session, AI rewrite opening its overlay twice. Only file /
     // window / navigation commands still run on top of it.
     const inEditor = e.target instanceof Element && !!e.target.closest('.cm-editor');
     if (e.defaultPrevented && inEditor && !appRunsAfterEditor(actionId, combo)) return;
-    const run = actions[actionId];
+    // Menu commands made bindable for the menus' sake (export, quick capture,
+    // open folder…) need no handler of their own: they run as the palette does.
+    const run = actions[actionId] ?? (commands.some((c) => c.id === actionId) ? () => runById(actionId) : undefined);
     if (!run) return;
     if (run() === false) return; // action declined — leave the event alone
     e.preventDefault();
