@@ -7,11 +7,105 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 几条约定：
 
-- **版本号沿用上游的 4.x 序号**，因此可能与上游重号（上游先占了 4.14.0 / 4.14.1，本 fork 用
-  4.14.1 / 4.14.2 / 4.14.3 与之区分）。
+- **版本号沿用上游的序号**，因此可能与上游重号（上游先占了 4.14.0 / 4.14.1，本 fork 用
+  4.14.1 / 4.14.2 / 4.14.3 与之区分）。自 5.0.0 起与上游同号 —— 本 fork 就是"上游 5.0.0 减去
+  推广/遥测/商店分发，再加上本地自研修复"。
 - 拉取上游一律 `git fetch upstream --no-tags`：两边都有 `v4.13.3` 标签，带 `--tags` 会被拒或被
   `--force` 悄悄改写本地标签。
 - 本 fork 的 release 由 CI 产出，默认是 **draft**，需要在 GitHub 上手动 Publish 才对外可见。
+
+---
+
+## [5.0.0] — 2026-10-13
+
+一条线：**同步上游 129 个提交**（上游 4.14.11 → **5.0.0**，即 `feat/v5-ui` 大版本合并）。
+v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板解剖、手机外壳、模糊命令匹配、
+真正的「跟随系统」主题等。上游的推广 / 赞助 / 遥测 / 商店与 MCP 分发登记一律不落地；
+本 fork 的 9 项自研修复（#395 #390 #381 #389 #387 #385 #384 #382 #378）与构建脚本全部保留。
+
+### 上游同步
+
+上游 `f0f22279..03d38a68`：**129 个提交**（106 个非 merge + 23 个 merge）、**659 个文件**有改动。
+分叉点 `f0f22279` 正是上次同步（4.14.11）合并的上游 tip，两侧边界干净。
+
+落地方式沿用上次：**真实 `git merge upstream/main`，在冲突处逐个取舍**。初始 34 个冲突文件，
+回退 `web/` 与 `app-store/` 后剩 **24 个**，其中 18 个需人工取舍，其余重叠文件由 git 自动合并。
+合并后相对 fork HEAD 净改动 **391 个文件**（新增 218 / 修改 172 / 删除 1）。
+
+**排除（不落地）**
+
+| 项 | 上游 5.0 的内容 | 处置 |
+|---|---|---|
+| 遥测 | 重新引入 `TelemetryBanner.vue`、设置页「匿名用量」开关、`lib/telemetry.ts`、各处的 `track(...)` | 全不落地；`TelemetryBanner.vue` 删除，`settings.ts` 保留迁移代码继续清理 `telemetryEnabled` / `telemetryNoticeAck` |
+| 求 star / 推广 | `scheduleStarPrompt` 一类提醒、`AboutDialog` 的 promoters 区块与 promote 按钮 | 不落地（fork 原有的 sponsors / testers 感谢名单保留） |
+| App Store / 商店分发 | `app-store/` 整目录、`scripts/asc-apply-metadata.py`、`asc-upload-screenshots.py`、`verify-mac-signed-interactive.py` | 整目录回退 + 脚本删除 |
+| 官网 `web/` | 5.0 版站点、真实截图、whats-new、llms | 整目录回退（仍冻结在 4.14.x） |
+| MCP Registry 登记 | `server.json` | 冻结；`mcp-server/src` 作为**产品功能**原样跟进（mcpb manifest 已随版本号到 5.0.0） |
+
+**纳入（产品代码）**
+
+界面 / 交互（v5 主体）
+
+| 上游提交 | 内容 |
+|---|---|
+| `feat(v5): interface spec, 5.0 token layer, icon set` | CSS `@layer` 设计令牌层 + 新图标集 |
+| `feat(v5): window frame` / `editor surface, pill tabs, stats pill` | 52px 头部、Windows 标题栏、整列侧栏、胶囊标签页 |
+| `feat(v5): one menu style, dialogs, settings cards, palette, toasts` | 统一的菜单 / 对话框 / 设置卡片 / 命令面板 / toast |
+| `feat(v5-panels)` | 右侧栏与整页视图的 5.0 面板解剖 |
+| `feat(v5): phone shell` + `PhoneTabBar` / `KeyboardBar` / `SelectionBubble` | 手机外壳（笔记首页 / 搜索 / 编辑器 + 底栏）与 iPad 竖屏覆盖式侧栏 |
+| `feat(v5): a find bar that belongs in 5.0` | `lib/cm-find-panel.ts`：查找条换成 v5 的 DOM（仍是 CodeMirror 的 search panel） |
+| `feat(palette): fuzzy command matching` | 命令面板模糊匹配（含"不跨词命中"的修正） |
+| `feat(theme): a real "System" theme that follows the OS appearance` | `followSystemTheme` + 主题校验 |
+| `feat(preview): clickable task checkboxes write back to the source` | 预览里勾选任务清单回写源文件 |
+| `perf(app): load KaTeX and highlight.js after the first paint` | `lib/render-deps.ts`：KaTeX / hljs 延迟加载；入口分包里给 `@vscode/markdown-it-katex` 加 katex stub |
+
+功能修复（节选，共 54 个 `fix`）
+
+| 内容 | 备注 |
+|---|---|
+| `fix(render): preserve URL-valued Markdown link labels (#395)` | **与 fork 4.14.12 的方案一致**（按位置判断前一兄弟是 `(` 的 `LinkMark`）；fork 保留抽取出来的 `lib/link-destination.ts` + 8 例单测 |
+| `fix(table): guard table editor draft against backdrop click and background tab closure (#381, #390)` | 上游也独立做了；fork 保留自己的「应用 / 丢弃 / 取消」浮层，**接入上游的 `solomd:table-close-request` 事件**（App.vue / useShortcuts 派发） |
+| `fix(session): remember the caret per tab`、`fix(editor): a new note takes focus`、`fix(fs): save UTF-16LE/BE files as UTF-16`、`fix(docx): keep math in Word export`、`fix(export): embed relative images, drop front matter`、`fix(format): code block and bold/italic toggle off from inside`、`fix(commands): transforms read the editor's current text`、`fix(quick-switcher): stop offering renamed and deleted files`、`fix(backlinks): file-absolute link lines`、`fix(split): the panes line up again` 等 | 全部纳入 |
+
+工程 / 测试
+
+| 上游提交 | 内容 |
+|---|---|
+| `test: one command for the frontend unit tests, and CI runs them` | `app/scripts/run-tests.sh` + `.github/workflows/tests.yml`（node:test + Rust lib 测试） |
+| `test-hooks.mjs`（随上一条） | **Node 解析钩子：无扩展名相对导入自动补 `.ts`** —— 正是 fork 之前那 8 个失败用例的根因，纳入后 **482/482 全绿** |
+| `chore(deps): Tauri 2.12` | `@tauri-apps/*` 全线升到 2.12.x |
+| `test: Windows regression suite` + `scripts/regress/*` | 上游的四平台手工回归套件（mac/win/linux/android，71 个用例）；**删除 `K05-telemetry-setting.js`**（它检验的正是 fork 已删掉的「匿名用量」开关），`lib/setup.js` 与 `README.md` 里的遥测措辞一并改掉 |
+| `chore(v5): drop the unused StatusBar` | 上游删掉未被渲染的 `StatusBar.vue`；fork 侧同名文件未被改过，安全跟随（`PomodoroPill` / `WritingGoals` 已改挂在 `StatsPill` 下） |
+
+### 冲突取舍
+
+18 个需人工取舍的文件，几个关键判断：
+
+| 文件 | 取舍 |
+|---|---|
+| `app/src/components/Editor.vue` | **两者都留**：v5 的查找面板（`createFindPanel`）与 fork 的 #389「Ctrl+F 切换」共存（`searchPanelOpen` 仍然有效） |
+| `app/src/components/Preview.vue` | **保留 fork 的阅读模式排版**（#143/#384：衬线字、`--content-font-size` 不放大、两侧"纸页"阴影、`tbody` 隔行底纹），**拒绝上游 5.0 §5**（那次把阅读模式改回与编辑器同字体、只留更大的页边距） |
+| `app/src/components/TableEditor.vue` | 保留 fork 的 #390/#381/#382（`baseline` 脏检查 + 自绘确认浮层 + 列选择条），**摘掉上游那套重复实现**（`initialTable` / `closeConfirm` / `DsModal` 确认框），只留上游的 `solomd:table-close-request` 监听并把 `:inert` 接到 fork 的浮层上 |
+| `app/src/lib/keybindings.ts` | 取上游（v5 的 `category` 重分类 + 去掉重复项），再回植 fork 的 `insert.table` |
+| `app/src/components/Toolbar.vue` | 取上游 v5 结构，再回植 fork 的 `openInsertTable()`（改走上游的 `closeAllDropdowns()`）与两个列表续行/自动编号 flat 按钮；这两个按钮按 v5 的窄屏约定加了 `!isNarrow`（`isNarrow` = 视口 ≤600px 的手机布局） |
+| `app/src/lib/cm-live-render.ts` | 保留 fork 的 `isLinkDestinationUrl()`（行为与上游一致，但有独立单测） |
+| `app/src/stores/settings.ts` | 两者都留：fork 的遥测 key 清理 + 上游的系统主题校验 |
+| `app/vite.config.ts` | 两者都留：fork 的 `VENDOR_GROUPS` 手工分包 + 上游的 katex 插件 stub |
+| `README.md` | 保留 fork 的 GitHub Releases / Windows-only 说明与 `chenghaitao` 链接；取上游「16 tools」措辞；删掉上游的 brew / install.sh / winget 安装段 |
+| `app/src/i18n/zh.ts` | 9 个冲突块**全取上游**（`en.ts` 是权威键集，上游补了 `openLensTooltip` / `modes` / `removeTag` 等新键，缺键 `vue-tsc` 会报错），同时把上游翻译工具产出的双引号统一回单引号 |
+
+### 验证
+
+- `vue-tsc --noEmit` **干净**（16 个语言文件按 `Record<Lang, () => Promise<I18n>>` 全量核对）。
+- `vite build` 入口 chunk **1,738.17 kB / gzip 530.02 kB**，与 4.14.13 基线**逐字节一致**（无包体回归；
+  fork 的 `VENDOR_GROUPS` 分包仍在生效，`vendor-editor` / `vendor-katex` / `vendor-preview` 均在）。
+- `bash app/scripts/run-tests.sh`：**482 用例 / 482 通过 / 0 失败**。上次同步时那 8 个失败
+  （无扩展名相对导入）是上游 `test-hooks.mjs` 解析钩子修好的。
+- 排除项零回流：全仓 `app/src` 已无 `lib/telemetry` / `TelemetryBanner` / `track(` 引用；
+  `web/`、`app-store/`、`server.json` 与 fork HEAD 逐字节相同。
+- fork 自研零丢失：`build.bat` / `release.bat` / `scripts/bump-version.js` / `scripts/package-portable-win.ps1` /
+  `lib/link-destination.ts`(+test) / `lib/insert-table.ts` / `InsertTableDialog.vue` / `lib/file-link.ts` 全部在位。
+- 版本号四处一致（`app/package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`）= **5.0.0**。
 
 ---
 
