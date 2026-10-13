@@ -70,39 +70,6 @@ if raw.components().any(|c| matches!(c, Component::ParentDir)) { return Err(...)
 **不跑 `mcp-server`**，所以这个失败在 CI 里从未暴露。
 按 fork 立场「MCP 源码原样保留、跟进上游修复」，本轮**不擅自改**，另行向上游报。
 
-### Windows 文件夹选择器：左侧树最上面的「桌面」无法确定（2026-10-13 实测，本轮仅记录）
-
-用户路径：**文件 → 打开文件夹 → 在弹窗左侧文件树选最上面的「桌面」→ 点「选择文件夹」** →
-弹「桌面 / 没有供标记使用的对象」，对话框不关闭，只能取消。
-
-**根因**：左侧树最上面的「桌面」是 shell 命名空间的**虚拟根**（`CSIDL_DESKTOP`，PIDL 为空，
-不带 `SFGAO_FILESYSTEM`），`IShellItem::GetDisplayName(SIGDN_FILESYSPATH)` 对它必然失败，
-于是 `IFileOpenDialog::GetResult` 返回 `MK_E_UNAVAILABLE`。**弹那条消息框、并把对话框卡住
-（`Show()` 不返回）的是 shell 自己** —— 应用侧既收不到错误也拿不到回调；rfd 的
-`get_result().ok()` 只会把它当成「用户取消」。
-
-同一状态还有第二条进入路径：**不给起始目录时 shell 默认就落在这个虚拟根上**。那就是 4.14.3
-已修掉的那条（`pickerStartDir()` 保证总给一个真实存在的目录）—— 本次在真机上回归验证，
-`defaultPath` = `D:\Documents` / `D:\Desktop` 都能正常返回，只有缺起始目录、或用户手点左侧树的
-「桌面」节点才会触发。
-
-**能不能从应用侧兜住？四种做法在真机上逐一实测**（独立的 `IFileOpenDialog` 探针直连 COM，
-不经过 rfd / tauri-plugin-dialog；点选左侧树的「桌面」后点确定）：
-
-| 选项 | 结果 |
-|---|---|
-| `FOS_PICKFOLDERS`（现状，rfd / tauri-plugin-dialog 就是这个） | 报「没有供标记使用的对象」 |
-| `FOS_PICKFOLDERS \| FOS_FORCEFILESYSTEM` | **无变化**，同样报错 |
-| `+ FOS_PATHMUSTEXIST \| FOS_FILEMUSTEXIST` | **无变化**，同样报错 |
-| `FOS_PICKFOLDERS \| FOS_HIDEPINNEDPLACES` | 虚拟「桌面」节点确实消失，但导航窗格只剩「应用程序链接」；`IFileDialog::AddPlace()` 在 Win11 的对话框上**被完全忽略**（单独调用也不显示），等于砍掉桌面 / 文档 / 下载 / 此电脑 / 网络的全部快捷入口，不可接受 |
-
-结论：**这个节点在系统对话框里就是选不了**，应用侧无法修复（VS Code 的「打开文件夹」表现完全
-一致，可作对照）。给用户的绕过办法：在右侧内容区点蓝色的**文件夹「桌面」磁贴**（进的是真实路径
-`D:\Desktop`），或从「此电脑」逐级进入 —— **不要**在左侧树里选最上面那个「桌面」。
-要彻底解决只能换掉系统对话框、自研桌面版文件夹选择器（Android 的
-`app/src/components/AndroidFolderPicker.vue` 是现成参照），本轮按约定不做；
-`useFiles.ts` 的 `pickerStartDir()` 注释里补了这条「不要去修」的原因，免得下次再查一遍。
-
 ### 验证
 
 - `vue-tsc --noEmit` **干净**。
