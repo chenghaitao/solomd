@@ -624,6 +624,16 @@ export function useFiles() {
    *    (`SHCreateItemFromParsingName` fails → `SetFolder` is skipped), so a
    *    remembered workspace on a deleted / unmounted path lands the user in
    *    exactly that virtual root.
+   *  - The user can still walk into that root by hand: the nav pane's top
+   *    「桌面」node is the same path-less *namespace* root, so confirming it
+   *    reproduces the error and the dialog stays open. Nothing here can stop
+   *    that; measured on Windows 11 (2026-10-13, standalone IFileOpenDialog
+   *    probe, not rfd): FOS_FORCEFILESYSTEM alone, and with
+   *    PATHMUSTEXIST|FILEMUSTEXIST, change nothing; FOS_HIDEPINNEDPLACES does
+   *    drop the node, but the shell ignores AddPlace, leaving the nav pane
+   *    with no shortcuts at all. VS Code's "Open Folder" fails identically —
+   *    it is the OS dialog, so do not re-investigate. Users reach the real
+   *    folder through the blue 「桌面」 *tile* in the right-hand pane.
    *
    *  A directory that exists keeps the dialog on the filesystem: the caller's
    *  own candidates first (a remembered path, the active file's folder), then
