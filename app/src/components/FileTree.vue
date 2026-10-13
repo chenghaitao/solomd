@@ -360,12 +360,13 @@ async function refreshRoot() {
   }
 }
 
-async function toggle(node: Node, how: 'click' | 'dblclick' = 'click') {
+async function toggle(node: Node, how: 'click' | 'dblclick' | 'caret' = 'click') {
   // #338 — with "double-click opens folders" a single click on a folder only
   // selects it, and the double click toggles. Without it, a double click is
   // just two clicks (open, close) as it always was, so its own event is
   // ignored — and files open on the first click either way.
-  const dblFolders = node.is_dir && settings.explorerDoubleClickFolders;
+  // #401 — clicking the caret/chevron directly always toggles expand/collapse.
+  const dblFolders = node.is_dir && settings.explorerDoubleClickFolders && how !== 'caret';
   // #355 — a single click on a file keeps the keyboard in the tree (F2 / Del
   // act on it, as in VS Code); a double click means "I want to write in it".
   if (how === 'dblclick' && !node.is_dir) {
@@ -2379,8 +2380,24 @@ export const FileTreeNode = defineComponent({
             // and every file sits visibly to the right of the folders at its
             // level (the file emoji used to be further left than the folder's
             // small caret, which read as "files are the parents").
-            h('span', { class: ['ftree__caret', n.is_dir && n.expanded ? 'ftree__caret--open' : ''] },
-              n.is_dir ? [h(Icon, { name: 'chevron-right', size: 12 })] : []),
+            h('span', {
+              class: [
+                'ftree__caret',
+                n.is_dir ? 'ftree__caret--clickable' : '',
+                n.is_dir && n.expanded ? 'ftree__caret--open' : '',
+              ],
+              onClick: n.is_dir
+                ? (ev: MouseEvent) => {
+                    ev.stopPropagation();
+                    emit('toggle', n, 'caret');
+                  }
+                : undefined,
+              onDblclick: n.is_dir
+                ? (ev: MouseEvent) => {
+                    ev.stopPropagation();
+                  }
+                : undefined,
+            }, n.is_dir ? [h(Icon, { name: 'chevron-right', size: 12 })] : []),
             h('span', { class: 'ftree__icon' }, [h(Icon, { name: n.is_dir ? 'folder-sm' : 'file', size: 16 })]),
             nameNode,
             !n.is_dir && props.inboxPaths.has(n.path)
@@ -2413,7 +2430,7 @@ export const FileTreeNode = defineComponent({
               inboxPaths: props.inboxPaths,
               extFilter: props.extFilter,
               filterDirs: props.filterDirs,
-              onToggle: (target: any, how?: 'click' | 'dblclick') => emit('toggle', target, how),
+              onToggle: (target: any, how?: 'click' | 'dblclick' | 'caret') => emit('toggle', target, how),
               onContextmenu: (event: MouseEvent, target: any) => emit('contextmenu', event, target),
               onPress: (event: PointerEvent, target: any) => emit('press', event, target),
             })
@@ -2940,14 +2957,24 @@ export const FileTreeNode = defineComponent({
   color: var(--text-3);
 }
 :deep(.ftree__caret) {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+  margin-right: -2px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-3);
-  transition: transform var(--dur-fast) var(--ease-out);
+  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+:deep(.ftree__caret--clickable) {
+  cursor: pointer;
+  border-radius: 4px;
+}
+:deep(.ftree__caret--clickable:hover) {
+  background: var(--fill-2);
+  color: var(--text);
 }
 :deep(.ftree__caret--open) {
   transform: rotate(90deg);

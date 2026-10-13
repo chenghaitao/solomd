@@ -478,7 +478,7 @@ impl SoloMdServer {
         let workspace = self
             .resolve_workspace(args.0.workspace.as_deref())
             .map_err(|e| McpError::invalid_params(e, None))?;
-        let needle = args.0.note_name.trim().to_lowercase();
+        let needle = args.0.note_name.trim();
         if needle.is_empty() {
             return Err(McpError::invalid_params("note_name must not be empty", None));
         }
@@ -489,7 +489,7 @@ impl SoloMdServer {
                 Err(_) => continue,
             };
             for link in &note.wikilinks {
-                if link.target.to_lowercase() == needle {
+                if backlink_matches(&link.target, needle) {
                     let from_name = path
                         .file_name()
                         .and_then(|s| s.to_str())
@@ -1208,6 +1208,26 @@ fn search_native(
     Ok(hits)
 }
 
+/// Does wikilink `target` point at `note_name`? Mirrors the app's
+/// path-suffix resolution (#278): case-insensitive, with or without the
+/// extension, and a folder component on either side matches on whole
+/// segments — `[[projects/sub/deep]]`, `[[deep.md]]` and `[[Deep]]` all
+/// link to `deep`.
+fn backlink_matches(target: &str, note_name: &str) -> bool {
+    fn normalize(s: &str) -> String {
+        let s = s.trim().replace('\\', "/").to_lowercase();
+        for ext in [".md", ".markdown", ".mdown"] {
+            if let Some(stem) = s.strip_suffix(ext) {
+                return stem.to_string();
+            }
+        }
+        s
+    }
+    let t = normalize(target);
+    let n = normalize(note_name);
+    t == n || t.ends_with(&format!("/{n}")) || n.ends_with(&format!("/{t}"))
+}
+
 // ---------------------------------------------------------------------------
 // v3.1 inner helpers — git2 / sync.json / share URL
 // ---------------------------------------------------------------------------
@@ -1827,6 +1847,58 @@ mod tests {
         assert_eq!(
             server.resolve_workspace(Some("legacy")).unwrap(),
             a.as_path()
+        );
+    }
+
+    // ----- get_backlinks -----------------------------------------------------
+
+    /// Backlink sources, by file name, for `note_name`.
+    fn backlinks_from(server: &SoloMdServer, note_name: &str) -> Vec<String> {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let res = rt
+            .block_on(server.get_backlinks(Parameters(GetBacklinksArgs {
+                note_name: note_name.into(),
+                workspace: None,
+            })))
+            .unwrap();
+        let text = &res.content[0].as_text().unwrap().text;
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        v["backlinks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["from_name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// `[[folder/note]]` and `[[note.md]]` link to `note` just like
+    /// `[[Note]]` does, the `name` that `list_notes` returns (`note.md`)
+    /// works as `note_name`, and a link in fenced code is not a backlink.
+    #[test]
+    fn get_backlinks_matches_folder_paths_and_extensions_but_not_fences() {
+        let dir = fresh_dir("backlinks").canonicalize().unwrap();
+        fs::create_dir_all(dir.join("projects/sub")).unwrap();
+        fs::write(dir.join("projects/sub/deep.md"), "# Deep\n").unwrap();
+        fs::write(dir.join("a.md"), "See [[projects/sub/deep|Deep note]].\n").unwrap();
+        fs::write(dir.join("b.md"), "See [[deep.md]].\n").unwrap();
+        fs::write(dir.join("c.md"), "See [[Deep]].\n").unwrap();
+        fs::write(dir.join("d.md"), "See [[other/deep]].\n").unwrap();
+        fs::write(dir.join("e.md"), "```\nexample: [[deep]]\n```\n").unwrap();
+        fs::write(dir.join("f.md"), "See [[undeep]].\n").unwrap();
+        let server = SoloMdServer::new(vec![("v".into(), dir)], false);
+
+        let all = vec!["a.md", "b.md", "c.md", "d.md"];
+        assert_eq!(backlinks_from(&server, "deep"), all);
+        assert_eq!(backlinks_from(&server, "deep.md"), all);
+        // A folder in the query narrows on whole segments: `[[other/deep]]`
+        // is a different note, a bare `[[deep]]` may be this one.
+        assert_eq!(
+            backlinks_from(&server, "projects/sub/deep"),
+            vec!["a.md", "b.md", "c.md"]
+        );
+        assert_eq!(
+            backlinks_from(&server, "sub/deep.md"),
+            vec!["a.md", "b.md", "c.md"]
         );
     }
 }

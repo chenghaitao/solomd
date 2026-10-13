@@ -1,4 +1,5 @@
-import { samePath } from '../lib/path-key';
+import { samePath, segmentsBelow } from '../lib/path-key';
+import { requestRevealInTree } from './useFileTreeReveal';
 import { inject } from 'vue';
 import { windowChromeOptions } from '../lib/window-chrome-options';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
@@ -351,14 +352,26 @@ export function useFiles() {
       // already current). That was the real "double-click opens nothing" bug.
       // Switching first means `openFromDisk` below adds the tab into the
       // already-settled workspace, so it survives and becomes active.
-      if (settings.revealInFileTreeOnOpen && !isSaf) {
-        const parent = path.replace(/[\\/][^\\/]+$/, '');
-        if (parent && parent !== path) {
-          // 张工 4.14.8 report #3: this used to also re-open a tree the user
-          // had hidden, on every file open. Switching the folder is the
-          // setting's job; whether the tree is shown is the user's.
-          workspace.setFolder(parent);
+      // Reveal the file in the file tree when the setting is on (#402).
+      // If the file is opened from within the tree itself (`opts.fromTree`),
+      // the row was already selected and clicked; never re-reveal or re-root.
+      // If the file is already inside the active workspace, keep the root
+      // untouched and ask the tree to expand down to the row.
+      // Only when the file is genuinely OUTSIDE the open workspace do we point
+      // the tree at its parent folder, before adding the tab.
+      if (settings.revealInFileTreeOnOpen && !isSaf && !opts.fromTree) {
+        const root = workspace.currentFolder;
+        const inside = !!root && segmentsBelow(root, path) !== null;
+        if (!inside) {
+          const parent = path.replace(/[\\/][^\\/]+$/, '');
+          if (parent && parent !== path) {
+            // 张工 4.14.8 report #3: this used to also re-open a tree the user
+            // had hidden, on every file open. Switching the folder is the
+            // setting's job; whether the tree is shown is the user's.
+            workspace.setFolder(parent);
+          }
         }
+        requestRevealInTree(path);
       }
 
       tabs.openFromDisk({

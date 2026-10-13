@@ -253,7 +253,17 @@ pub fn extract_wikilinks(body: &str) -> Vec<WikilinkRef> {
     static RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"\[\[([^\[\]\n]+?)\]\]").expect("wikilink regex"));
     let mut out = Vec::new();
+    // Same fence rule as tags, headings and tasks: `[[x]]` in a code sample
+    // is not a link.
+    let mut in_fence = false;
     for (line_idx, line) in body.lines().enumerate() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
         for cap in RE.captures_iter(line) {
             let inner = cap.get(1).map(|m| m.as_str()).unwrap_or("");
             let (target_raw, alias) = match inner.split_once('|') {
@@ -551,6 +561,21 @@ mod task_tests {
         assert_eq!(extract_tasks(doc)[0].line, 10, "tasks and links must agree");
         // And the context window around a link is the link's own line.
         assert_eq!(super::read_context(&path, 7)[1], "See [[Alpha]].");
+    }
+
+    /// Like tags, headings and tasks, a `[[link]]` inside fenced code is
+    /// sample text, not a link; line numbers after the fence stay right.
+    #[test]
+    fn wikilinks_skip_fenced_code() {
+        let body = "See [[Alpha]].\n```md\nexample: [[Beta]]\n```\nThen [[Gamma]].\n";
+        let links: Vec<(String, u32)> = super::extract_wikilinks(body)
+            .into_iter()
+            .map(|w| (w.target, w.line))
+            .collect();
+        assert_eq!(
+            links,
+            vec![("Alpha".to_string(), 1), ("Gamma".to_string(), 5)]
+        );
     }
 
     #[test]
