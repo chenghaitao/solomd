@@ -3,7 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import thanksData from '../../data/thanks.json';
-import { sponsors, promoters, testers } from '../../lib/supporters';
+import { sponsors, testers } from '../../lib/supporters';
 
 const lang = 'zh' as const;
 
@@ -65,19 +65,6 @@ const platformLabel: Record<Donor['platform'], string> = {
         </section>
       )}
 
-      <section class="supporters">
-        <h2>推广者</h2>
-        <p class="supporters__lead" set:html={'写文章、录视频、在社区里推荐 SoloMD 的朋友。<a href="/zh/promote">怎么成为推广者 →</a>'} />
-        {promoters.length === 0 ? (
-          <p class="empty">还没有推广者——欢迎成为第一位。</p>
-        ) : (
-          <ul class="supporters__list">
-            {promoters.map((x) => (
-              <li><a href={x.url} target="_blank" rel="noopener">{x.name}</a><span class="supporters__since">{x.platform} · {x.since}</span></li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       <h2 class="tips-heading">打赏</h2>
       {donors.length === 0 ? (

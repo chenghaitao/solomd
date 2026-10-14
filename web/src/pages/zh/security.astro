@@ -149,22 +149,26 @@ const lang = 'zh' as const;
         </li>
       </ul>
 
-      <h2>7. 遥测 — 极少 + 可关 + 不带内容 + 可见</h2>
+      <h2>7. 没有遥测，也没有统计接口</h2>
       <ul>
         <li>
-          只发匿名事件计数(打开次数、用了哪个功能),帮我们决定接下来做什么。
+          不收集<strong>任何</strong>使用数据 —— 没有事件计数、没有设备或安装标识、
+          没有崩溃上报。App 里既没有统计接口，也没有可用于上报的统计依赖。
         </li>
         <li>
-          <strong>绝不</strong>发送:笔记内容、文件名、文件路径、工作区路径、
-          API key、搜索关键词,或任何能识别个人身份的信息。
+          唯一一条不需要你触发的外发请求是更新检查：<code>solomd.app/api/stats</code>，
+          不可达时回退到 <code>api.github.com</code>。它只返回公开的版本号，
+          不带任何标识、不带任何使用数据；关掉「自动检查更新」即不再发出。
         </li>
         <li>
-          设置里一键关闭。App Store 版本默认关闭。
+          其余离开本机的请求都由你的操作引起：打开主题市场（会从
+          <code>solomd.app</code> 拉取主题列表）、你自己配了 key 的 AI 服务、
+          你推送过的 Git 远端、你填的 PlantUML 服务或图床、你选的同步文件夹 ——
+          都在第 6 节。
         </li>
         <li>
-          想看到底发了什么?打开 DevTools 执行
-          <code>localStorage.setItem('solomd.telemetryDebug', '1')</code>,
-          所有事件会原样打印到控制台。
+          不必只听我们说 —— 源码公开，这条声明一条 grep 就能验证：<code>grep -rn "fetch(" app/src</code>
+          列出 App 所有可能发起连接的地方。
         </li>
       </ul>
 
@@ -204,9 +208,10 @@ const lang = 'zh' as const;
           </a>
         </li>
         <li>
-          想验证遥测里没有笔记内容?在仓库里搜
-          <a href="https://github.com/zhitongblog/solomd/search?q=trackEvent" rel="external">
-            <code>trackEvent</code>
+          想验证你的内容不可能外传?整个 App 一次 grep 就能查清 —— 所有可能发起
+          连接的地方都是 <code>fetch(</code> 或 Rust 命令:
+          <a href="https://github.com/zhitongblog/solomd/search?q=fetch%28&type=code" rel="external">
+            <code>fetch(</code>
           </a>
         </li>
       </ul>

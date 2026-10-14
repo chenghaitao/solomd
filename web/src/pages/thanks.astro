@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import thanksData from '../data/thanks.json';
-import { sponsors, promoters, testers } from '../lib/supporters';
+import { sponsors, testers } from '../lib/supporters';
 
 const lang = 'en' as const;
 
@@ -30,7 +30,7 @@ const platformLabel: Record<Donor['platform'], string> = {
 ---
 
 <Layout
-  title="Thanks — Sponsors, promoters and supporters of SoloMD"
+  title="Thanks — Sponsors, testers and supporters of SoloMD"
   description="A thank-you wall for everyone who has sponsored, promoted or tipped SoloMD."
   lang={lang}
 >
@@ -68,19 +68,6 @@ const platformLabel: Record<Donor['platform'], string> = {
         </section>
       )}
 
-      <section class="supporters">
-        <h2>Promoters</h2>
-        <p class="supporters__lead" set:html={'People who wrote about SoloMD, made a video or recommended it. <a href="/promote">How to become one →</a>'} />
-        {promoters.length === 0 ? (
-          <p class="empty">No promoters yet — be the first.</p>
-        ) : (
-          <ul class="supporters__list">
-            {promoters.map((x) => (
-              <li><a href={x.url} target="_blank" rel="noopener">{x.name}</a><span class="supporters__since">{x.platform} · {x.since}</span></li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       <h2 class="tips-heading">Tips</h2>
       {donors.length === 0 ? (
