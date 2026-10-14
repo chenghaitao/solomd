@@ -17,6 +17,73 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [5.0.2] — 2026-10-14
+
+一条线：**本 fork 自研改动，无上游同步**。三件事 ——「设为默认编辑器」的提示不再固定英文、窄窗口下标题栏不再压住
+菜单栏、标签页标出已经被删掉的文件。
+
+### 1. 「设为默认 Markdown 编辑器」的提示不再固定英文
+
+`set_as_default_markdown_editor` 原先直接返回**已经拼好的英文句子**
+（`Ok("Set as default for 4 Markdown type(s)…")` / `Err("LaunchServices rejected the request…")`），
+前端 `toasts.success(msg)` 原样弹出 —— 无论界面语言是什么，这条提示永远是英文。
+
+| 层 | 改动 |
+|---|---|
+| `src-tauri/src/set_default.rs` | 返回值 `Result<String, String>` → `SetDefaultOutcome { ok, code, count, detail }`（`serde(rename_all = "camelCase")`）。**`code` 是语言中立的枚举串**：`doneMacos` / `failedMacos` / `doneWindows` / `failedWindows` / `doneLinux` / `failedLinux` / `failedUnsupported`。`detail` 只装**原始 OS 诊断**（OSStatus、注册表路径 + 错误、`xdg-mime` stderr），由前端插值成译文里的一个「值」，不再是一句话 |
+| 同上（Windows 分支） | 拆出 `register() -> Result<u32, String>`：成功返回**成功的扩展名个数**，失败返回「出错的注册表路径 + OS 错误」（原先只写 `Can't create ProgId` —— 不说具体是哪个键）。Linux 分支的 `last_error` 也改为 `trim()` 后的原始 stderr，去掉 `Failed to run xdg-mime: ` 这层英文包装 |
+| `components/SettingsPanel.vue` | 新增 `SET_DEFAULT_RESULT_KEY` 把 `code` 映射到 `settings.setDefault*` 键，`{count}` / `{detail}` 插值；`ok` 走 success toast，否则走 error toast；未知 code 落 `settings.setDefaultFailedUnknown` |
+| `components/Slideshow.vue` | 顺手清掉同一类问题：放映帮助面板与底部提示原先是硬编码英文（`Slideshow Shortcuts`、`F fullscreen · ? help · Esc exit` 等），改走 `slideshowHelp.*` |
+| `i18n/*.ts` ×15 | 新增 **25 个键**：8 × `settings.setDefault*`、16 × `slideshowHelp.*`、1 × `tabMenu.fileMissing`（见第 3 节） |
+
+**边界（有意为之）**：本次**只**做功能文案（`setDefault` 的结果、放映帮助）。`toasts.error` / `toasts.warning`
+一类**错误提示仍保持英文硬编码** —— `t()` 本身就有「当前语言 → 英文 → key」的兜底链，为错误信息补键纯属噪音。
+
+### 2. 窄窗口下标题栏不再压住菜单栏
+
+Windows 无边框标题栏里 `文件名 — SoloMD` 居中显示，菜单（文件 / 编辑 / …）从品牌图标向右展开。窗口拖窄时两者
+在中间相遇，标题被菜单文字压住。实测 1756px 宽的窗口：标题自然宽 ≈577px 居中、菜单右边缘 ≈645px → 左间隙
+**−55px**。
+
+`components/Toolbar.vue` 的做法是让标题**在放不下时整体让位**（文件名在标签页上已经有了，不丢信息）：
+
+| 做法 | 说明 |
+|---|---|
+| 量**真实文本宽** | 加一个**不参与布局的孪生 span**（`.titlebar__title-measure`：`position: fixed` + `visibility: hidden`，**不带** `max-width: 40%` 那道钳制），量出标题的自然宽度，而不是被 clamp 后的盒子宽 —— 这样 `a.md — SoloMD` 在长文件名会被隐藏的窗口上仍能留下 |
+| 判据 | 居中框两侧到「菜单右边缘」与「窗口按钮左边缘」的间隙都 ≥ **12px** 才显示，否则 `v-if` 掉整条标题 |
+| 触发 | `ResizeObserver` 盯标题栏盒子，`watch([titlebarTitle, settings.language])` 跟上「菜单宽随语言变、标题随活动标签变」；`onMounted` 里先量一次，避免窄窗口下先闪一帧 |
+
+标题与测量元素**都在布局之外**，所以观察回调不可能把自己再触发一次（无 `ResizeObserver` 死循环）。
+
+### 3. 标签页标出「文件已经不在了」
+
+恢复到上次会话的标签页只带回了**文件名**，没带回文件本身。文件在资源管理器里被删 / 移走 / 改名后，标签照旧
+显示最后已知的内容，没有一处提示它已经没了 —— 再从别处打开一个同名文件，两者无法区分。
+
+| 层 | 改动 |
+|---|---|
+| Rust | 新增 `commands::fs_files_exist(paths: Vec<String>) -> Vec<bool>`（`Path::is_file()`），在 `runner.rs` 注册。**一次 IPC 问完所有标签**，而不是逐个 round trip（`fs_dir_exists` 只能判目录；`plugin-fs` 的 `exists()` 作用域只到 `$DOCUMENT`，用不了） |
+| 状态 | 新增 `stores/missingFiles.ts`（Pinia）：**不挂到 Tab 上、不持久化** —— 这是对磁盘的**观测**，不是会话状态。每次启动 + 窗口获得焦点时重算，文件放回去就自动清除 |
+| 触发 | `useFiles.refreshMissingFiles()`；`App.vue` 在 `onMounted` 与 `onWindowFocus` 调用；`tabs.markSaved()` 保存后立即清掉自己的标记（能保存当然说明文件在） |
+| 排除 | 跳过 `saf:…`（SAF vault）与 Android `content://` —— 它们根本不是文件系统路径，`std::fs` 的「否」会是假话 |
+| 样式 | `components/PaneTabBar.vue`：`.tab--missing .tab__name { text-decoration: line-through; color: var(--danger) }`（对齐 VS Code 的「红色 + 删除线」），`#218` 的「全部标签」下拉同样处理 |
+| Tooltip | `{完整路径} - {t('tabMenu.fileMissing')}`（zh「已删除」/ en「deleted」） |
+
+### 验证
+
+- `vue-tsc --noEmit` **干净** —— 15 个语言文件按 `I18n` 全量类型核对（缺键 / 多键都会报错）。
+- `cargo check` 通过（`solomd v5.0.2`）。
+- `vite build` 入口 chunk **1,738.17 kB / gzip 530.02 kB**，与 5.0.0 / 5.0.1 基线**逐字节一致**（无包体回归）。
+
+### 说明
+
+- **「打开文件夹无法选择桌面」不再排查。** `pickerStartDir()` 保持现状：4.14.3 那条「起点目录必须真实存在」
+  的修复已完整在位；而导航窗格顶部那个「桌面」是 shell 的**无路径命名空间根**，确认它必然报
+  `MK_E_UNAVAILABLE`（中文「没有供标记使用的对象」）—— 这是 OS 对话框自己的行为，VS Code 的
+  「打开文件夹」同样如此。结论已写在 `pickerStartDir()` 的源码注释里，别再重复投入。
+
+---
+
 ## [5.0.1] — 2026-10-13
 
 一条线：**同步上游 3 个提交**（5.0.0 发版之后的补丁：文件树两处 + MCP 反链一处）。**零冲突**。
