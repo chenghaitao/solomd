@@ -211,10 +211,15 @@ onBeforeUnmount(() => {
     :style="{ '--sb-w': settings.fileTreeWidth + 'px' }"
     data-testid="sidebar"
   >
-    <!-- macOS: the traffic lights sit in this strip; it is a drag region and
-         keeps its left 80 px free of controls. -->
+    <!-- macOS: the traffic lights sit in this strip; on Windows/Linux it provides
+         the same 52 px strip and collapse button aligned with the toolbar. -->
     <h1 v-if="phone" class="sb__title">{{ t('phone.notes') }}</h1>
-    <div v-else-if="props.macInset" class="sb__inset" data-tauri-drag-region>
+    <div
+      v-else
+      class="sb__inset"
+      :class="{ 'sb__inset--win': !props.macInset }"
+      :data-tauri-drag-region="props.macInset ? '' : undefined"
+    >
       <button
         class="sb__icon-btn"
         type="button"
@@ -225,7 +230,6 @@ onBeforeUnmount(() => {
         <Icon name="sidebar" :size="16" />
       </button>
     </div>
-    <div v-else class="sb__pad" />
 
     <div class="sb__search-wrap">
       <button class="sb__search" type="button" @click="emit('open-quick-switcher')">
@@ -450,6 +454,9 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-end;
   padding: 0 var(--sp-2) 0 80px;
+}
+.sb__inset--win {
+  padding: 0 var(--sp-2);
 }
 .sb__pad {
   flex: none;
