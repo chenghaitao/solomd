@@ -17,6 +17,83 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ---
 
+## [5.0.3] — 2026-10-14
+
+一条线：**撤销 5.0.2 刚上的自研「修复格式」引擎**（一次点击连带改多处、不可控），**同步上游 5 个提交**，
+并把 **`web/` 官网与 `app-store/` 商店素材恢复与上游保持一致** —— 同步的同时把 fork 的立场（无遥测、无推广）
+重新贴回官网。
+
+### 1. 撤销自研的 Markdown「修复格式」引擎
+
+5.0.2 把一套自研的 Markdown 语法修复引擎接到了工具栏的星形按钮上。**实测后决定整套撤掉**：一次点击会同时
+改写多处，改了什么、对不对都没法逐条审阅。最典型的一次误判 ——
+
+| 现象 | 原因 |
+|---|---|
+| 表格里**含引号的单元格**，修完「多处一列引号」 | 表格重建按 `\|` 切单元格，**没有把引号内的 `\|` 排除在分隔符之外**，该行被当成多一列，再按最宽行补齐 |
+
+| 处置 | 内容 |
+|---|---|
+| 删除 | `app/src/lib/md-repair.ts` 与其 31 例测试（两者已随 5.0.2 发布）；以及尚未入库的报告层 `lib/repair-report.ts`、`stores/repairBanners.ts`、`components/RepairBanners.vue` |
+| 摘除全部注册点 | `lib/keybindings.ts`、`composables/useShortcuts.ts`、`lib/app-menu.ts`（「格式 → 修复 Markdown 语法」）、`components/FormatBar.vue` |
+| 还原 | 星形按钮回到 **`format.markdown`（Prettier 重排）** —— 这个命令原本、也是唯一的功能；`App.vue` 与 `stores/tabs.ts` 与 5.0.2 之前逐字节一致 |
+
+**上一轮唯一保留的成果**：格式化命令的 6 条提示（`noDocument` / `markdownOnly` / `stale` / `already` / `done` /
+`failed`）改走顶层 `format.*` 键，**15 个语言全部有译文**（原先无论界面语言都是英文）；同时删掉两个已死的键
+`cmd.format.repair`、`formatBar.repair`。
+
+⚠️ **不要再引入这种「一次点击整理多处」的修复 / 自动整理功能** —— 已明确否掉。
+
+### 2. 同步上游 5 个提交
+
+| 上游提交 | 内容 | 处置 |
+|---|---|---|
+| `371f37fd` | `fix(sidebar): show sidebar collapse button on Windows and Linux too` | **取用**（真实产品修复） |
+| `78dc6479` | 致谢名单补一位测试者 | 取用（名单数据，无推广位） |
+| `1889ef67` / `46af04ee` | 上游把版本号 bump 到 5.0.1（含 `mcp-server`） | **以 fork 为准**，app 保持 5.0.3 |
+| `73c88c2d` | 官网下载链接回退 5.0.0、等 5.0.1 发版 | 由第 3 节的整目录同步吸收 |
+
+README（中英）与 `web/public/sponsors.json` 的冲突按 **fork 侧** 解决。
+
+### 3. `web/` 与 `app-store/` 恢复与上游同步（同步的同时保住立场）
+
+做法是**先整目录取上游**（`git checkout upstream/main -- web app-store`），再把 fork 的去遥测 / 去推广改造
+**逐处重新贴回**（补丁 `git apply` 打不上 —— 上游相关行已重构，改为逐条精确替换）。
+
+| 目录 | 规模 |
+|---|---|
+| `app-store/` | **369 个纯新增、0 删除**：4.14.5–4.14.11 各语言发版说明 + `app-store/v5/` 商店素材（截图、`shared.json`） |
+| `web/` | 59 个文件（24 新增 / 35 修改）：官网样式、v5 截图、i18n、隐私 / 安全 / 设置文档页 |
+
+同步后**必须再贴回**的部分（否则立场直接回退）：
+
+| 剔除对象 | 涉及文件 |
+|---|---|
+| 遥测服务端 | `web/functions/api/track.ts`、`web/functions/api/admin/stats.ts`、`web/ANALYTICS.md` |
+| 推广计划页与组件 | `components/Promote.astro`、`pages/promote.astro`、`pages/zh/promote.astro`；`lib/supporters.ts` 里的 promoter 与 `PROMOTE_*` 常量 |
+| 首页推广横幅 | `Hero.astro` 的 `PROMOTE_BANNER` 与 `.brand-update-banner` 样式 |
+| 返利码埋点 | `Layout.astro` 里那段 `?ref=` → `/api/track` 的 `sendBeacon` 脚本 |
+| 赞助组件里的推广块 | `Sponsor.astro` 的 `.promote-card` / `.promote-featured` / `.promote-quote`；致谢页的「推广者 / Promoters」分区 |
+| 文案里的假陈述 | 隐私政策（中英）、安全白皮书（中英）、`FactPack`、`translations.ts`、对比页 —— 「匿名统计可关」一律改成「完全无遥测」 |
+
+### 验证
+
+- `vue-tsc --noEmit` 干净；`bash app/scripts/run-tests.sh` **490 / 490 通过 / 0 失败**（5.0.2 为 521：本轮 −31 例 `md-repair`）。
+- `vite build` 成功，入口 `index-*.js` **869.39 kB**（5.0.2 因修复引擎为 874.51 kB；回到撤销前基线
+  869.36 kB 之上 +0.03 kB，差量来自上游合并进的 `Sidebar.vue`）；稳定分包 **1,738.17 kB / gzip 530.02 kB**
+  与各版本逐字节一致。
+- 官网 `astro build`：**111 个 HTML 页面全部生成**；产物里 `/promote` 路由、`api/track` 与 `ref_download` 埋点**均已消失**。
+- `cargo check` 通过（`solomd v5.0.3`）；上游合并只在 `Sidebar.vue` 动了一处 UI 条件，无 Rust 改动。
+
+### 说明
+
+- **本版把「上游同步」拆成了两笔提交**：一笔是纯上游内容（`web/` + `app-store/`），另一笔是把 fork 的
+  去遥测 / 去推广改造重新贴回。撤销修复引擎另有独立提交，互不混装，便于逐笔审阅。
+- 官网那篇文章 `blog/v3-5-5-font-fix-self-hosted-analytics` 仍保留原样 —— 它是历史记录，写法上提到
+  `api/track` 与 `web/ANALYTICS.md`，这两者在本 fork 已不存在；如需一并改写请单独提。
+
+---
+
 ## [5.0.2] — 2026-10-14
 
 一条线：**本 fork 自研改动，无上游同步**。六件事 —— 新增**页面内格式工具栏**（设置里可关）；
@@ -128,7 +205,10 @@ Windows 无边框标题栏里 `文件名 — SoloMD` 居中显示，菜单（文
 输入框 4px 的 `--ring` 顶边被切掉。改 `padding: 6px 24px 12px` + `position: sticky; top: 0`。
 背景用 `--bg` 而**不是** `--bg-pop`（深色主题下两者有色差，会显成一条带）。
 
-### 6. 「修复格式」：自研 Markdown 修复引擎
+### 6. 「修复格式」：自研 Markdown 修复引擎 ⚠️ 已在 5.0.3 整套撤销
+
+> **本节只作历史记录。** 该引擎因「一次点击连带改多处、不可控」已在 **5.0.3** 撤销，
+> 星形按钮已回到 `format.markdown`（Prettier）。详见 5.0.3 第 1 节。
 
 原先工具栏那颗星是 `format.markdown`（Prettier 重排），既不会修语法，toast 也是硬编码英文。现在换成
 `lib/md-repair.ts` 的纯函数 `repairMarkdown(src) -> { text, fixed[], unparsed[] }`，按「能确定意图就改、
