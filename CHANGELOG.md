@@ -19,8 +19,10 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 
 ## [5.0.2] — 2026-10-14
 
-一条线：**本 fork 自研改动，无上游同步**。三件事 ——「设为默认编辑器」的提示不再固定英文、窄窗口下标题栏不再压住
-菜单栏、标签页标出已经被删掉的文件。
+一条线：**本 fork 自研改动，无上游同步**。六件事 —— 新增**页面内格式工具栏**（设置里可关）；
+设置页高度改为可拖拽调整，基础页的 29 项设置搬进新的「编辑」分类；「设为默认编辑器」的提示不再固定英文；
+窄窗口下标题栏不再压住菜单栏；标签页标出已经被删掉的文件；「修复格式」换成一个真的会修 **Markdown 语法**
+的自研引擎（原先只是 Prettier 重排）。
 
 ### 1. 「设为默认 Markdown 编辑器」的提示不再固定英文
 
@@ -69,14 +71,110 @@ Windows 无边框标题栏里 `文件名 — SoloMD` 居中显示，菜单（文
 | 样式 | `components/PaneTabBar.vue`：`.tab--missing .tab__name { text-decoration: line-through; color: var(--danger) }`（对齐 VS Code 的「红色 + 删除线」），`#218` 的「全部标签」下拉同样处理 |
 | Tooltip | `{完整路径} - {t('tabMenu.fileMissing')}`（zh「已删除」/ en「deleted」） |
 
+### 4. 页面内格式工具栏
+
+正文上方新增一条格式工具栏（`components/FormatBar.vue`，高 38px），把最常用的排版动作放到手边；
+原先挤在右上角工具条里的两个列表开关（**回车继承列表格式** / **自动编号**）移到这里，给标签页腾出宽度。
+设置 → 编辑 →「显示格式工具栏」可关闭（默认开）。
+
+| 分组 | 内容 |
+|---|---|
+| 1 | 加粗、下划线、斜体、删除线 |
+| 2 | 标题（hover 展开 H1–H6）、下标、上标、引用 |
+| 3 | 回车继承列表格式、自动编号、任务列表 |
+| 4 | 行内代码、代码块、链接、图片、表格（hover 展开 6×4 网格，可鼠标滑选范围；或点「可视化编辑」打开表格编辑器） |
+| 5 | 撤销、重做、修复格式 |
+
+**不新造命令通道**：每个按钮都派发既有窗口事件（`solomd:format-markdown` / `solomd:menu-action` /
+`solomd:editor-history` / `solomd:insert-markdown { snippet, paneId }`）。只有下划线 / 下标 / 上标是新的
+`FormatKind` —— Markdown 没有这三种语法，改用**内联 HTML** `<u>` / `<sub>` / `<sup>`（渲染层是
+`html: true`，`lib/sanitize-html.ts` 明确放行内联 HTML；为此加 markdown-it 插件是下策，`~x~` / `^x^`
+本来就不会被渲染）。裸光标落在 `<u>foo</u>` 里时取词会把标签名也算进去（取成 `u>foo`），所以
+`textRun()` 把范围裁回标签之间的内容。
+
+| 层 | 改动 |
+|---|---|
+| `components/FormatBar.vue` | **新增**。整条 `@mousedown.prevent`：不夺编辑器焦点、不毁选区 |
+| `lib/table-grid.ts` + `.test.ts` | **新增**：6×4 网格的取值与命中判定（`gridSizeAt` / `inGridSelection`），5 例单测 |
+| `lib/md-format.ts` | 联合类型与 `FORMAT_KINDS` 加 `underline` / `subscript` / `superscript` |
+| `components/Icons.vue` | 补 6 个图标：下划线 / 删除线 / 下标 / 上标 / 代码块 / 表格 |
+| `App.vue` | `<FormatBar>` 挂在 `.main-col`（列向）里 `<Toolbar>` 与 `.workspace` 之间；`showFormatBar` 按「非手机 × markdown 标签 × 非预览/阅读 × 非 bases/inbox/typeLens/savedView」决定 |
+| `components/Toolbar.vue` | 摘掉两个列表开关（已搬进 FormatBar），右上角不再被挤 |
+| `stores/settings.ts` | `formatBar`（默认 true）+ `toggleFormatBar()` |
+| `lib/md-format.test.ts` | +2 例：三种 HTML 标签的正反切换（含 `u>foo` 回归例）；另加遍历 `FORMAT_KINDS` 的守卫 —— `applyFormat` 的 `default:` 是标题分支，新 kind 漏写 `case` 会因为 `'#'.repeat(NaN) === ''` 给文本加一个**前导空格**，悄无声息 |
+
+**位置**：不做拖拽 / 浮动。工具栏本来就能在设置里整个关掉，每个按钮也都有对应快捷键；浮动条会遮正文本身，
+而拖拽手势还会与按钮的 `mousedown.prevent` 抢事件。若日后真要省这 38px，正确做法是加一个
+「工具栏位置」设置项（编辑区上方 ⇄ 标签栏内），不是自由拖拽。
+
+### 5. 设置页：高度可拖拽调整 + 新增「编辑」分类
+
+**高度**：面板底部多了一条拖拽量尺（`role="separator"`，↑↓ 键步进 24px），高度存
+`settings.settingsPanelHeight`（默认 **520**，钳 280–1400），超出时页面区内部自己出滚动条。
+
+**根因值得记一笔**：`.settings__layout` 原先写的是 `flex: 1`，即 `flex: 1 1 0%` —— **basis 归零**，
+里面那句 `height: min(600px, 78vh)` 一直是**死代码**，高度完全由 flex 撑满。于是「太高」与「调不动」
+是同一个原因：改成 `flex: 1 1 auto` 之后显式高度才真正生效（无剩余空间时 grow 不动，小窗口由 shrink 回退）。
+弹窗是垂直居中的，长高 d 会同时把顶边抬起 d/2，所以拖拽位移按 **×2** 换算，量尺才贴着指针走；
+上限按「面板顶边到视口边缘」推算，与起始高度无关。拖拽期间的光标靠 `body.settings-grip--dragging`
+（弹窗 teleport 到 body，scoped 选择器够不到）。
+
+**新分类「编辑」**（基础 → **编辑** → 写作）：基础页只剩 语言 / 主题 / 字体 / 等宽字体 / 字号 / 界面字号 /
+全局缩放，其余 **29 个 `<section>`**（自动换行往下全部）迁进 `editing`。除了类型联合与 `categories` 数组，
+**还必须同时加进 CSS 显示白名单的两行**（`[data-active-cat="editing"] > [data-cat="editing"]` 与
+`> section[data-cat="editing"]`）—— 漏一行该页全空。
+
+**搜索框外框显示不全**：`.ds-modal__body` 是滚动容器，会在 padding 边缘裁切；搜索行顶部 padding 原为 0，
+输入框 4px 的 `--ring` 顶边被切掉。改 `padding: 6px 24px 12px` + `position: sticky; top: 0`。
+背景用 `--bg` 而**不是** `--bg-pop`（深色主题下两者有色差，会显成一条带）。
+
+### 6. 「修复格式」：自研 Markdown 修复引擎
+
+原先工具栏那颗星是 `format.markdown`（Prettier 重排），既不会修语法，toast 也是硬编码英文。现在换成
+`lib/md-repair.ts` 的纯函数 `repairMarkdown(src) -> { text, fixed[], unparsed[] }`，按「能确定意图就改、
+确定不了只报告」两档工作。
+
+| 能自动修（`fixed`） | 说明 |
+|---|---|
+| 未闭合围栏 | 补到文件尾 |
+| **短一截的关闭围栏** | 关闭处只写了 1~2 个反引号 —— 任何 Markdown 规范里这**都不是**围栏，块会一直张着，把后面的标题吞进代码块（mermaid 图因此报 `Parse error … got 'NODE_STRING'`）。按开围栏的缩进重写成完整标记 |
+| 表格 | 缺竖线的行按最宽行补齐对齐；分隔行缺短横线时按表头重建 |
+| 行内 | `](` 缺 `)`；链接目标含空格却没用 `<>` 包；单侧反引号 |
+
+| 只报告（`unparsed`） | 为什么不改 |
+|---|---|
+| `**` 个数为奇数 | 不知道该往哪一侧补 |
+| 有 `](` 时方括号不配对 | 正文里的裸 `[` 是 `array[0]` 这类正常写法，猜不得 |
+
+| 层 | 改动 |
+|---|---|
+| `lib/md-repair.ts` | **新增**（纯函数：围栏遮罩 + 表格重建 + 行内三修）|
+| `lib/md-repair.test.ts` | **新增 31 例**，含 mermaid「双反引号关闭围栏」的原始样例 |
+| `composables/useCommands.ts` | 新命令 `format.repair`。⚠️ 此处 `useI18n` 必须解构成 **`tr`** —— 该文件已有局部 `const t = freshActiveTab()` 会遮蔽 |
+| `lib/keybindings.ts` / `useShortcuts.ts` / `lib/app-menu.ts` | 注册命令（**无默认快捷键**），菜单「格式 → 修复 Markdown 语法」 |
+| `components/FormatBar.vue` | 星形按钮改指向 `format.repair` |
+| `i18n/*.ts` ×15 | `repair.*` 8 键（`fixed` / `unparsed` / `none` / …），修复结果提示随界面语言 |
+
+**安全边界**：围栏遮罩保证**代码块内部的内容永不改写**；短围栏只在**已打开的围栏内**、且**与开围栏同字符**
+时才判定（正文里的散反引号照旧不动，代码块里的波浪线行仍是内容，CommonMark 也这么认为）。
+**一处已知取舍**（已写成测试名）：教人怎么写代码块的教学片段里，单独一行的两个反引号会被一并改写 ——
+它与「打错的关闭围栏」在文本上完全同形，只能靠意图区分；修复是用户主动点的一次检查，此处偏向
+「让文档能渲染」的一边。
+
 ### 验证
 
 - `vue-tsc --noEmit` **干净** —— 15 个语言文件按 `I18n` 全量类型核对（缺键 / 多键都会报错）。
-- `cargo check` 通过（`solomd v5.0.2`）。
-- `vite build` 入口 chunk **1,738.17 kB / gzip 530.02 kB**，与 5.0.0 / 5.0.1 基线**逐字节一致**（无包体回归）。
+- `cargo check` 通过（`solomd v5.0.2`）。第 4–6 节无 Rust 改动，未再跑 cargo。
+- `bash app/scripts/run-tests.sh`：**521 用例 / 521 通过 / 0 失败**（5.0.1 基线 482，本轮 +39：`md-repair` 31、`table-grid` 5、`md-format` 3）。
+- `vite build` 成功。入口之外那个稳定的 **1,738.17 kB / gzip 530.02 kB** 分包与 5.0.0 / 5.0.1 基线
+  **逐字节一致**；本轮新增的 UI 代码落在 `index-*.js`（874.51 kB）—— 判断体积回归要按模块看，
+  别拿 1,738 那个块当唯一标尺。
 
 ### 说明
 
+- **本版是重新打的一次。** 最初的 `v5.0.2` 标签 / CI 构建 / draft Release 在人工评审之前就被删除（内容从未
+  对外发布），四项修复与页面内工具栏补齐后仍用同一个版本号重新打 —— 序号没有被浪费，`main` 上的提交也没有
+  改动过历史。
 - **「打开文件夹无法选择桌面」不再排查。** `pickerStartDir()` 保持现状：4.14.3 那条「起点目录必须真实存在」
   的修复已完整在位；而导航窗格顶部那个「桌面」是 shell 的**无路径命名空间根**，确认它必然报
   `MK_E_UNAVAILABLE`（中文「没有供标记使用的对象」）—— 这是 OS 对话框自己的行为，VS Code 的
