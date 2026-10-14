@@ -189,9 +189,6 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'clean.aiArtifacts', label: 'Clean AI Formatting Marks', category: 'edit', defaults: [] },
   { id: 'clean.stripMarkdown', label: 'Strip All Markdown', category: 'edit', defaults: [] },
   { id: 'format.markdown', label: 'Format Markdown', category: 'edit', defaults: ['Mod+Alt+L'] },
-  // No default chord: the formatting toolbar is where this is reached, so it
-  // ships unbound and showable/assignable in the shortcut editor either way.
-  { id: 'format.repair', label: 'Repair Markdown Syntax', category: 'edit', defaults: [] },
   { id: 'proofread.cjk', label: 'CJK Proofread', category: 'edit', defaults: ['Mod+Shift+J'] },
 
   // ---- Paragraph (#296, #274) ----

@@ -2062,15 +2062,13 @@ export const fr: I18n = {
     formatKey: "Astuce : {key} fait « {name} » — inutile de taper les symboles.",
     formatChange: "Modifier les raccourcis",
   },
-  repair: {
+  format: {
     noDocument: 'Aucun document actif',
-    markdownOnly: 'La réparation ne fonctionne que sur les fichiers Markdown',
-    stale: 'Le document a changé pendant la réparation — relancez la réparation',
-    nothing: 'Rien à réparer — aucune syntaxe Markdown cassée trouvée',
-    done: '{n} problème(s) réparé(s)',
-    partial: '{n} problème(s) réparé(s) ; {m} à vérifier manuellement',
-    unparsed: '{n} problème(s) n’ont pas pu être réparés automatiquement',
-    failed: 'Échec de la réparation — le document n’a pas pu être analysé',
+    markdownOnly: 'Le formatage ne fonctionne que sur les fichiers Markdown',
+    stale: 'Le document a changé pendant le formatage — relancez le formatage',
+    already: 'Déjà formaté',
+    done: 'Formaté',
+    failed: 'Échec du formatage — vérifiez la syntaxe',
   },
   cmd: {
     heading: {
@@ -2210,7 +2208,6 @@ export const fr: I18n = {
     },
     format: {
       markdown: 'Formater le Markdown (Prettier)',
-      repair: 'Réparer la syntaxe Markdown',
     },
     clean: {
       aiArtifacts: 'Nettoyer les artefacts d\'IA (guillemets typographiques, tirets cadratins, caractères invisibles)',
@@ -2300,7 +2297,6 @@ export const fr: I18n = {
     undo: "Annuler",
     redo: "Rétablir",
     hideKeyboard: "Masquer le clavier",
-    repair: "Réparer automatiquement le formatage",
     tableTip: "Tableau — faites glisser pour choisir la taille, ou ouvrez l’éditeur visuel",
     tableVisual: "Éditeur visuel…",
   },

@@ -2079,15 +2079,13 @@ export const nl: I18n = {
     formatKey: "Tip: {key} doet ‘{name}’ — je hoeft de tekens niet te typen.",
     formatChange: "Sneltoetsen wijzigen",
   },
-  repair: {
+  format: {
     noDocument: 'Geen actief document',
-    markdownOnly: 'Repareren werkt alleen op Markdown-bestanden',
-    stale: 'Het document is gewijzigd tijdens het repareren — voer het opnieuw uit',
-    nothing: 'Niets te repareren — geen kapotte Markdown-syntax gevonden',
-    done: '{n} probleem(en) gerepareerd',
-    partial: '{n} probleem(en) gerepareerd; {m} vragen handmatige controle',
-    unparsed: '{n} probleem(en) konden niet automatisch worden gerepareerd',
-    failed: 'Repareren mislukt — het document kon niet worden gelezen',
+    markdownOnly: 'Formatteren werkt alleen op Markdown-bestanden',
+    stale: 'Het document is gewijzigd tijdens het formatteren — voer het opnieuw uit',
+    already: 'Al geformatteerd',
+    done: 'Geformatteerd',
+    failed: 'Formatteren mislukt — controleer de syntaxis',
   },
   cmd: {
     heading: {
@@ -2227,7 +2225,6 @@ export const nl: I18n = {
     },
     format: {
       markdown: 'Markdown formatteren (Prettier)',
-      repair: 'Markdown-syntax repareren',
     },
     clean: {
       aiArtifacts: 'AI-artefacten opschonen (typografische aanhalingstekens, em-strepen, onzichtbare tekens)',
@@ -2317,7 +2314,6 @@ export const nl: I18n = {
     undo: "Ongedaan maken",
     redo: "Opnieuw",
     hideKeyboard: "Toetsenbord verbergen",
-    repair: "Opmaak automatisch herstellen",
     tableTip: "Tabel — sleep om een grootte te kiezen of open de visuele editor",
     tableVisual: "Visuele editor…",
   },

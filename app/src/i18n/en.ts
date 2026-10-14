@@ -2091,15 +2091,13 @@ export const en = {
     formatKey: "Tip: {key} does {name} — no need to type the marks.",
     formatChange: "Change shortcuts",
   },
-  repair: {
+  format: {
     noDocument: 'No active document',
-    markdownOnly: 'Repair works on Markdown files only',
-    stale: 'The document changed while repairing — run Repair again',
-    nothing: 'Nothing to repair — no broken Markdown syntax found',
-    done: 'Repaired {n} issue(s)',
-    partial: 'Repaired {n} issue(s); {m} need a manual look',
-    unparsed: '{n} problem(s) could not be repaired automatically',
-    failed: 'Repair failed — the document could not be parsed',
+    markdownOnly: 'Format works on Markdown files only',
+    stale: 'The document changed while formatting — run Format again',
+    already: 'Already formatted',
+    done: 'Formatted',
+    failed: 'Format failed — check syntax',
   },
   cmd: {
     heading: {
@@ -2239,7 +2237,6 @@ export const en = {
     },
     format: {
       markdown: 'Format Markdown (Prettier)',
-      repair: 'Repair Markdown Syntax',
     },
     clean: {
       aiArtifacts: 'Clean AI Artifacts (smart quotes, em-dashes, invisible chars)',
@@ -2329,7 +2326,6 @@ export const en = {
     undo: "Undo",
     redo: "Redo",
     hideKeyboard: "Hide keyboard",
-    repair: "Auto repair formatting",
     tableTip: "Table — drag to choose a size, or open the visual editor",
     tableVisual: "Visual editor…",
   },

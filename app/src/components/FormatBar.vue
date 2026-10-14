@@ -6,7 +6,7 @@
  * you have not learnt yet, and the ones you reach for once a week. Bold,
  * underline, italic, strikethrough | heading, subscript, superscript, quote |
  * list continuation, auto numbering, task list | inline code, code block,
- * link, image, table | undo, redo, repair formatting.
+ * link, image, table | undo, redo, format document.
  *
  * Every button goes through a path that already exists, so a button can never
  * do something its shortcut or its menu item does not:
@@ -264,7 +264,7 @@ function insertTable() {
 
     <span class="fbar__sep" aria-hidden="true" />
 
-    <!-- undo · redo · repair formatting -->
+    <!-- undo · redo · format the document (the format.markdown command) -->
     <button class="fbar__btn" :title="t('formatBar.undo')" :aria-label="t('formatBar.undo')" @click="history('undo')">
       <Icon name="undo" />
     </button>
@@ -273,9 +273,9 @@ function insertTable() {
     </button>
     <button
       class="fbar__btn"
-      :title="t('formatBar.repair')"
-      :aria-label="t('formatBar.repair')"
-      @click="command('format.repair')"
+      :title="t('cmd.format.markdown')"
+      :aria-label="t('cmd.format.markdown')"
+      @click="command('format.markdown')"
     >
       <Icon name="sparkle" />
     </button>

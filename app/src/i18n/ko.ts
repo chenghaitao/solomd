@@ -2062,15 +2062,13 @@ export const ko: I18n = {
     formatKey: "팁: {name}은(는) {key} 로 할 수 있습니다. 기호를 직접 입력할 필요가 없습니다.",
     formatChange: "단축키 변경",
   },
-  repair: {
+  format: {
     noDocument: '활성 문서가 없습니다',
-    markdownOnly: '복구는 Markdown 파일에서만 동작합니다',
-    stale: '복구하는 동안 문서가 변경되었습니다 — 다시 실행하세요',
-    nothing: '복구할 것이 없습니다 — 깨진 Markdown 문법을 찾지 못했습니다',
-    done: '{n}개 문제를 복구했습니다',
-    partial: '{n}개를 복구했고 {m}개는 직접 확인해야 합니다',
-    unparsed: '{n}개 문제는 자동으로 복구할 수 없습니다',
-    failed: '복구 실패 — 문서를 해석할 수 없습니다',
+    markdownOnly: '서식은 Markdown 파일에서만 동작합니다',
+    stale: '서식을 적용하는 동안 문서가 변경되었습니다 — 다시 실행하세요',
+    already: '이미 정리되어 있습니다',
+    done: '서식 적용 완료',
+    failed: '서식 실패 — 문법을 확인하세요',
   },
   cmd: {
     heading: {
@@ -2210,7 +2208,6 @@ export const ko: I18n = {
     },
     format: {
       markdown: 'Markdown 서식 지정 (Prettier)',
-      repair: 'Markdown 문법 복구',
     },
     clean: {
       aiArtifacts: 'AI 흔적 정리 (스마트 따옴표, 엠 대시, 보이지 않는 문자)',
@@ -2300,7 +2297,6 @@ export const ko: I18n = {
     undo: "실행 취소",
     redo: "다시 실행",
     hideKeyboard: "키보드 숨기기",
-    repair: "서식 자동 수정",
     tableTip: "표 — 끌어서 크기 선택, 또는 시각적 편집 열기",
     tableVisual: "시각적 편집…",
   },

@@ -2062,15 +2062,13 @@ export const es: I18n = {
     formatKey: "Consejo: {key} hace «{name}»; no hace falta escribir los símbolos.",
     formatChange: "Cambiar atajos",
   },
-  repair: {
+  format: {
     noDocument: 'No hay ningún documento activo',
-    markdownOnly: 'La reparación solo funciona con archivos Markdown',
-    stale: 'El documento cambió durante la reparación: vuelve a ejecutarla',
-    nothing: 'Nada que reparar: no se encontró sintaxis Markdown rota',
-    done: 'Se repararon {n} problema(s)',
-    partial: 'Se repararon {n} problema(s); {m} requieren revisión manual',
-    unparsed: 'No se pudieron reparar {n} problema(s) automáticamente',
-    failed: 'La reparación falló: no se pudo analizar el documento',
+    markdownOnly: 'El formato solo funciona con archivos Markdown',
+    stale: 'El documento cambió durante el formateo: vuelve a ejecutarlo',
+    already: 'Ya está formateado',
+    done: 'Formateado',
+    failed: 'El formateo falló: revisa la sintaxis',
   },
   cmd: {
     heading: {
@@ -2210,7 +2208,6 @@ export const es: I18n = {
     },
     format: {
       markdown: 'Formatear Markdown (Prettier)',
-      repair: 'Reparar sintaxis de Markdown',
     },
     clean: {
       aiArtifacts: 'Limpiar artefactos de IA (comillas tipográficas, rayas, caracteres invisibles)',
@@ -2300,7 +2297,6 @@ export const es: I18n = {
     undo: "Deshacer",
     redo: "Rehacer",
     hideKeyboard: "Ocultar teclado",
-    repair: "Reparar formato automáticamente",
     tableTip: "Tabla — arrastra para elegir el tamaño o abre el editor visual",
     tableVisual: "Editor visual…",
   },

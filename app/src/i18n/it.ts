@@ -2062,15 +2062,13 @@ export const it: I18n = {
     formatKey: "Suggerimento: {key} fa «{name}» — non serve digitare i simboli.",
     formatChange: "Modifica scorciatoie",
   },
-  repair: {
+  format: {
     noDocument: 'Nessun documento attivo',
-    markdownOnly: 'La riparazione funziona solo sui file Markdown',
-    stale: 'Il documento è cambiato durante la riparazione: rieseguila',
-    nothing: 'Niente da riparare: nessuna sintassi Markdown rotta trovata',
-    done: '{n} problema(i) riparato(i)',
-    partial: '{n} problema(i) riparato(i); {m} richiedono un controllo manuale',
-    unparsed: '{n} problema(i) non hanno potuto essere riparati automaticamente',
-    failed: 'Riparazione non riuscita: impossibile analizzare il documento',
+    markdownOnly: 'La formattazione funziona solo sui file Markdown',
+    stale: 'Il documento è cambiato durante la formattazione: rieseguila',
+    already: 'Già formattato',
+    done: 'Formattato',
+    failed: 'Formattazione non riuscita: controlla la sintassi',
   },
   cmd: {
     heading: {
@@ -2210,7 +2208,6 @@ export const it: I18n = {
     },
     format: {
       markdown: 'Formatta Markdown (Prettier)',
-      repair: 'Ripara la sintassi Markdown',
     },
     clean: {
       aiArtifacts: 'Pulisci artefatti IA (virgolette tipografiche, trattini lunghi, caratteri invisibili)',
@@ -2300,7 +2297,6 @@ export const it: I18n = {
     undo: "Annulla",
     redo: "Ripeti",
     hideKeyboard: "Nascondi tastiera",
-    repair: "Ripara automaticamente la formattazione",
     tableTip: "Tabella — trascina per scegliere la dimensione o apri l’editor visuale",
     tableVisual: "Editor visuale…",
   },

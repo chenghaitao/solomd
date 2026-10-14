@@ -2079,15 +2079,13 @@ export const tr: I18n = {
     formatKey: "İpucu: {key} “{name}” yapar — işaretleri elle yazmanıza gerek yok.",
     formatChange: "Kısayolları değiştir",
   },
-  repair: {
+  format: {
     noDocument: 'Etkin belge yok',
-    markdownOnly: 'Onarım yalnızca Markdown dosyalarında çalışır',
-    stale: 'Belge onarım sırasında değişti — onarımı yeniden çalıştır',
-    nothing: 'Onarılacak bir şey yok — bozuk Markdown söz dizimi bulunamadı',
-    done: '{n} sorun onarıldı',
-    partial: '{n} sorun onarıldı; {m} tanesi elle kontrol edilmeli',
-    unparsed: '{n} sorun otomatik olarak onarılamadı',
-    failed: 'Onarım başarısız — belge çözümlememedi',
+    markdownOnly: 'Biçimlendirme yalnızca Markdown dosyalarında çalışır',
+    stale: 'Belge biçimlendirme sırasında değişti — yeniden çalıştır',
+    already: 'Zaten biçimlendirilmiş',
+    done: 'Biçimlendirildi',
+    failed: 'Biçimlendirme başarısız — sözdizimini denetle',
   },
   cmd: {
     heading: {
@@ -2227,7 +2225,6 @@ export const tr: I18n = {
     },
     format: {
       markdown: 'Markdown\'ı Biçimlendir (Prettier)',
-      repair: 'Markdown söz dizimini onar',
     },
     clean: {
       aiArtifacts: 'Yapay Zeka Kalıntılarını Temizle (akıllı tırnaklar, uzun tireler, görünmez karakterler)',
@@ -2317,7 +2314,6 @@ export const tr: I18n = {
     undo: "Geri al",
     redo: "Yinele",
     hideKeyboard: "Klavyeyi gizle",
-    repair: "Biçimlendirmeyi otomatik onar",
     tableTip: "Tablo — boyut seçmek için sürükleyin veya görsel düzenleyiciyi açın",
     tableVisual: "Görsel düzenleyici…",
   },

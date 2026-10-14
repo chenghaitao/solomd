@@ -2062,15 +2062,13 @@ export const de: I18n = {
     formatKey: "Tipp: {name} geht mit {key} – die Zeichen musst du nicht tippen.",
     formatChange: "Tastenkürzel ändern",
   },
-  repair: {
+  format: {
     noDocument: 'Kein aktives Dokument',
-    markdownOnly: 'Reparieren funktioniert nur mit Markdown-Dateien',
-    stale: 'Das Dokument wurde während der Reparatur geändert — bitte erneut ausführen',
-    nothing: 'Nichts zu reparieren — keine defekte Markdown-Syntax gefunden',
-    done: '{n} Problem(e) repariert',
-    partial: '{n} Problem(e) repariert; {m} brauchen einen manuellen Blick',
-    unparsed: '{n} Problem(e) konnten nicht automatisch repariert werden',
-    failed: 'Reparatur fehlgeschlagen — das Dokument ließ sich nicht parsen',
+    markdownOnly: 'Formatieren funktioniert nur mit Markdown-Dateien',
+    stale: 'Das Dokument wurde während des Formatierens geändert — bitte erneut ausführen',
+    already: 'Bereits formatiert',
+    done: 'Formatiert',
+    failed: 'Formatieren fehlgeschlagen — Syntax prüfen',
   },
   cmd: {
     heading: {
@@ -2210,7 +2208,6 @@ export const de: I18n = {
     },
     format: {
       markdown: 'Markdown formatieren (Prettier)',
-      repair: 'Markdown-Syntax reparieren',
     },
     clean: {
       aiArtifacts: 'KI-Artefakte bereinigen (typografische Anführungszeichen, Geviertstriche, unsichtbare Zeichen)',
@@ -2300,7 +2297,6 @@ export const de: I18n = {
     undo: "Rückgängig",
     redo: "Wiederholen",
     hideKeyboard: "Tastatur ausblenden",
-    repair: "Formatierung automatisch reparieren",
     tableTip: "Tabelle — ziehen, um die Größe zu wählen, oder den visuellen Editor öffnen",
     tableVisual: "Visueller Editor…",
   },

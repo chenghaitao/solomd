@@ -19,7 +19,6 @@ const loadChineseConvert = () => import('../lib/chinese-convert');
 import { cleanAIArtifacts, stripMarkdownToPlain } from '../lib/clean-ai';
 import { openWelcomeTour } from '../lib/welcome-tour';
 import { formatMarkdown } from '../lib/markdown-format';
-import { repairMarkdown } from '../lib/md-repair';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useDailyNotes } from './useDailyNotes';
 import { usePandocExport } from './usePandocExport';
@@ -552,6 +551,12 @@ export function useCommands(): Command[] {
       },
     },
 
+    // The toolbar's sparkle button and the Format menu both land here. A
+    // syntax-repair pass briefly sat where this comment is; it was removed
+    // because it rewrote several places at once in one click and misread
+    // quoted table cells (a cell holding a `|` came back with an extra
+    // column). Formatting stays: it is what Prettier does, and it is what
+    // this command has always been.
     {
       id: 'format.markdown',
       title: 'Format Markdown (Prettier)',
@@ -560,11 +565,11 @@ export function useCommands(): Command[] {
       run: async () => {
         const t = freshActiveTab();
         if (!t) {
-          toasts.warning('No active document');
+          toasts.warning(tr('format.noDocument'));
           return;
         }
         if (t.language !== 'markdown') {
-          toasts.warning('Format works on Markdown files only');
+          toasts.warning(tr('format.markdownOnly'));
           return;
         }
         try {
@@ -573,64 +578,18 @@ export function useCommands(): Command[] {
           // Prettier loads on first use: anything typed while it did would be
           // overwritten by a result formatted from the older text.
           if (freshActiveTab()?.id !== t.id || t.content !== src) {
-            toasts.info('The document changed while formatting — run Format again');
+            toasts.info(tr('format.stale'));
             return;
           }
           if (next === src) {
-            toasts.info('Already formatted');
+            toasts.info(tr('format.already'));
             return;
           }
           tabs.setContent(t.id, next);
-          toasts.success('Formatted');
+          toasts.success(tr('format.done'));
         } catch (e) {
           console.error('format failed', e);
-          toasts.warning('Format failed — check syntax');
-        }
-      },
-    },
-
-    // The toolbar's "repair formatting" button and the Format menu both land
-    // here. Prettier above reformats a document that parses; this one repairs
-    // the ones that don't — an unclosed fence or bracket, a link with no `)`,
-    // a table row that lost a pipe — and says so when it cannot. Every string
-    // is localized because that button is where the user meets it.
-    {
-      id: 'format.repair',
-      title: 'Repair Markdown Syntax',
-      shortcut: kb('format.repair'),
-      hint: 'Close unclosed code fences, links and brackets, straighten table rows',
-      run: async () => {
-        const tab = freshActiveTab();
-        if (!tab) {
-          toasts.warning(tr('repair.noDocument'));
-          return;
-        }
-        if (tab.language !== 'markdown') {
-          toasts.warning(tr('repair.markdownOnly'));
-          return;
-        }
-        try {
-          const src = tab.content;
-          const result = repairMarkdown(src);
-          // Reading the document is synchronous, but a repair that opened a
-          // dialog (or a save landing mid-flight) would still race it.
-          if (freshActiveTab()?.id !== tab.id || tab.content !== src) {
-            toasts.info(tr('repair.stale'));
-            return;
-          }
-          const fixed = result.fixed.length;
-          const left = result.unparsed.length;
-          if (!fixed && !left) {
-            toasts.info(tr('repair.nothing'));
-            return;
-          }
-          if (fixed && result.text !== src) tabs.setContent(tab.id, result.text);
-          if (!fixed) toasts.warning(tr('repair.unparsed', { n: left }));
-          else if (left) toasts.warning(tr('repair.partial', { n: fixed, m: left }));
-          else toasts.success(tr('repair.done', { n: fixed }));
-        } catch (e) {
-          console.error('repair failed', e);
-          toasts.warning(tr('repair.failed'));
+          toasts.warning(tr('format.failed'));
         }
       },
     },

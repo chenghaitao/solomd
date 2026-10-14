@@ -2062,15 +2062,13 @@ export const ja: I18n = {
     formatKey: "ヒント: {name}は {key} でできます。記号を手入力する必要はありません。",
     formatChange: "ショートカットを変更",
   },
-  repair: {
+  format: {
     noDocument: 'アクティブなドキュメントがありません',
-    markdownOnly: '修復は Markdown ファイルのみで動作します',
-    stale: '修復中にドキュメントが変更されました — もう一度実行してください',
-    nothing: '修復するものはありません — 壊れた Markdown 記法は見つかりませんでした',
-    done: '{n} 件を修復しました',
-    partial: '{n} 件を修復しました。{m} 件は手動での確認が必要です',
-    unparsed: '{n} 件の問題は自動修復できませんでした',
-    failed: '修復に失敗しました — ドキュメントを解析できませんでした',
+    markdownOnly: '整形は Markdown ファイルのみで動作します',
+    stale: '整形中にドキュメントが変更されました — もう一度実行してください',
+    already: 'すでに整形済みです',
+    done: '整形しました',
+    failed: '整形に失敗しました — 構文を確認してください',
   },
   cmd: {
     heading: {
@@ -2210,7 +2208,6 @@ export const ja: I18n = {
     },
     format: {
       markdown: 'Markdown を整形 (Prettier)',
-      repair: 'Markdown 記法を修復',
     },
     clean: {
       aiArtifacts: 'AI アーティファクトをクリーンアップ (スマート引用符、em ダッシュ、不可視文字)',
@@ -2300,7 +2297,6 @@ export const ja: I18n = {
     undo: "元に戻す",
     redo: "やり直す",
     hideKeyboard: "キーボードを閉じる",
-    repair: "書式を自動修正",
     tableTip: "表 — ドラッグしてサイズを選択、またはビジュアル編集を開く",
     tableVisual: "ビジュアル編集…",
   },

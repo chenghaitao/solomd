@@ -2079,15 +2079,13 @@ export const sv: I18n = {
     formatKey: "Tips: {key} gör ”{name}” – du behöver inte skriva tecknen.",
     formatChange: "Ändra kortkommandon",
   },
-  repair: {
+  format: {
     noDocument: 'Inget aktivt dokument',
-    markdownOnly: 'Reparering fungerar bara på Markdown-filer',
-    stale: 'Dokumentet ändrades under repareringen — kör igen',
-    nothing: 'Inget att reparera — ingen trasig Markdown-syntax hittades',
-    done: 'Reparerade {n} problem',
-    partial: 'Reparerade {n} problem; {m} behöver ses över manuellt',
-    unparsed: '{n} problem kunde inte repareras automatiskt',
-    failed: 'Repareringen misslyckades — dokumentet kunde inte tolkas',
+    markdownOnly: 'Formatering fungerar bara på Markdown-filer',
+    stale: 'Dokumentet ändrades under formateringen — kör igen',
+    already: 'Redan formaterat',
+    done: 'Formaterat',
+    failed: 'Formateringen misslyckades — kontrollera syntaxen',
   },
   cmd: {
     heading: {
@@ -2227,7 +2225,6 @@ export const sv: I18n = {
     },
     format: {
       markdown: 'Formatera Markdown (Prettier)',
-      repair: 'Reparera Markdown-syntax',
     },
     clean: {
       aiArtifacts: 'Rensa AI-artefakter (typografiska citattecken, tankstreck, osynliga tecken)',
@@ -2317,7 +2314,6 @@ export const sv: I18n = {
     undo: "Ångra",
     redo: "Gör om",
     hideKeyboard: "Dölj tangentbord",
-    repair: "Reparera formateringen automatiskt",
     tableTip: "Tabell — dra för att välja storlek eller öppna den visuella redigeraren",
     tableVisual: "Visuell redigerare…",
   },

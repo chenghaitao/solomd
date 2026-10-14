@@ -2067,15 +2067,13 @@ export const zh: I18n = {
     formatKey: "小提示:{name}可以直接按 {key},不用手打符号。",
     formatChange: "修改快捷键",
   },
-  repair: {
+  format: {
     noDocument: '没有打开的文档',
-    markdownOnly: '修复仅适用于 Markdown 文件',
-    stale: '修复期间文档已更改 —— 请再次运行修复',
-    nothing: '无需修复 —— 未发现损坏的 Markdown 语法',
-    done: '已修复 {n} 处问题',
-    partial: '已修复 {n} 处问题，另有 {m} 处需要手动处理',
-    unparsed: '有 {n} 处问题无法自动修复',
-    failed: '修复失败 —— 无法解析该文档',
+    markdownOnly: '格式化仅适用于 Markdown 文件',
+    stale: '格式化期间文档已更改 —— 请再次运行格式化',
+    already: '已是最新格式',
+    done: '已格式化',
+    failed: '格式化失败 —— 请检查语法',
   },
   cmd: {
     heading: {
@@ -2215,7 +2213,6 @@ export const zh: I18n = {
     },
     format: {
       markdown: '格式化 Markdown(Prettier)',
-      repair: '修复 Markdown 语法',
     },
     clean: {
       aiArtifacts: '清理 AI 痕迹(弯引号、长破折号、不可见字符)',
@@ -2305,7 +2302,6 @@ export const zh: I18n = {
     undo: "撤销",
     redo: "重做",
     hideKeyboard: "收起键盘",
-    repair: "自动修复格式",
     tableTip: "表格 — 拖动选择行列数，或打开可视化编辑",
     tableVisual: "可视化编辑…",
   },

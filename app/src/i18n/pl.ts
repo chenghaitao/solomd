@@ -2079,15 +2079,13 @@ export const pl: I18n = {
     formatKey: "Wskazówka: {key} robi „{name}” — nie trzeba wpisywać znaków.",
     formatChange: "Zmień skróty",
   },
-  repair: {
+  format: {
     noDocument: 'Brak aktywnego dokumentu',
-    markdownOnly: 'Naprawa działa tylko na plikach Markdown',
-    stale: 'Dokument zmienił się podczas naprawy — uruchom naprawę ponownie',
-    nothing: 'Nie ma czego naprawiać — nie znaleziono uszkodzonej składni Markdown',
-    done: 'Naprawiono {n} problem(ów)',
-    partial: 'Naprawiono {n} problem(ów); {m} wymaga ręcznego sprawdzenia',
-    unparsed: 'Nie udało się automatycznie naprawić {n} problem(ów)',
-    failed: 'Naprawa nie powiodła się — nie można przeanalizować dokumentu',
+    markdownOnly: 'Formatowanie działa tylko na plikach Markdown',
+    stale: 'Dokument zmienił się podczas formatowania — uruchom ponownie',
+    already: 'Już sformatowany',
+    done: 'Sformatowano',
+    failed: 'Formatowanie nie powiodło się — sprawdź składnię',
   },
   cmd: {
     heading: {
@@ -2227,7 +2225,6 @@ export const pl: I18n = {
     },
     format: {
       markdown: 'Formatuj Markdown (Prettier)',
-      repair: 'Napraw składnię Markdown',
     },
     clean: {
       aiArtifacts: 'Wyczyść artefakty AI (cudzysłowy typograficzne, pauzy, niewidoczne znaki)',
@@ -2317,7 +2314,6 @@ export const pl: I18n = {
     undo: "Cofnij",
     redo: "Ponów",
     hideKeyboard: "Ukryj klawiaturę",
-    repair: "Automatycznie napraw formatowanie",
     tableTip: "Tabela — przeciągnij, aby wybrać rozmiar, albo otwórz edytor wizualny",
     tableVisual: "Edytor wizualny…",
   },
