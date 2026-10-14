@@ -410,6 +410,7 @@ export const sv: I18n = {
     searchPosition: "Träff {i} av {n}",
     title: 'Inställningar',
     catBasics: 'Grunder',
+    catEditing: 'Redigering',
     catWriting: 'Skrivande',
     catSync: 'Synkronisering',
     syncUnsupportedAndroid: 'Git-baserad synkronisering (versionshistorik, GitHub-synk, proxy) finns ännu inte i Android-bygget — libgit2-motorn som den bygger på är inte kompilerad in i Android-binären. Använd tills vidare skrivbords- eller iOS-appen för att synka det här valvet.',
@@ -417,6 +418,7 @@ export const sv: I18n = {
     catExport: 'Export',
     catAdvanced: 'Avancerat',
     catKeys: 'Kortkommandon',
+    panelResize: 'Ändra panelens höjd (dra eller ↑ / ↓)',
     keysInterceptedTitle: "Några kortkommandon tas av annan programvara",
     keysInterceptedBody: "Programmen nedan registrerar de här tangentkombinationerna som globala snabbtangenter, så de når aldrig SoloMD. Att flytta kommandona till tangenterna till höger påverkar inte dina övriga kortkommandon.",
     keysApplyCompat: "Flytta kommandona till lediga tangenter",
@@ -501,6 +503,8 @@ export const sv: I18n = {
     solidCursor: 'Fast markör (utan blinkning)',
     selectionBubble: "Visa ett formatfält över markerad text",
     selectionBubbleHint: "Fetstil, kursiv, kod, länk, rubriker och listor direkt ovanför markeringen, i live- och källkodsläge. Varje knapp kör samma kommando som sitt kortkommando.",
+    formatBar: "Visa formateringsfältet ovanför redigeraren",
+    formatBarHint: "Fet, rubriker, listor, kod, länkar, bilder, tabeller och ångra, grupperade på en rad ovanför texten. Stäng av för att arbeta enbart med menyer och kortkommandon.",
     alwaysShowMarkers: "Visa alltid Markdown-tecken",
     alwaysShowMarkersHint: "#, ** och andra tecken förblir synliga (nedtonade) när du redigerar, i stället för att döljas på rader utan markör. Formateringen syns och ett klick på en rad får den inte längre att hoppa. Bilder visas under sin rad; tabeller, formler och diagram förblir källkod. Gäller CodeMirror-redigeraren.",
     highlightCurrentLine: "Markera aktuell rad",
@@ -2075,6 +2079,16 @@ export const sv: I18n = {
     formatKey: "Tips: {key} gör ”{name}” – du behöver inte skriva tecknen.",
     formatChange: "Ändra kortkommandon",
   },
+  repair: {
+    noDocument: 'Inget aktivt dokument',
+    markdownOnly: 'Reparering fungerar bara på Markdown-filer',
+    stale: 'Dokumentet ändrades under repareringen — kör igen',
+    nothing: 'Inget att reparera — ingen trasig Markdown-syntax hittades',
+    done: 'Reparerade {n} problem',
+    partial: 'Reparerade {n} problem; {m} behöver ses över manuellt',
+    unparsed: '{n} problem kunde inte repareras automatiskt',
+    failed: 'Repareringen misslyckades — dokumentet kunde inte tolkas',
+  },
   cmd: {
     heading: {
       promote: "Höj rubriknivå",
@@ -2083,10 +2097,13 @@ export const sv: I18n = {
     },
     fmt: {
       bold: "Fet",
+      underline: "Understruken",
       italic: "Kursiv",
       strike: "Genomstruken",
       code: "Infogad kod",
       link: "Länk",
+      subscript: "Nedsänkt",
+      superscript: "Upphöjd",
       h1: "Rubrik 1",
       h2: "Rubrik 2",
       h3: "Rubrik 3",
@@ -2210,6 +2227,7 @@ export const sv: I18n = {
     },
     format: {
       markdown: 'Formatera Markdown (Prettier)',
+      repair: 'Reparera Markdown-syntax',
     },
     clean: {
       aiArtifacts: 'Rensa AI-artefakter (typografiska citattecken, tankstreck, osynliga tecken)',
@@ -2294,9 +2312,14 @@ export const sv: I18n = {
   formatBar: {
     label: "Formatering",
     heading: "Rubrik",
+    headingTip: "Rubrik — välj nivå",
     image: "Infoga bild",
     undo: "Ångra",
+    redo: "Gör om",
     hideKeyboard: "Dölj tangentbord",
+    repair: "Reparera formateringen automatiskt",
+    tableTip: "Tabell — dra för att välja storlek eller öppna den visuella redigeraren",
+    tableVisual: "Visuell redigerare…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

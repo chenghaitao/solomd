@@ -399,6 +399,15 @@ body.split-divider--dragging * {
   -webkit-user-select: none !important;
 }
 
+/* Same for the Settings dialog's height grip — the dialog is teleported to
+   <body>, so the cursor has to be pinned from outside the component. */
+body.settings-grip--dragging,
+body.settings-grip--dragging * {
+  cursor: ns-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 button {
   font: inherit;
   color: inherit;

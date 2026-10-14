@@ -140,6 +140,7 @@ export function useShortcuts(hooks: Hooks = {}) {
       FORMAT_KINDS.map((kind) => [`fmt.${kind}`, () => formatMarkdown(kind)]),
     ),
     'format.markdown': () => runById('format.markdown'),
+    'format.repair': () => runById('format.repair'),
     // #387 — opens the size dialog rather than dropping a fixed 2×2 table.
     // App.vue owns the dialog, so the chord only has to ask for it.
     'insert.table': () => {

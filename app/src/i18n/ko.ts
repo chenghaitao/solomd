@@ -410,6 +410,7 @@ export const ko: I18n = {
     searchPosition: "{n}개 중 {i}번째",
     title: '설정',
     catBasics: '기본',
+    catEditing: '편집',
     catWriting: '쓰기',
     catSync: '동기화',
     syncUnsupportedAndroid: 'Git 기반 동기화(버전 기록, GitHub 동기화, 프록시)는 아직 Android 빌드에서 사용할 수 없습니다. 이 기능이 의존하는 libgit2 엔진이 Android 바이너리에 포함되어 있지 않기 때문입니다. 당분간 데스크톱 또는 iOS 앱에서 동기화해 주세요.',
@@ -417,6 +418,7 @@ export const ko: I18n = {
     catExport: '내보내기',
     catAdvanced: '고급',
     catKeys: '단축키',
+    panelResize: '패널 크기 조절 (드래그 또는 ↑ / ↓)',
     keysInterceptedTitle: "다른 소프트웨어가 가져가는 단축키가 있습니다",
     keysInterceptedBody: "아래 프로그램들이 이 조합을 전역 단축키로 등록해서 SoloMD까지 오지 않습니다. 해당 명령을 오른쪽 키로 옮겨도 나머지 단축키는 그대로입니다.",
     keysApplyCompat: "이 명령들을 비어 있는 키로 옮기기",
@@ -501,6 +503,8 @@ export const ko: I18n = {
     solidCursor: '커서 깜박임 없음(고정 커서)',
     selectionBubble: "선택한 텍스트 위에 서식 막대 표시",
     selectionBubbleHint: "라이브 및 소스 모드에서 선택 영역 위에 굵게, 기울임, 코드, 링크, 제목, 목록 버튼을 표시합니다. 각 버튼은 해당 단축키와 같은 명령을 실행합니다.",
+    formatBar: "편집기 위에 서식 도구 모음 표시",
+    formatBarHint: "굵게, 제목, 목록, 코드, 링크, 이미지, 표, 실행 취소를 본문 위 한 줄에 묶어 표시합니다. 끄면 메뉴와 단축키만 사용합니다.",
     alwaysShowMarkers: "Markdown 기호 항상 표시",
     alwaysShowMarkersHint: "편집 중에도 #, ** 같은 기호를 흐리게 표시하고, 커서가 없는 줄에서 숨기지 않습니다. 서식은 그대로 보이며 줄을 클릭해도 화면이 튀지 않습니다. 이미지는 해당 줄 아래에 표시되고 표·수식·다이어그램은 소스로 유지됩니다. CodeMirror 편집기에 적용됩니다.",
     highlightCurrentLine: "현재 줄 강조",
@@ -2058,6 +2062,16 @@ export const ko: I18n = {
     formatKey: "팁: {name}은(는) {key} 로 할 수 있습니다. 기호를 직접 입력할 필요가 없습니다.",
     formatChange: "단축키 변경",
   },
+  repair: {
+    noDocument: '활성 문서가 없습니다',
+    markdownOnly: '복구는 Markdown 파일에서만 동작합니다',
+    stale: '복구하는 동안 문서가 변경되었습니다 — 다시 실행하세요',
+    nothing: '복구할 것이 없습니다 — 깨진 Markdown 문법을 찾지 못했습니다',
+    done: '{n}개 문제를 복구했습니다',
+    partial: '{n}개를 복구했고 {m}개는 직접 확인해야 합니다',
+    unparsed: '{n}개 문제는 자동으로 복구할 수 없습니다',
+    failed: '복구 실패 — 문서를 해석할 수 없습니다',
+  },
   cmd: {
     heading: {
       promote: "제목 수준 올리기",
@@ -2066,10 +2080,13 @@ export const ko: I18n = {
     },
     fmt: {
       bold: "굵게",
+      underline: "밑줄",
       italic: "기울임꼴",
       strike: "취소선",
       code: "인라인 코드",
       link: "링크",
+      subscript: "아래 첨자",
+      superscript: "위 첨자",
       h1: "제목 1",
       h2: "제목 2",
       h3: "제목 3",
@@ -2193,6 +2210,7 @@ export const ko: I18n = {
     },
     format: {
       markdown: 'Markdown 서식 지정 (Prettier)',
+      repair: 'Markdown 문법 복구',
     },
     clean: {
       aiArtifacts: 'AI 흔적 정리 (스마트 따옴표, 엠 대시, 보이지 않는 문자)',
@@ -2277,9 +2295,14 @@ export const ko: I18n = {
   formatBar: {
     label: "서식",
     heading: "제목",
+    headingTip: "제목 — 수준 선택",
     image: "이미지 삽입",
     undo: "실행 취소",
+    redo: "다시 실행",
     hideKeyboard: "키보드 숨기기",
+    repair: "서식 자동 수정",
+    tableTip: "표 — 끌어서 크기 선택, 또는 시각적 편집 열기",
+    tableVisual: "시각적 편집…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

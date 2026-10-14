@@ -412,6 +412,7 @@ export const zh: I18n = {
     searchPosition: "第 {i} 项，共 {n} 项",
     title: '设置',
     catBasics: '基础',
+    catEditing: '编辑',
     catWriting: '写作',
     catSync: '同步',
     syncUnsupportedAndroid: '基于 Git 的同步（版本历史、GitHub 同步、代理）在 Android 版中暂不可用 —— 它依赖的 libgit2 引擎还没有编译进 Android 包。请暂时使用桌面版或 iOS 版来同步这个仓库。',
@@ -419,6 +420,7 @@ export const zh: I18n = {
     catExport: '导出',
     catAdvanced: '高级',
     catKeys: '快捷键',
+    panelResize: '调整面板高度（拖动，或 ↑ / ↓）',
     keysInterceptedTitle: "有快捷键被别的软件抢走了",
     keysInterceptedBody: "下面这些组合被列出的程序注册成了全局热键,按下去根本到不了 SoloMD。把这些命令改到右侧的键位即可,其余快捷键不受影响。",
     keysApplyCompat: "把这些命令改到不冲突的键位",
@@ -503,6 +505,8 @@ export const zh: I18n = {
     solidCursor: '光标不闪烁(实心光标)',
     selectionBubble: "选中文字时显示格式栏",
     selectionBubbleHint: "在实时和源码模式下，选中文字后在其上方显示加粗、斜体、代码、链接、标题和列表按钮。每个按钮与对应快捷键执行同一命令。",
+    formatBar: "在编辑器上方显示格式工具栏",
+    formatBarHint: "加粗、标题、列表、代码、链接、图片、表格与撤销，分组显示在正文上方的一行里。关闭后仅使用菜单与快捷键。",
     alwaysShowMarkers: "始终显示 Markdown 标记",
     alwaysShowMarkersHint: "编辑时保留 #、** 等标记（淡色显示），不再在光标不在的行上隐藏。格式照常显示，点击某一行时不会再跳动。图片显示在所在行下方；表格、公式和图表保持源码。适用于 CodeMirror 编辑器。",
     highlightCurrentLine: "高亮当前行",
@@ -2063,6 +2067,16 @@ export const zh: I18n = {
     formatKey: "小提示:{name}可以直接按 {key},不用手打符号。",
     formatChange: "修改快捷键",
   },
+  repair: {
+    noDocument: '没有打开的文档',
+    markdownOnly: '修复仅适用于 Markdown 文件',
+    stale: '修复期间文档已更改 —— 请再次运行修复',
+    nothing: '无需修复 —— 未发现损坏的 Markdown 语法',
+    done: '已修复 {n} 处问题',
+    partial: '已修复 {n} 处问题，另有 {m} 处需要手动处理',
+    unparsed: '有 {n} 处问题无法自动修复',
+    failed: '修复失败 —— 无法解析该文档',
+  },
   cmd: {
     heading: {
       promote: "提升标题级别",
@@ -2071,10 +2085,13 @@ export const zh: I18n = {
     },
     fmt: {
       bold: "加粗",
+      underline: "下划线",
       italic: "斜体",
       strike: "删除线",
       code: "行内代码",
       link: "链接",
+      subscript: "下标",
+      superscript: "上标",
       h1: "一级标题",
       h2: "二级标题",
       h3: "三级标题",
@@ -2198,6 +2215,7 @@ export const zh: I18n = {
     },
     format: {
       markdown: '格式化 Markdown(Prettier)',
+      repair: '修复 Markdown 语法',
     },
     clean: {
       aiArtifacts: '清理 AI 痕迹(弯引号、长破折号、不可见字符)',
@@ -2282,9 +2300,14 @@ export const zh: I18n = {
   formatBar: {
     label: "格式",
     heading: "标题",
+    headingTip: "标题 — 选择级别",
     image: "插入图片",
     undo: "撤销",
+    redo: "重做",
     hideKeyboard: "收起键盘",
+    repair: "自动修复格式",
+    tableTip: "表格 — 拖动选择行列数，或打开可视化编辑",
+    tableVisual: "可视化编辑…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

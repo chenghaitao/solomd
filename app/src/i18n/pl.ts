@@ -410,6 +410,7 @@ export const pl: I18n = {
     searchPosition: "Wynik {i} z {n}",
     title: 'Ustawienia',
     catBasics: 'Podstawy',
+    catEditing: 'Edycja',
     catWriting: 'Pisanie',
     catSync: 'Synchronizacja',
     syncUnsupportedAndroid: 'Synchronizacja oparta na Git (historia wersji, synchronizacja z GitHubem, proxy) nie jest jeszcze dostępna w wersji na Androida — silnik libgit2, na którym się opiera, nie jest skompilowany w binarce Androida. Na razie synchronizuj ten schowek w aplikacji desktopowej lub iOS.',
@@ -417,6 +418,7 @@ export const pl: I18n = {
     catExport: 'Eksport',
     catAdvanced: 'Zaawansowane',
     catKeys: 'Skróty',
+    panelResize: 'Zmień wysokość panelu (przeciągnij lub ↑ / ↓)',
     keysInterceptedTitle: "Część skrótów przechwytuje inne oprogramowanie",
     keysInterceptedBody: "Wymienione niżej programy rejestrują te kombinacje jako skróty globalne, więc nigdy nie docierają do SoloMD. Przeniesienie tych poleceń na klawisze po prawej nie rusza pozostałych skrótów.",
     keysApplyCompat: "Przenieś te polecenia na wolne klawisze",
@@ -501,6 +503,8 @@ export const pl: I18n = {
     solidCursor: 'Stały kursor (bez migania)',
     selectionBubble: "Pokazuj pasek formatowania nad zaznaczonym tekstem",
     selectionBubbleHint: "Pogrubienie, kursywa, kod, link, nagłówki i listy tuż nad zaznaczeniem, w trybie na żywo i źródłowym. Każdy przycisk wykonuje to samo polecenie co jego skrót.",
+    formatBar: "Pokaż pasek formatowania nad edytorem",
+    formatBarHint: "Pogrubienie, nagłówki, listy, kod, linki, obrazy, tabele i cofnij — zgrupowane w jednym wierszu nad tekstem. Wyłącz, aby korzystać wyłącznie z menu i skrótów.",
     alwaysShowMarkers: "Zawsze pokazuj znaczniki Markdown",
     alwaysShowMarkersHint: "Znaczniki #, ** i inne pozostają widoczne (przygaszone) podczas edycji zamiast znikać w wierszach bez kursora. Formatowanie zostaje, a kliknięcie wiersza nie powoduje już skoku. Obrazy są pod swoim wierszem; tabele, wzory i diagramy zostają źródłem. Dotyczy edytora CodeMirror.",
     highlightCurrentLine: "Podświetlaj bieżący wiersz",
@@ -2075,6 +2079,16 @@ export const pl: I18n = {
     formatKey: "Wskazówka: {key} robi „{name}” — nie trzeba wpisywać znaków.",
     formatChange: "Zmień skróty",
   },
+  repair: {
+    noDocument: 'Brak aktywnego dokumentu',
+    markdownOnly: 'Naprawa działa tylko na plikach Markdown',
+    stale: 'Dokument zmienił się podczas naprawy — uruchom naprawę ponownie',
+    nothing: 'Nie ma czego naprawiać — nie znaleziono uszkodzonej składni Markdown',
+    done: 'Naprawiono {n} problem(ów)',
+    partial: 'Naprawiono {n} problem(ów); {m} wymaga ręcznego sprawdzenia',
+    unparsed: 'Nie udało się automatycznie naprawić {n} problem(ów)',
+    failed: 'Naprawa nie powiodła się — nie można przeanalizować dokumentu',
+  },
   cmd: {
     heading: {
       promote: "Podnieś poziom nagłówka",
@@ -2083,10 +2097,13 @@ export const pl: I18n = {
     },
     fmt: {
       bold: "Pogrubienie",
+      underline: "Podkreślenie",
       italic: "Kursywa",
       strike: "Przekreślenie",
       code: "Kod w wierszu",
       link: "Link",
+      subscript: "Indeks dolny",
+      superscript: "Indeks górny",
       h1: "Nagłówek 1",
       h2: "Nagłówek 2",
       h3: "Nagłówek 3",
@@ -2210,6 +2227,7 @@ export const pl: I18n = {
     },
     format: {
       markdown: 'Formatuj Markdown (Prettier)',
+      repair: 'Napraw składnię Markdown',
     },
     clean: {
       aiArtifacts: 'Wyczyść artefakty AI (cudzysłowy typograficzne, pauzy, niewidoczne znaki)',
@@ -2294,9 +2312,14 @@ export const pl: I18n = {
   formatBar: {
     label: "Formatowanie",
     heading: "Nagłówek",
+    headingTip: "Nagłówek — wybierz poziom",
     image: "Wstaw obraz",
     undo: "Cofnij",
+    redo: "Ponów",
     hideKeyboard: "Ukryj klawiaturę",
+    repair: "Automatycznie napraw formatowanie",
+    tableTip: "Tabela — przeciągnij, aby wybrać rozmiar, albo otwórz edytor wizualny",
+    tableVisual: "Edytor wizualny…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

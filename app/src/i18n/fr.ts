@@ -410,6 +410,7 @@ export const fr: I18n = {
     searchPosition: "Résultat {i} sur {n}",
     title: 'Paramètres',
     catBasics: 'Général',
+    catEditing: 'Édition',
     catWriting: 'Écriture',
     catSync: 'Synchronisation',
     syncUnsupportedAndroid: 'La synchronisation basée sur Git (historique des versions, synchronisation GitHub, proxy) n\'est pas encore disponible sur Android — le moteur libgit2 dont elle dépend n\'est pas compilé dans le binaire Android. Utilisez pour l\'instant les applications de bureau ou iOS pour synchroniser ce coffre.',
@@ -417,6 +418,7 @@ export const fr: I18n = {
     catExport: 'Export',
     catAdvanced: 'Avancé',
     catKeys: 'Raccourcis',
+    panelResize: 'Redimensionner le panneau (glisser, ou ↑ / ↓)',
     keysInterceptedTitle: "Certains raccourcis sont interceptés par un autre logiciel",
     keysInterceptedBody: "Ces combinaisons sont enregistrées comme raccourcis globaux par les programmes ci-dessous : elles n'arrivent jamais jusqu'à SoloMD. Déplacer ces commandes vers les touches de droite laisse tous vos autres raccourcis intacts.",
     keysApplyCompat: "Déplacer ces commandes vers des touches libres",
@@ -501,6 +503,8 @@ export const fr: I18n = {
     solidCursor: 'Curseur fixe (sans clignotement)',
     selectionBubble: "Afficher une barre de mise en forme sur le texte sélectionné",
     selectionBubbleHint: "Gras, italique, code, lien, titres et listes juste au-dessus de la sélection, en mode direct et source. Chaque bouton exécute la même commande que son raccourci.",
+    formatBar: "Afficher la barre de mise en forme au-dessus de l’éditeur",
+    formatBarHint: "Gras, titres, listes, code, liens, images, tableaux et annuler, regroupés sur une ligne au-dessus du texte. Désactivez pour travailler uniquement avec les menus et les raccourcis.",
     alwaysShowMarkers: "Toujours afficher les marqueurs Markdown",
     alwaysShowMarkersHint: "Garder #, ** et les autres marqueurs visibles (atténués) pendant l’édition, au lieu de les masquer sur les lignes sans curseur. La mise en forme reste, et cliquer sur une ligne ne la fait plus sauter. Les images s’affichent sous leur ligne ; tableaux, formules et diagrammes restent en source. S’applique à l’éditeur CodeMirror.",
     highlightCurrentLine: "Surligner la ligne courante",
@@ -2058,6 +2062,16 @@ export const fr: I18n = {
     formatKey: "Astuce : {key} fait « {name} » — inutile de taper les symboles.",
     formatChange: "Modifier les raccourcis",
   },
+  repair: {
+    noDocument: 'Aucun document actif',
+    markdownOnly: 'La réparation ne fonctionne que sur les fichiers Markdown',
+    stale: 'Le document a changé pendant la réparation — relancez la réparation',
+    nothing: 'Rien à réparer — aucune syntaxe Markdown cassée trouvée',
+    done: '{n} problème(s) réparé(s)',
+    partial: '{n} problème(s) réparé(s) ; {m} à vérifier manuellement',
+    unparsed: '{n} problème(s) n’ont pas pu être réparés automatiquement',
+    failed: 'Échec de la réparation — le document n’a pas pu être analysé',
+  },
   cmd: {
     heading: {
       promote: "Augmenter le niveau de titre",
@@ -2066,10 +2080,13 @@ export const fr: I18n = {
     },
     fmt: {
       bold: "Gras",
+      underline: "Souligné",
       italic: "Italique",
       strike: "Barré",
       code: "Code en ligne",
       link: "Lien",
+      subscript: "Indice",
+      superscript: "Exposant",
       h1: "Titre 1",
       h2: "Titre 2",
       h3: "Titre 3",
@@ -2193,6 +2210,7 @@ export const fr: I18n = {
     },
     format: {
       markdown: 'Formater le Markdown (Prettier)',
+      repair: 'Réparer la syntaxe Markdown',
     },
     clean: {
       aiArtifacts: 'Nettoyer les artefacts d\'IA (guillemets typographiques, tirets cadratins, caractères invisibles)',
@@ -2277,9 +2295,14 @@ export const fr: I18n = {
   formatBar: {
     label: "Mise en forme",
     heading: "Titre",
+    headingTip: "Titre — choisir le niveau",
     image: "Insérer une image",
     undo: "Annuler",
+    redo: "Rétablir",
     hideKeyboard: "Masquer le clavier",
+    repair: "Réparer automatiquement le formatage",
+    tableTip: "Tableau — faites glisser pour choisir la taille, ou ouvrez l’éditeur visuel",
+    tableVisual: "Éditeur visuel…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

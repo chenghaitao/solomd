@@ -287,6 +287,38 @@ defineProps<{ name: string; size?: number }>();
     <template v-else-if="name === 'redo'">
       <path d="M15 14l5-5-5-5" /><path d="M20 9H9a5 5 0 0 0 0 10h3" />
     </template>
+    <template v-else-if="name === 'underline'">
+      <path d="M7 4v7a5 5 0 0 0 10 0V4" /><line x1="5" y1="20" x2="19" y2="20" />
+    </template>
+    <template v-else-if="name === 'strikethrough'">
+      <path d="M16 4H9.5a3 3 0 0 0-.5 5.96" /><path d="M14 12a3.5 3.5 0 0 1 0 8H6.5" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+    </template>
+    <!-- Subscript / superscript read as "x₂" / "x²" — a letter with a small
+         digit beside it, the shape the buttons stand for. Drawn with <text>
+         like the list-number glyph, so the digit stays legible at 16px. -->
+    <template v-else-if="name === 'subscript'">
+      <text x="1.6" y="17" font-size="13" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">x</text>
+      <text x="13" y="21.5" font-size="8" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">2</text>
+    </template>
+    <template v-else-if="name === 'superscript'">
+      <text x="1.6" y="21" font-size="13" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">x</text>
+      <text x="13" y="9.5" font-size="8" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">2</text>
+    </template>
+    <template v-else-if="name === 'codeblock'">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9.5 10l-2 2.5 2 2.5" /><path d="M14.5 10l2 2.5-2 2.5" />
+    </template>
+    <template v-else-if="name === 'table'">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="3" y1="10" x2="21" y2="10" /><line x1="3" y1="15" x2="21" y2="15" />
+      <line x1="9" y1="4" x2="9" y2="20" /><line x1="15" y1="4" x2="15" y2="20" />
+    </template>
+    <!-- Settings → Editing. An I-beam: the one glyph everyone reads as "text
+         you type into", distinct from the pencil (Writing) beside it. -->
+    <template v-else-if="name === 'text-cursor'">
+      <path d="M9 5h6M9 19h6M12 5v14" />
+    </template>
     <template v-else-if="name === 'keyboard-hide'">
       <rect x="2" y="5" width="20" height="11" rx="2" /><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 12.5h10M9 19.5l3 2 3-2" />
     </template>

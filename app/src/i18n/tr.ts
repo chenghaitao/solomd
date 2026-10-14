@@ -410,6 +410,7 @@ export const tr: I18n = {
     searchPosition: "Sonuç {i} / {n}",
     title: 'Ayarlar',
     catBasics: 'Temel',
+    catEditing: 'Düzenleme',
     catWriting: 'Yazma',
     catSync: 'Eşitleme',
     syncUnsupportedAndroid: 'Git tabanlı eşitleme (sürüm geçmişi, GitHub eşitleme, proxy) Android sürümünde henüz kullanılamıyor — dayandığı libgit2 motoru Android ikilisine derlenmiş değil. Şimdilik bu kasayı eşitlemek için masaüstü veya iOS uygulamasını kullanın.',
@@ -417,6 +418,7 @@ export const tr: I18n = {
     catExport: 'Dışa Aktarma',
     catAdvanced: 'Gelişmiş',
     catKeys: 'Kısayollar',
+    panelResize: 'Paneli yeniden boyutlandır (sürükle veya ↑ / ↓)',
     keysInterceptedTitle: "Bazı kısayolları başka yazılımlar alıyor",
     keysInterceptedBody: "Aşağıdaki programlar bu tuş birleşimlerini genel kısayol olarak kaydediyor, bu yüzden SoloMD'ye hiç ulaşmıyorlar. Komutları sağdaki tuşlara taşımak diğer kısayollarınıza dokunmaz.",
     keysApplyCompat: "Bu komutları boş tuşlara taşı",
@@ -501,6 +503,8 @@ export const tr: I18n = {
     solidCursor: 'Sabit imleç (yanıp sönme yok)',
     selectionBubble: "Seçili metnin üzerinde biçim çubuğu göster",
     selectionBubbleHint: "Canlı ve kaynak modunda seçimin hemen üstünde kalın, italik, kod, bağlantı, başlık ve liste düğmeleri. Her düğme kısayoluyla aynı komutu çalıştırır.",
+    formatBar: "Düzenleyicinin üstünde biçimlendirme araç çubuğunu göster",
+    formatBarHint: "Kalın, başlıklar, listeler, kod, bağlantılar, resimler, tablolar ve geri al, metnin üstünde tek satırda gruplanır. Yalnızca menüler ve kısayollarla çalışmak için kapatın.",
     alwaysShowMarkers: "Markdown işaretlerini her zaman göster",
     alwaysShowMarkersHint: "Düzenlerken #, ** ve diğer işaretler imleç olmayan satırlarda gizlenmek yerine soluk olarak görünür kalır. Biçimlendirme sürer ve bir satıra tıklamak artık onu kaydırmaz. Görseller kendi satırının altında görünür; tablolar, formüller ve diyagramlar kaynak olarak kalır. CodeMirror düzenleyicisi için geçerlidir.",
     highlightCurrentLine: "Geçerli satırı vurgula",
@@ -2075,6 +2079,16 @@ export const tr: I18n = {
     formatKey: "İpucu: {key} “{name}” yapar — işaretleri elle yazmanıza gerek yok.",
     formatChange: "Kısayolları değiştir",
   },
+  repair: {
+    noDocument: 'Etkin belge yok',
+    markdownOnly: 'Onarım yalnızca Markdown dosyalarında çalışır',
+    stale: 'Belge onarım sırasında değişti — onarımı yeniden çalıştır',
+    nothing: 'Onarılacak bir şey yok — bozuk Markdown söz dizimi bulunamadı',
+    done: '{n} sorun onarıldı',
+    partial: '{n} sorun onarıldı; {m} tanesi elle kontrol edilmeli',
+    unparsed: '{n} sorun otomatik olarak onarılamadı',
+    failed: 'Onarım başarısız — belge çözümlememedi',
+  },
   cmd: {
     heading: {
       promote: "Başlık düzeyini yükselt",
@@ -2083,10 +2097,13 @@ export const tr: I18n = {
     },
     fmt: {
       bold: "Kalın",
+      underline: "Altı çizili",
       italic: "İtalik",
       strike: "Üstü çizili",
       code: "Satır içi kod",
       link: "Bağlantı",
+      subscript: "Alt simge",
+      superscript: "Üst simge",
       h1: "Başlık 1",
       h2: "Başlık 2",
       h3: "Başlık 3",
@@ -2210,6 +2227,7 @@ export const tr: I18n = {
     },
     format: {
       markdown: 'Markdown\'ı Biçimlendir (Prettier)',
+      repair: 'Markdown söz dizimini onar',
     },
     clean: {
       aiArtifacts: 'Yapay Zeka Kalıntılarını Temizle (akıllı tırnaklar, uzun tireler, görünmez karakterler)',
@@ -2294,9 +2312,14 @@ export const tr: I18n = {
   formatBar: {
     label: "Biçimlendirme",
     heading: "Başlık",
+    headingTip: "Başlık — düzey seç",
     image: "Görsel ekle",
     undo: "Geri al",
+    redo: "Yinele",
     hideKeyboard: "Klavyeyi gizle",
+    repair: "Biçimlendirmeyi otomatik onar",
+    tableTip: "Tablo — boyut seçmek için sürükleyin veya görsel düzenleyiciyi açın",
+    tableVisual: "Görsel düzenleyici…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

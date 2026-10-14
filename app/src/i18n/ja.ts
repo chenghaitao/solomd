@@ -410,6 +410,7 @@ export const ja: I18n = {
     searchPosition: "{n} 件中 {i} 件目",
     title: '設定',
     catBasics: '基本',
+    catEditing: '編集',
     catWriting: '執筆',
     catSync: '同期',
     syncUnsupportedAndroid: 'Git ベースの同期（バージョン履歴、GitHub 同期、プロキシ）は Android 版ではまだ利用できません。依存している libgit2 エンジンが Android バイナリに組み込まれていないためです。当面はデスクトップ版または iOS 版で同期してください。',
@@ -417,6 +418,7 @@ export const ja: I18n = {
     catExport: 'エクスポート',
     catAdvanced: '詳細',
     catKeys: 'ショートカット',
+    panelResize: 'パネルの高さを変更（ドラッグ、または ↑ / ↓）',
     keysInterceptedTitle: "他のソフトに奪われているショートカットがあります",
     keysInterceptedBody: "以下のプログラムがこれらのキーをグローバルホットキーとして登録しているため、SoloMD には届きません。右側のキーに移せば、ほかのショートカットはそのままです。",
     keysApplyCompat: "これらのコマンドを空いているキーに移す",
@@ -501,6 +503,8 @@ export const ja: I18n = {
     solidCursor: 'カーソルを点滅させない',
     selectionBubble: "選択したテキストの上に書式バーを表示",
     selectionBubbleHint: "ライブ／ソースモードで、選択範囲の上に太字・斜体・コード・リンク・見出し・リストのボタンを表示します。各ボタンはショートカットと同じコマンドを実行します。",
+    formatBar: "エディターの上に書式ツールバーを表示",
+    formatBarHint: "太字・見出し・リスト・コード・リンク・画像・表・元に戻すを本文の上に 1 行でまとめて表示します。オフにするとメニューとショートカットのみになります。",
     alwaysShowMarkers: "Markdown 記号を常に表示",
     alwaysShowMarkersHint: "編集中も #、** などの記号を（薄く）表示し、カーソルのない行で隠さないようにします。書式はそのまま表示され、行をクリックしても表示が動きません。画像は行の下に表示され、表・数式・図はソースのままです。CodeMirror エディタに適用されます。",
     highlightCurrentLine: "現在の行をハイライト",
@@ -2058,6 +2062,16 @@ export const ja: I18n = {
     formatKey: "ヒント: {name}は {key} でできます。記号を手入力する必要はありません。",
     formatChange: "ショートカットを変更",
   },
+  repair: {
+    noDocument: 'アクティブなドキュメントがありません',
+    markdownOnly: '修復は Markdown ファイルのみで動作します',
+    stale: '修復中にドキュメントが変更されました — もう一度実行してください',
+    nothing: '修復するものはありません — 壊れた Markdown 記法は見つかりませんでした',
+    done: '{n} 件を修復しました',
+    partial: '{n} 件を修復しました。{m} 件は手動での確認が必要です',
+    unparsed: '{n} 件の問題は自動修復できませんでした',
+    failed: '修復に失敗しました — ドキュメントを解析できませんでした',
+  },
   cmd: {
     heading: {
       promote: "見出しレベルを上げる",
@@ -2066,10 +2080,13 @@ export const ja: I18n = {
     },
     fmt: {
       bold: "太字",
+      underline: "下線",
       italic: "斜体",
       strike: "取り消し線",
       code: "インラインコード",
       link: "リンク",
+      subscript: "下付き文字",
+      superscript: "上付き文字",
       h1: "見出し 1",
       h2: "見出し 2",
       h3: "見出し 3",
@@ -2193,6 +2210,7 @@ export const ja: I18n = {
     },
     format: {
       markdown: 'Markdown を整形 (Prettier)',
+      repair: 'Markdown 記法を修復',
     },
     clean: {
       aiArtifacts: 'AI アーティファクトをクリーンアップ (スマート引用符、em ダッシュ、不可視文字)',
@@ -2277,9 +2295,14 @@ export const ja: I18n = {
   formatBar: {
     label: "書式",
     heading: "見出し",
+    headingTip: "見出し — レベルを選択",
     image: "画像を挿入",
     undo: "元に戻す",
+    redo: "やり直す",
     hideKeyboard: "キーボードを閉じる",
+    repair: "書式を自動修正",
+    tableTip: "表 — ドラッグしてサイズを選択、またはビジュアル編集を開く",
+    tableVisual: "ビジュアル編集…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

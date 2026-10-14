@@ -292,6 +292,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     sep,
     item('clean.stripMarkdown', t('menubar.stripMarkdown')),
     item('format.markdown', t('cmd.format.markdown')),
+    item('format.repair', t('cmd.format.repair')),
     sep,
     {
       type: 'submenu',

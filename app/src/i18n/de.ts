@@ -410,6 +410,7 @@ export const de: I18n = {
     searchPosition: "Treffer {i} von {n}",
     title: 'Einstellungen',
     catBasics: 'Allgemein',
+    catEditing: 'Bearbeiten',
     catWriting: 'Schreiben',
     catSync: 'Synchronisierung',
     syncUnsupportedAndroid: 'Git-basierte Synchronisierung (Versionsverlauf, GitHub-Sync, Proxy) ist im Android-Build noch nicht verfügbar — die zugrunde liegende libgit2-Engine ist nicht in die Android-Binärdatei kompiliert. Nutze vorerst die Desktop- oder iOS-App, um diesen Tresor zu synchronisieren.',
@@ -417,6 +418,7 @@ export const de: I18n = {
     catExport: 'Export',
     catAdvanced: 'Erweitert',
     catKeys: 'Tastenkürzel',
+    panelResize: 'Panelhöhe ändern (ziehen oder ↑ / ↓)',
     keysInterceptedTitle: "Einige Tastenkürzel werden von anderer Software abgefangen",
     keysInterceptedBody: "Diese Tastenkombinationen sind von den unten genannten Programmen als globale Hotkeys registriert und erreichen SoloMD nie. Werden die Befehle auf die Tasten rechts verschoben, bleibt der Rest Ihrer Kürzel unverändert.",
     keysApplyCompat: "Diese Befehle auf freie Tasten verschieben",
@@ -501,6 +503,8 @@ export const de: I18n = {
     solidCursor: 'Durchgehender Cursor (kein Blinken)',
     selectionBubble: "Formatleiste über markiertem Text anzeigen",
     selectionBubbleHint: "Fett, kursiv, Code, Link, Überschriften und Listen direkt über der Auswahl – im Live- und Quelltextmodus. Jede Schaltfläche führt denselben Befehl aus wie ihr Tastenkürzel.",
+    formatBar: "Formatierungsleiste über dem Editor anzeigen",
+    formatBarHint: "Fett, Überschriften, Listen, Code, Links, Bilder, Tabellen und Rückgängig, gruppiert in einer Zeile über dem Text. Ausschalten, um nur mit Menüs und Tastenkürzeln zu arbeiten.",
     alwaysShowMarkers: "Markdown-Zeichen immer anzeigen",
     alwaysShowMarkersHint: "#, ** und andere Zeichen bleiben beim Bearbeiten (abgeschwächt) sichtbar, statt auf Zeilen ohne Cursor ausgeblendet zu werden. Die Formatierung bleibt, und ein Klick auf eine Zeile lässt sie nicht mehr springen. Bilder erscheinen unter ihrer Zeile; Tabellen, Formeln und Diagramme bleiben Quelltext. Gilt für den CodeMirror-Editor.",
     highlightCurrentLine: "Aktuelle Zeile hervorheben",
@@ -2058,6 +2062,16 @@ export const de: I18n = {
     formatKey: "Tipp: {name} geht mit {key} – die Zeichen musst du nicht tippen.",
     formatChange: "Tastenkürzel ändern",
   },
+  repair: {
+    noDocument: 'Kein aktives Dokument',
+    markdownOnly: 'Reparieren funktioniert nur mit Markdown-Dateien',
+    stale: 'Das Dokument wurde während der Reparatur geändert — bitte erneut ausführen',
+    nothing: 'Nichts zu reparieren — keine defekte Markdown-Syntax gefunden',
+    done: '{n} Problem(e) repariert',
+    partial: '{n} Problem(e) repariert; {m} brauchen einen manuellen Blick',
+    unparsed: '{n} Problem(e) konnten nicht automatisch repariert werden',
+    failed: 'Reparatur fehlgeschlagen — das Dokument ließ sich nicht parsen',
+  },
   cmd: {
     heading: {
       promote: "Überschriftenebene erhöhen",
@@ -2066,10 +2080,13 @@ export const de: I18n = {
     },
     fmt: {
       bold: "Fett",
+      underline: "Unterstrichen",
       italic: "Kursiv",
       strike: "Durchgestrichen",
       code: "Inline-Code",
       link: "Link",
+      subscript: "Tiefgestellt",
+      superscript: "Hochgestellt",
       h1: "Überschrift 1",
       h2: "Überschrift 2",
       h3: "Überschrift 3",
@@ -2193,6 +2210,7 @@ export const de: I18n = {
     },
     format: {
       markdown: 'Markdown formatieren (Prettier)',
+      repair: 'Markdown-Syntax reparieren',
     },
     clean: {
       aiArtifacts: 'KI-Artefakte bereinigen (typografische Anführungszeichen, Geviertstriche, unsichtbare Zeichen)',
@@ -2277,9 +2295,14 @@ export const de: I18n = {
   formatBar: {
     label: "Formatierung",
     heading: "Überschrift",
+    headingTip: "Überschrift — Ebene wählen",
     image: "Bild einfügen",
     undo: "Rückgängig",
+    redo: "Wiederholen",
     hideKeyboard: "Tastatur ausblenden",
+    repair: "Formatierung automatisch reparieren",
+    tableTip: "Tabelle — ziehen, um die Größe zu wählen, oder den visuellen Editor öffnen",
+    tableVisual: "Visueller Editor…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

@@ -413,6 +413,7 @@ export const en = {
     searchPosition: "Match {i} of {n}",
     title: 'Settings',
     catBasics: 'Basics',
+    catEditing: 'Editing',
     catWriting: 'Writing',
     catSync: 'Sync',
     syncUnsupportedAndroid: 'Git-backed sync (version history, GitHub sync, proxy) isn\'t available in the Android build yet — the libgit2 engine it relies on isn\'t compiled into the Android binary. Use the desktop or iOS apps to sync this vault for now.',
@@ -420,6 +421,7 @@ export const en = {
     catExport: 'Export',
     catAdvanced: 'Advanced',
     catKeys: 'Shortcuts',
+    panelResize: 'Resize the panel (drag, or ↑ / ↓)',
     keysInterceptedTitle: "Some shortcuts are being taken by other software",
     keysInterceptedBody: "These chords are registered as global hotkeys by the programs named below, so they never reach SoloMD. Switching the commands to the keys on the right leaves the rest of your shortcuts alone.",
     keysApplyCompat: "Move these commands to free keys",
@@ -504,6 +506,8 @@ export const en = {
     solidCursor: 'Solid cursor (no blinking)',
     selectionBubble: "Show a format bar over selected text",
     selectionBubbleHint: "Bold, italic, code, link, headings and lists right above a selection, in live and source modes. Every button runs the same command as its shortcut.",
+    formatBar: "Show the formatting toolbar above the editor",
+    formatBarHint: "Bold, headings, lists, code, links, images, tables and undo, grouped in one row above the text. Turn it off to work with the menus and shortcuts alone.",
     alwaysShowMarkers: "Always show Markdown markers",
     alwaysShowMarkersHint: "Keep #, ** and other markers visible (dimmed) while editing, instead of hiding them on lines the cursor isn't on. Formatting still shows, and clicking a line no longer makes it jump. Images render below their line; tables, math and diagrams stay as source. Applies to the CodeMirror editor.",
     highlightCurrentLine: "Highlight the current line",
@@ -2087,6 +2091,16 @@ export const en = {
     formatKey: "Tip: {key} does {name} — no need to type the marks.",
     formatChange: "Change shortcuts",
   },
+  repair: {
+    noDocument: 'No active document',
+    markdownOnly: 'Repair works on Markdown files only',
+    stale: 'The document changed while repairing — run Repair again',
+    nothing: 'Nothing to repair — no broken Markdown syntax found',
+    done: 'Repaired {n} issue(s)',
+    partial: 'Repaired {n} issue(s); {m} need a manual look',
+    unparsed: '{n} problem(s) could not be repaired automatically',
+    failed: 'Repair failed — the document could not be parsed',
+  },
   cmd: {
     heading: {
       promote: "Increase Heading Level",
@@ -2095,10 +2109,13 @@ export const en = {
     },
     fmt: {
       bold: "Bold",
+      underline: "Underline",
       italic: "Italic",
       strike: "Strikethrough",
       code: "Inline Code",
       link: "Link",
+      subscript: "Subscript",
+      superscript: "Superscript",
       h1: "Heading 1",
       h2: "Heading 2",
       h3: "Heading 3",
@@ -2222,6 +2239,7 @@ export const en = {
     },
     format: {
       markdown: 'Format Markdown (Prettier)',
+      repair: 'Repair Markdown Syntax',
     },
     clean: {
       aiArtifacts: 'Clean AI Artifacts (smart quotes, em-dashes, invisible chars)',
@@ -2306,9 +2324,14 @@ export const en = {
   formatBar: {
     label: "Formatting",
     heading: "Heading",
+    headingTip: "Heading — pick a level",
     image: "Insert image",
     undo: "Undo",
+    redo: "Redo",
     hideKeyboard: "Hide keyboard",
+    repair: "Auto repair formatting",
+    tableTip: "Table — drag to choose a size, or open the visual editor",
+    tableVisual: "Visual editor…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

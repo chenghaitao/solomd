@@ -412,6 +412,7 @@ export const pt: I18n = {
     searchPosition: "Resultado {i} de {n}",
     title: 'Configurações',
     catBasics: 'Geral',
+    catEditing: 'Edição',
     catWriting: 'Escrita',
     catSync: 'Sincronização',
     syncUnsupportedAndroid: 'A sincronização baseada em Git (histórico de versões, sincronização com o GitHub, proxy) ainda não está disponível na versão Android — o motor libgit2 do qual depende não está compilado no binário Android. Por enquanto, use os apps de desktop ou iOS para sincronizar este cofre.',
@@ -419,6 +420,7 @@ export const pt: I18n = {
     catExport: 'Exportar',
     catAdvanced: 'Avançado',
     catKeys: 'Atalhos',
+    panelResize: 'Redimensionar o painel (arrastar ou ↑ / ↓)',
     keysInterceptedTitle: "Alguns atalhos estão sendo capturados por outro software",
     keysInterceptedBody: "Os programas listados abaixo registram essas combinações como atalhos globais, então elas nunca chegam ao SoloMD. Mover esses comandos para as teclas à direita não altera os demais atalhos.",
     keysApplyCompat: "Mover estes comandos para teclas livres",
@@ -503,6 +505,8 @@ export const pt: I18n = {
     solidCursor: 'Cursor fixo (sem piscar)',
     selectionBubble: "Mostrar uma barra de formatação sobre o texto selecionado",
     selectionBubbleHint: "Negrito, itálico, código, link, títulos e listas logo acima da seleção, nos modos ao vivo e código-fonte. Cada botão executa o mesmo comando que o seu atalho.",
+    formatBar: "Mostrar a barra de formatação acima do editor",
+    formatBarHint: "Negrito, títulos, listas, código, links, imagens, tabelas e desfazer, agrupados numa linha acima do texto. Desligue para trabalhar apenas com menus e atalhos.",
     alwaysShowMarkers: "Sempre mostrar os marcadores Markdown",
     alwaysShowMarkersHint: "Manter #, ** e outros marcadores visíveis (esmaecidos) ao editar, em vez de ocultá-los nas linhas sem cursor. A formatação continua e clicar numa linha não a faz mais pular. Imagens aparecem abaixo da linha; tabelas, fórmulas e diagramas ficam como código-fonte. Vale para o editor CodeMirror.",
     highlightCurrentLine: "Destacar a linha atual",
@@ -2060,6 +2064,16 @@ export const pt: I18n = {
     formatKey: "Dica: {key} faz «{name}» — não é preciso escrever os símbolos.",
     formatChange: "Alterar atalhos",
   },
+  repair: {
+    noDocument: 'Nenhum documento ativo',
+    markdownOnly: 'A reparação funciona apenas em arquivos Markdown',
+    stale: 'O documento mudou durante a reparação — execute novamente',
+    nothing: 'Nada a reparar — nenhuma sintaxe Markdown quebrada encontrada',
+    done: '{n} problema(s) reparado(s)',
+    partial: '{n} problema(s) reparado(s); {m} precisam de revisão manual',
+    unparsed: '{n} problema(s) não puderam ser reparados automaticamente',
+    failed: 'Falha na reparação — não foi possível analisar o documento',
+  },
   cmd: {
     heading: {
       promote: "Aumentar nível do título",
@@ -2068,10 +2082,13 @@ export const pt: I18n = {
     },
     fmt: {
       bold: "Negrito",
+      underline: "Sublinhado",
       italic: "Itálico",
       strike: "Tachado",
       code: "Código em linha",
       link: "Link",
+      subscript: "Subscrito",
+      superscript: "Sobrescrito",
       h1: "Título 1",
       h2: "Título 2",
       h3: "Título 3",
@@ -2195,6 +2212,7 @@ export const pt: I18n = {
     },
     format: {
       markdown: 'Formatar Markdown (Prettier)',
+      repair: 'Reparar sintaxe Markdown',
     },
     clean: {
       aiArtifacts: 'Limpar artefatos de IA (aspas tipográficas, travessões, caracteres invisíveis)',
@@ -2279,9 +2297,14 @@ export const pt: I18n = {
   formatBar: {
     label: "Formatação",
     heading: "Título",
+    headingTip: "Título — escolher nível",
     image: "Inserir imagem",
     undo: "Desfazer",
+    redo: "Refazer",
     hideKeyboard: "Ocultar teclado",
+    repair: "Reparar formatação automaticamente",
+    tableTip: "Tabela — arraste para escolher o tamanho ou abra o editor visual",
+    tableVisual: "Editor visual…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

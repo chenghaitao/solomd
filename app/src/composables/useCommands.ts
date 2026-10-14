@@ -19,6 +19,7 @@ const loadChineseConvert = () => import('../lib/chinese-convert');
 import { cleanAIArtifacts, stripMarkdownToPlain } from '../lib/clean-ai';
 import { openWelcomeTour } from '../lib/welcome-tour';
 import { formatMarkdown } from '../lib/markdown-format';
+import { repairMarkdown } from '../lib/md-repair';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useDailyNotes } from './useDailyNotes';
 import { usePandocExport } from './usePandocExport';
@@ -35,6 +36,7 @@ import { useGithubSyncStore } from '../stores/githubSync';
 import { useGithubSync } from './useGithubSync';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { hasGitBackend } from '../lib/platform';
+import { useI18n } from '../i18n';
 
 export interface Command {
   id: string;
@@ -56,6 +58,9 @@ export function useCommands(): Command[] {
   const tiles = useTilesStore();
   const exporter = useExport();
   const toasts = useToastsStore();
+  // Destructured as `tr`: four places in this file already hold a local
+  // `const t = freshActiveTab()`, and shadowing those would read as a bug.
+  const { t: tr } = useI18n();
   const daily = useDailyNotes();
   const pandoc = usePandocExport();
   const bases = useBasesView();
@@ -580,6 +585,52 @@ export function useCommands(): Command[] {
         } catch (e) {
           console.error('format failed', e);
           toasts.warning('Format failed — check syntax');
+        }
+      },
+    },
+
+    // The toolbar's "repair formatting" button and the Format menu both land
+    // here. Prettier above reformats a document that parses; this one repairs
+    // the ones that don't — an unclosed fence or bracket, a link with no `)`,
+    // a table row that lost a pipe — and says so when it cannot. Every string
+    // is localized because that button is where the user meets it.
+    {
+      id: 'format.repair',
+      title: 'Repair Markdown Syntax',
+      shortcut: kb('format.repair'),
+      hint: 'Close unclosed code fences, links and brackets, straighten table rows',
+      run: async () => {
+        const tab = freshActiveTab();
+        if (!tab) {
+          toasts.warning(tr('repair.noDocument'));
+          return;
+        }
+        if (tab.language !== 'markdown') {
+          toasts.warning(tr('repair.markdownOnly'));
+          return;
+        }
+        try {
+          const src = tab.content;
+          const result = repairMarkdown(src);
+          // Reading the document is synchronous, but a repair that opened a
+          // dialog (or a save landing mid-flight) would still race it.
+          if (freshActiveTab()?.id !== tab.id || tab.content !== src) {
+            toasts.info(tr('repair.stale'));
+            return;
+          }
+          const fixed = result.fixed.length;
+          const left = result.unparsed.length;
+          if (!fixed && !left) {
+            toasts.info(tr('repair.nothing'));
+            return;
+          }
+          if (fixed && result.text !== src) tabs.setContent(tab.id, result.text);
+          if (!fixed) toasts.warning(tr('repair.unparsed', { n: left }));
+          else if (left) toasts.warning(tr('repair.partial', { n: fixed, m: left }));
+          else toasts.success(tr('repair.done', { n: fixed }));
+        } catch (e) {
+          console.error('repair failed', e);
+          toasts.warning(tr('repair.failed'));
         }
       },
     },

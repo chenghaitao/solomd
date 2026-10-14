@@ -54,6 +54,7 @@ import UnsavedDialog from './components/UnsavedDialog.vue';
 import FileChangedDialog from './components/FileChangedDialog.vue';
 import Toast from './components/Toast.vue';
 import KeyboardBar from './components/KeyboardBar.vue';
+import FormatBar from './components/FormatBar.vue';
 import { forceKeyboardBarPreview } from './lib/platform';
 import { useTabsStore } from './stores/tabs';
 import { useSettingsStore, buildEditorFontStack, setRightSidebarShell } from './stores/settings';
@@ -2149,6 +2150,28 @@ const viewOpen = ref(false);
  */
 const savedViewsStore = useSavedViewsStore();
 const viewPaneVisible = computed(() => viewOpen.value && !!savedViewsStore.activeView);
+
+/**
+ * 5.0 — the formatting toolbar above the editor (`components/FormatBar.vue`).
+ *
+ * It belongs to the editor, so it follows the same rules the editor's own
+ * chrome does: nothing to format in a side view (bases / inbox / a type lens /
+ * a saved view) or in preview-only mode, and no Markdown tab, no Markdown
+ * toolbar — a `.txt` or `.csv` note has no markers to write. Desktop only:
+ * the phone gets `KeyboardBar`, and SettingsPanel hides the switch there too.
+ */
+const showFormatBar = computed(
+  () =>
+    settings.formatBar &&
+    !isMobile() &&
+    tabs.activeTab?.language === 'markdown' &&
+    settings.viewMode !== 'preview' &&
+    settings.viewMode !== 'reading' &&
+    !basesOpen.value &&
+    !inboxViewOpen.value &&
+    !typeLensOpen.value &&
+    !viewPaneVisible.value,
+);
 const aiHasKey = ref(false);
 async function refreshAiHasKey() {
   if (!settings.aiEnabled) { aiHasKey.value = false; return; }
@@ -2241,6 +2264,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
         @open-help="helpOpen = true"
         @open-search="toggleGlobalSearch()"
       />
+      <FormatBar v-if="showFormatBar" />
       <div class="workspace">
         <aside
           v-if="showRightSidebar && settings.outlineSide === 'left'"

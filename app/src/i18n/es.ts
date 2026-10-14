@@ -410,6 +410,7 @@ export const es: I18n = {
     searchPosition: "Coincidencia {i} de {n}",
     title: 'Ajustes',
     catBasics: 'General',
+    catEditing: 'Edición',
     catWriting: 'Escritura',
     catSync: 'Sincronización',
     syncUnsupportedAndroid: 'La sincronización basada en Git (historial de versiones, sincronización con GitHub, proxy) aún no está disponible en la compilación de Android: el motor libgit2 del que depende no está compilado en el binario de Android. Por ahora, usa las apps de escritorio o iOS para sincronizar esta bóveda.',
@@ -417,6 +418,7 @@ export const es: I18n = {
     catExport: 'Exportar',
     catAdvanced: 'Avanzado',
     catKeys: 'Atajos',
+    panelResize: 'Cambiar el alto del panel (arrastrar o ↑ / ↓)',
     keysInterceptedTitle: "Otro software está interceptando algunos atajos",
     keysInterceptedBody: "Los programas indicados abajo registran estas combinaciones como atajos globales, así que nunca llegan a SoloMD. Mover esos comandos a las teclas de la derecha no afecta al resto de tus atajos.",
     keysApplyCompat: "Mover estos comandos a teclas libres",
@@ -501,6 +503,8 @@ export const es: I18n = {
     solidCursor: 'Cursor fijo (sin parpadeo)',
     selectionBubble: "Mostrar una barra de formato sobre el texto seleccionado",
     selectionBubbleHint: "Negrita, cursiva, código, enlace, títulos y listas justo encima de la selección, en los modos en vivo y código fuente. Cada botón ejecuta el mismo comando que su atajo.",
+    formatBar: "Mostrar la barra de formato sobre el editor",
+    formatBarHint: "Negrita, títulos, listas, código, enlaces, imágenes, tablas y deshacer, agrupados en una fila sobre el texto. Desactívalo para trabajar solo con los menús y los atajos.",
     alwaysShowMarkers: "Mostrar siempre los marcadores Markdown",
     alwaysShowMarkersHint: "Mantener visibles (atenuados) #, ** y demás marcadores al editar, en vez de ocultarlos en las líneas sin cursor. El formato se sigue viendo y al hacer clic en una línea ya no salta. Las imágenes se muestran bajo su línea; tablas, fórmulas y diagramas quedan como código. Se aplica al editor CodeMirror.",
     highlightCurrentLine: "Resaltar la línea actual",
@@ -2058,6 +2062,16 @@ export const es: I18n = {
     formatKey: "Consejo: {key} hace «{name}»; no hace falta escribir los símbolos.",
     formatChange: "Cambiar atajos",
   },
+  repair: {
+    noDocument: 'No hay ningún documento activo',
+    markdownOnly: 'La reparación solo funciona con archivos Markdown',
+    stale: 'El documento cambió durante la reparación: vuelve a ejecutarla',
+    nothing: 'Nada que reparar: no se encontró sintaxis Markdown rota',
+    done: 'Se repararon {n} problema(s)',
+    partial: 'Se repararon {n} problema(s); {m} requieren revisión manual',
+    unparsed: 'No se pudieron reparar {n} problema(s) automáticamente',
+    failed: 'La reparación falló: no se pudo analizar el documento',
+  },
   cmd: {
     heading: {
       promote: "Subir nivel de encabezado",
@@ -2066,10 +2080,13 @@ export const es: I18n = {
     },
     fmt: {
       bold: "Negrita",
+      underline: "Subrayado",
       italic: "Cursiva",
       strike: "Tachado",
       code: "Código en línea",
       link: "Enlace",
+      subscript: "Subíndice",
+      superscript: "Superíndice",
       h1: "Título 1",
       h2: "Título 2",
       h3: "Título 3",
@@ -2193,6 +2210,7 @@ export const es: I18n = {
     },
     format: {
       markdown: 'Formatear Markdown (Prettier)',
+      repair: 'Reparar sintaxis de Markdown',
     },
     clean: {
       aiArtifacts: 'Limpiar artefactos de IA (comillas tipográficas, rayas, caracteres invisibles)',
@@ -2277,9 +2295,14 @@ export const es: I18n = {
   formatBar: {
     label: "Formato",
     heading: "Título",
+    headingTip: "Título — elegir nivel",
     image: "Insertar imagen",
     undo: "Deshacer",
+    redo: "Rehacer",
     hideKeyboard: "Ocultar teclado",
+    repair: "Reparar formato automáticamente",
+    tableTip: "Tabla — arrastra para elegir el tamaño o abre el editor visual",
+    tableVisual: "Editor visual…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

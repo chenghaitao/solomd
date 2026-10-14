@@ -410,6 +410,7 @@ export const nl: I18n = {
     searchPosition: "Resultaat {i} van {n}",
     title: 'Instellingen',
     catBasics: 'Basis',
+    catEditing: 'Bewerken',
     catWriting: 'Schrijven',
     catSync: 'Synchronisatie',
     syncUnsupportedAndroid: 'Git-gebaseerde synchronisatie (versiegeschiedenis, GitHub-sync, proxy) is nog niet beschikbaar in de Android-build — de libgit2-engine waarvan het afhangt is niet in de Android-binary gecompileerd. Gebruik voorlopig de desktop- of iOS-app om deze kluis te synchroniseren.',
@@ -417,6 +418,7 @@ export const nl: I18n = {
     catExport: 'Exporteren',
     catAdvanced: 'Geavanceerd',
     catKeys: 'Sneltoetsen',
+    panelResize: 'Formaat van het paneel aanpassen (slepen of ↑ / ↓)',
     keysInterceptedTitle: "Sommige sneltoetsen worden door andere software afgevangen",
     keysInterceptedBody: "De onderstaande programma's registreren deze toetsen als globale sneltoetsen, dus ze bereiken SoloMD nooit. De opdrachten naar de toetsen rechts verplaatsen laat je overige sneltoetsen ongemoeid.",
     keysApplyCompat: "Verplaats deze opdrachten naar vrije toetsen",
@@ -501,6 +503,8 @@ export const nl: I18n = {
     solidCursor: 'Vaste cursor (zonder knipperen)',
     selectionBubble: "Opmaakbalk boven geselecteerde tekst tonen",
     selectionBubbleHint: "Vet, cursief, code, link, koppen en lijsten direct boven de selectie, in live- en bronmodus. Elke knop voert hetzelfde commando uit als de sneltoets.",
+    formatBar: "Opmaakbalk boven de editor tonen",
+    formatBarHint: "Vet, koppen, lijsten, code, links, afbeeldingen, tabellen en ongedaan maken, gegroepeerd op één regel boven de tekst. Zet dit uit om alleen met menu’s en sneltoetsen te werken.",
     alwaysShowMarkers: "Markdown-tekens altijd tonen",
     alwaysShowMarkersHint: "#, ** en andere tekens blijven (gedimd) zichtbaar tijdens het bewerken, in plaats van te verdwijnen op regels zonder cursor. De opmaak blijft en klikken op een regel laat die niet meer verspringen. Afbeeldingen staan onder hun regel; tabellen, formules en diagrammen blijven bron. Geldt voor de CodeMirror-editor.",
     highlightCurrentLine: "Huidige regel markeren",
@@ -2075,6 +2079,16 @@ export const nl: I18n = {
     formatKey: "Tip: {key} doet ‘{name}’ — je hoeft de tekens niet te typen.",
     formatChange: "Sneltoetsen wijzigen",
   },
+  repair: {
+    noDocument: 'Geen actief document',
+    markdownOnly: 'Repareren werkt alleen op Markdown-bestanden',
+    stale: 'Het document is gewijzigd tijdens het repareren — voer het opnieuw uit',
+    nothing: 'Niets te repareren — geen kapotte Markdown-syntax gevonden',
+    done: '{n} probleem(en) gerepareerd',
+    partial: '{n} probleem(en) gerepareerd; {m} vragen handmatige controle',
+    unparsed: '{n} probleem(en) konden niet automatisch worden gerepareerd',
+    failed: 'Repareren mislukt — het document kon niet worden gelezen',
+  },
   cmd: {
     heading: {
       promote: "Kopniveau verhogen",
@@ -2083,10 +2097,13 @@ export const nl: I18n = {
     },
     fmt: {
       bold: "Vet",
+      underline: "Onderstreept",
       italic: "Cursief",
       strike: "Doorhalen",
       code: "Inline code",
       link: "Link",
+      subscript: "Subscript",
+      superscript: "Superscript",
       h1: "Kop 1",
       h2: "Kop 2",
       h3: "Kop 3",
@@ -2210,6 +2227,7 @@ export const nl: I18n = {
     },
     format: {
       markdown: 'Markdown formatteren (Prettier)',
+      repair: 'Markdown-syntax repareren',
     },
     clean: {
       aiArtifacts: 'AI-artefacten opschonen (typografische aanhalingstekens, em-strepen, onzichtbare tekens)',
@@ -2294,9 +2312,14 @@ export const nl: I18n = {
   formatBar: {
     label: "Opmaak",
     heading: "Kop",
+    headingTip: "Kop — kies een niveau",
     image: "Afbeelding invoegen",
     undo: "Ongedaan maken",
+    redo: "Opnieuw",
     hideKeyboard: "Toetsenbord verbergen",
+    repair: "Opmaak automatisch herstellen",
+    tableTip: "Tabel — sleep om een grootte te kiezen of open de visuele editor",
+    tableVisual: "Visuele editor…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

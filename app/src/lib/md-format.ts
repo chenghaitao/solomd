@@ -15,10 +15,13 @@ import { applyChanges, renumberChanges } from './list-renumber.ts';
 
 export type FormatKind =
   | 'bold'
+  | 'underline'
   | 'italic'
   | 'strike'
   | 'code'
   | 'link'
+  | 'subscript'
+  | 'superscript'
   | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
   | 'quote'
   | 'ul'
@@ -27,7 +30,8 @@ export type FormatKind =
   | 'codeblock';
 
 export const FORMAT_KINDS: FormatKind[] = [
-  'bold', 'italic', 'strike', 'code', 'link',
+  'bold', 'underline', 'italic', 'strike', 'code', 'link',
+  'subscript', 'superscript',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'quote', 'ul', 'ol', 'task', 'codeblock',
 ];
@@ -146,6 +150,56 @@ function toggleWrap(doc: string, from: number, to: number, marker: string): Form
     return { from: s - w, to: e + w, insert: inner, selFrom: s - w, selTo: e - w };
   }
   return { from: s, to: e, insert: marker + inner + marker, selFrom: s + w, selTo: e + w };
+}
+
+/**
+ * `targetRange`'s word rule is happy to hand back `u>foo` for a caret inside
+ * `<u>foo</u>` — a tag name is made of word characters too. A bare caret's
+ * range is trimmed back to the text between the tags, so the span `toggleTag`
+ * looks at is the content and the tags around it stay visible.
+ */
+function textRun(doc: string, from: number, to: number): [number, number] {
+  let [s, e] = targetRange(doc, from, to);
+  const gt = doc.lastIndexOf('>', e - 1);
+  if (gt >= s) s = gt + 1;
+  const lt = doc.indexOf('<', s);
+  if (lt >= 0 && lt < e) e = lt;
+  return [s, e];
+}
+
+/**
+ * Underline, subscript and superscript — the three formats Markdown has no
+ * syntax of its own for. The renderer runs with `html: true` and the
+ * sanitizer passes inline HTML (`<sub>` is one of the tags it names), so
+ * these are written as the tags themselves and render everywhere the note
+ * goes. Still a toggle: run it with the caret inside the span and the tags
+ * come off, exactly like bold.
+ */
+function toggleTag(doc: string, from: number, to: number, tag: 'u' | 'sub' | 'sup'): FormatEdit {
+  const open = `<${tag}>`;
+  const close = `</${tag}>`;
+  let [s, e] = from === to ? textRun(doc, from, to) : targetRange(doc, from, to);
+  // A selection that includes its own tags counts as formatted too.
+  if (e - s >= open.length + close.length && doc.startsWith(open, s) && doc.endsWith(close, e)) {
+    s += open.length;
+    e -= close.length;
+  }
+  const inner = doc.slice(s, e);
+  const wraps =
+    s >= open.length &&
+    e + close.length <= doc.length &&
+    doc.slice(s - open.length, s) === open &&
+    doc.slice(e, e + close.length) === close;
+  if (wraps) {
+    return {
+      from: s - open.length,
+      to: e + close.length,
+      insert: inner,
+      selFrom: s - open.length,
+      selTo: e - open.length,
+    };
+  }
+  return { from: s, to: e, insert: open + inner + close, selFrom: s + open.length, selTo: e + open.length };
 }
 
 function makeLink(doc: string, from: number, to: number): FormatEdit {
@@ -341,6 +395,9 @@ export function applyFormat(doc: string, from: number, to: number, kind: FormatK
     case 'strike': return toggleWrap(doc, a, b, '~~');
     case 'code': return toggleWrap(doc, a, b, '`');
     case 'link': return makeLink(doc, a, b);
+    case 'underline': return toggleTag(doc, a, b, 'u');
+    case 'subscript': return toggleTag(doc, a, b, 'sub');
+    case 'superscript': return toggleTag(doc, a, b, 'sup');
     case 'quote':
       return togglePrefix(doc, a, b, QUOTE, (ind, rest) => `${ind}> ${rest}`, /^(\s*)(?=\S)/);
     case 'ul':

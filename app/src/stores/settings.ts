@@ -50,6 +50,11 @@ interface Settings {
   solidCursor: boolean;
   // 5.0 — floating format bar over a text selection (desktop only).
   selectionBubble: boolean;
+  // 5.0 — the formatting toolbar above the editor (bold, headings, lists,
+  // code, links, images, tables, undo). Default ON: it is the discoverable
+  // half of #296 — the shortcuts stay for people who prefer them, and the
+  // menus stay either way. OFF = the editor column goes back to text only.
+  formatBar: boolean;
   // #353 — keep Markdown markers (`#`, `**`, …) visible in the CodeMirror
   // live views instead of hiding them off the caret line, so clicking a line
   // doesn't reflow it. Styling (heading size, bold) still applies.
@@ -213,6 +218,12 @@ interface Settings {
   sideSidebarWidth: number;
   // Width (in px) of the left file tree sidebar. User-resizable via drag handle.
   fileTreeWidth: number;
+  // Height (in px) of the Settings dialog's category area — the nav rail and
+  // the page beside it, under the fixed search row. User-resizable via the
+  // grip on the panel's bottom edge. Stored as the user left it; a short
+  // window takes it back through the panel's max-height, not through a
+  // rewrite here.
+  settingsPanelHeight: number;
   // v2.0 F4: BYOK AI rewrite. `aiProvider` is a stable id from
   // ai-providers.ts PROVIDERS — widened to string to avoid breaking when
   // new providers land.
@@ -587,6 +598,7 @@ function defaults(): Settings {
     showLineNumbers: false,
     solidCursor: false,
     selectionBubble: true,
+    formatBar: true,
     alwaysShowMarkers: false,
     highlightCurrentLine: false,
     codeFontFamily: '',
@@ -676,6 +688,7 @@ function defaults(): Settings {
     agentToolLoopCap: 8,
     sideSidebarWidth: 260,
     fileTreeWidth: 260,
+    settingsPanelHeight: 520,
     aiEnabled: false,
     aiProvider: 'openai',
     aiModel: '',
@@ -1072,6 +1085,10 @@ export const useSettingsStore = defineStore('settings', {
       this.selectionBubble = !this.selectionBubble;
       this.persist();
     },
+    toggleFormatBar() {
+      this.formatBar = !this.formatBar;
+      this.persist();
+    },
     toggleAlwaysShowMarkers() {
       this.alwaysShowMarkers = !this.alwaysShowMarkers;
       this.persist();
@@ -1340,6 +1357,16 @@ export const useSettingsStore = defineStore('settings', {
       // eats too much editor space.
       const clean = Math.max(180, Math.min(600, Math.round(w) || 260));
       this.fileTreeWidth = clean;
+      this.persist();
+    },
+    setSettingsPanelHeight(h: number) {
+      // These bounds are the *stored* ones, and they exist so a corrupt or
+      // absurd value cannot lock the dialog into an unusable box. How much of
+      // the stored height actually fits is the panel's business — its
+      // max-height plus `.settings__layout`'s flex-shrink handle a shrinking
+      // window without touching what the user asked for.
+      const clean = Math.max(280, Math.min(1400, Math.round(h) || 520));
+      this.settingsPanelHeight = clean;
       this.persist();
     },
     setDailyNotesFolder(p: string) {

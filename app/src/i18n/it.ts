@@ -410,6 +410,7 @@ export const it: I18n = {
     searchPosition: "Risultato {i} di {n}",
     title: 'Impostazioni',
     catBasics: 'Generali',
+    catEditing: 'Modifica',
     catWriting: 'Scrittura',
     catSync: 'Sincronizzazione',
     syncUnsupportedAndroid: 'La sincronizzazione basata su Git (cronologia versioni, sincronizzazione GitHub, proxy) non è ancora disponibile nella build Android: il motore libgit2 da cui dipende non è compilato nel binario Android. Per ora usa le app desktop o iOS per sincronizzare questo archivio.',
@@ -417,6 +418,7 @@ export const it: I18n = {
     catExport: 'Esportazione',
     catAdvanced: 'Avanzate',
     catKeys: 'Scorciatoie',
+    panelResize: 'Ridimensiona il pannello (trascina o ↑ / ↓)',
     keysInterceptedTitle: "Alcune scorciatoie vengono intercettate da altri programmi",
     keysInterceptedBody: "Questi tasti sono registrati come scorciatoie globali dai programmi indicati qui sotto e non arrivano mai a SoloMD. Spostare quei comandi sui tasti a destra lascia invariate tutte le altre scorciatoie.",
     keysApplyCompat: "Sposta questi comandi su tasti liberi",
@@ -501,6 +503,8 @@ export const it: I18n = {
     solidCursor: 'Cursore fisso (senza lampeggio)',
     selectionBubble: "Mostra una barra di formattazione sul testo selezionato",
     selectionBubbleHint: "Grassetto, corsivo, codice, link, titoli ed elenchi subito sopra la selezione, nelle modalità live e sorgente. Ogni pulsante esegue lo stesso comando della sua scorciatoia.",
+    formatBar: "Mostra la barra di formattazione sopra l’editor",
+    formatBarHint: "Grassetto, titoli, elenchi, codice, link, immagini, tabelle e annulla, raggruppati in una riga sopra il testo. Disattiva per lavorare solo con menu e scorciatoie.",
     alwaysShowMarkers: "Mostra sempre i marcatori Markdown",
     alwaysShowMarkersHint: "Mantiene visibili (attenuati) #, ** e gli altri marcatori durante la modifica, invece di nasconderli nelle righe senza cursore. La formattazione resta e cliccare una riga non la fa più saltare. Le immagini appaiono sotto la loro riga; tabelle, formule e diagrammi restano sorgente. Vale per l’editor CodeMirror.",
     highlightCurrentLine: "Evidenzia la riga corrente",
@@ -2058,6 +2062,16 @@ export const it: I18n = {
     formatKey: "Suggerimento: {key} fa «{name}» — non serve digitare i simboli.",
     formatChange: "Modifica scorciatoie",
   },
+  repair: {
+    noDocument: 'Nessun documento attivo',
+    markdownOnly: 'La riparazione funziona solo sui file Markdown',
+    stale: 'Il documento è cambiato durante la riparazione: rieseguila',
+    nothing: 'Niente da riparare: nessuna sintassi Markdown rotta trovata',
+    done: '{n} problema(i) riparato(i)',
+    partial: '{n} problema(i) riparato(i); {m} richiedono un controllo manuale',
+    unparsed: '{n} problema(i) non hanno potuto essere riparati automaticamente',
+    failed: 'Riparazione non riuscita: impossibile analizzare il documento',
+  },
   cmd: {
     heading: {
       promote: "Aumenta livello titolo",
@@ -2066,10 +2080,13 @@ export const it: I18n = {
     },
     fmt: {
       bold: "Grassetto",
+      underline: "Sottolineato",
       italic: "Corsivo",
       strike: "Barrato",
       code: "Codice in linea",
       link: "Link",
+      subscript: "Pedice",
+      superscript: "Apice",
       h1: "Titolo 1",
       h2: "Titolo 2",
       h3: "Titolo 3",
@@ -2193,6 +2210,7 @@ export const it: I18n = {
     },
     format: {
       markdown: 'Formatta Markdown (Prettier)',
+      repair: 'Ripara la sintassi Markdown',
     },
     clean: {
       aiArtifacts: 'Pulisci artefatti IA (virgolette tipografiche, trattini lunghi, caratteri invisibili)',
@@ -2277,9 +2295,14 @@ export const it: I18n = {
   formatBar: {
     label: "Formattazione",
     heading: "Titolo",
+    headingTip: "Titolo — scegli il livello",
     image: "Inserisci immagine",
     undo: "Annulla",
+    redo: "Ripeti",
     hideKeyboard: "Nascondi tastiera",
+    repair: "Ripara automaticamente la formattazione",
+    tableTip: "Tabella — trascina per scegliere la dimensione o apri l’editor visuale",
+    tableVisual: "Editor visuale…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
   sidebar: {

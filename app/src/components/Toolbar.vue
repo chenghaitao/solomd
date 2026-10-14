@@ -1071,32 +1071,11 @@ onBeforeUnmount(() => {
         </Teleport>
       </div>
 
-      <!-- Fork feature: two Word-style toggles for what Enter does at the end
-           of a list line. Deliberately flat buttons, no dropdown caret: each
-           one is a simple on/off, and the pressed state is the setting's value.
-           Markdown only — the list continuation they drive is a Markdown one. -->
-      <button
-        v-if="isMarkdown && !isNarrow"
-        class="icon-btn"
-        @click="settings.toggleMarkdownListContinue"
-        :class="{ active: settings.markdownListContinue }"
-        :title="settings.markdownListContinue ? t('toolbar.listContinueOn') : t('toolbar.listContinueOff')"
-        :aria-label="settings.markdownListContinue ? t('toolbar.listContinueOn') : t('toolbar.listContinueOff')"
-        :aria-pressed="settings.markdownListContinue"
-      >
-        <Icon name="list-bullet" />
-      </button>
-      <button
-        v-if="isMarkdown && !isNarrow"
-        class="icon-btn"
-        @click="settings.toggleMarkdownAutoNumber"
-        :class="{ active: settings.markdownAutoNumber }"
-        :title="settings.markdownAutoNumber ? t('toolbar.autoNumberOn') : t('toolbar.autoNumberOff')"
-        :aria-label="settings.markdownAutoNumber ? t('toolbar.autoNumberOn') : t('toolbar.autoNumberOff')"
-        :aria-pressed="settings.markdownAutoNumber"
-      >
-        <Icon name="list-number" />
-      </button>
+      <!-- The two Word-style list toggles ("回车继承列表格式" / "自动编号") used
+           to sit here. They moved to the formatting toolbar over the editor
+           (components/FormatBar.vue): this row is the one the tab strip is
+           teleported into, and every button here eats into the file name's
+           width. The commands are unchanged — same two settings, same icons. -->
 
       <button
         v-if="!isNarrow"
