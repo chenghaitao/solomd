@@ -169,25 +169,33 @@ const lang = 'en' as const;
         </li>
       </ul>
 
-      <h2>7. Telemetry — minimal, opt-out, content-free, inspectable</h2>
+      <h2>7. No telemetry, no analytics endpoints</h2>
       <ul>
         <li>
-          We send anonymous event counters (app launched, which feature was
-          used) to help us decide what to build next.
+          SoloMD collects <strong>no</strong> usage data — no event counters,
+          no device or install identifiers, no crash reports. There is no
+          analytics endpoint and no analytics dependency in the app to send
+          them to.
         </li>
         <li>
-          We <strong>never</strong> send: note content, file names, file
-          paths, workspace paths, API keys, search queries, or any personally
-          identifiable info.
+          The only call the app makes without you asking is the update check:
+          <code>solomd.app/api/stats</code>, falling back to
+          <code>api.github.com</code> if that is unreachable. It returns the
+          public release tag; it carries no identifier and no usage data, and
+          the "check for updates" switch turns it off.
         </li>
         <li>
-          One toggle in settings turns it off. App Store builds default to
-          off.
+          Everything else that leaves the machine follows something you did:
+          opening the theme browser (which fetches the theme list from
+          <code>solomd.app</code>), an AI provider you configured with your own
+          key, a Git remote you pushed to, a PlantUML server or image host you
+          typed in, a sync folder you chose. Those are section 6.
         </li>
         <li>
-          Want to see exactly what's being reported? Open DevTools and run
-          <code>localStorage.setItem('solomd.telemetryDebug', '1')</code>.
-          Every event will be printed to the console verbatim.
+          You do not have to take our word for it — the source is public and
+          this claim is one grep:
+          <code>grep -rn "fetch(" app/src</code> lists every place the app can
+          open a connection.
         </li>
       </ul>
 
@@ -229,10 +237,12 @@ const lang = 'en' as const;
           </a>
         </li>
         <li>
-          Want to verify there's no telemetry of file content? grep the
-          repo:
-          <a href="https://github.com/zhitongblog/solomd/search?q=trackEvent" rel="external">
-            <code>trackEvent</code>
+          Want to verify none of your content can leave? The whole app is
+          searchable in one grep — every place it can open a connection is a
+          <code>fetch(</code> or a Rust command; the repo search below lists
+          them.
+          <a href="https://github.com/zhitongblog/solomd/search?q=fetch%28&type=code" rel="external">
+            <code>fetch(</code>
           </a>
         </li>
       </ul>

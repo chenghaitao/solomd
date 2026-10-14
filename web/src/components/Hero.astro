@@ -13,25 +13,6 @@ const langPrefix = lang === 'en' ? '' : `/${lang}`;
 const whatsNewHref = `${langPrefix}/whats-new/`;
 // /agents/ sub-page exists only in en + zh; ja/ko link to en.
 const agentsHref = lang === 'zh' ? '/zh/agents/' : '/agents/';
-// The banner above the hero invites people into the promoter program
-// (/promote). It replaced the v4.11.3 new-logo announcement.
-const promoteHref = lang === 'zh' ? '/zh/promote' : '/promote';
-const PROMOTE_BANNER = {
-  en: { eyebrow: 'PROMOTER PROGRAM', title: 'Tell people about SoloMD — your name goes in it.', cta: 'How it works' },
-  zh: { eyebrow: '推广者计划', title: '帮 SoloMD 说句话，你的名字就会写进它里面。', cta: '看看怎么参与' },
-  ja: { eyebrow: 'プロモーター・プログラム', title: 'SoloMD を紹介すると、あなたの名前が刻まれます。', cta: '参加方法を見る' },
-  ko: { eyebrow: '프로모터 프로그램', title: 'SoloMD를 알려 주세요 — 이름이 함께 실립니다.', cta: '참여 방법 보기' },
-  de: { eyebrow: 'PROMOTER-PROGRAMM', title: 'Erzähl von SoloMD — und dein Name steht drin.', cta: 'So funktioniert es' },
-  fr: { eyebrow: 'PROGRAMME AMBASSADEURS', title: 'Parlez de SoloMD — votre nom y figurera.', cta: 'Comment ça marche' },
-  es: { eyebrow: 'PROGRAMA DE DIFUSIÓN', title: 'Habla de SoloMD y tu nombre quedará en él.', cta: 'Cómo funciona' },
-  pt: { eyebrow: 'PROGRAMA DE DIVULGAÇÃO', title: 'Fale do SoloMD e seu nome fica nele.', cta: 'Como funciona' },
-  it: { eyebrow: 'PROGRAMMA PROMOTORI', title: 'Parla di SoloMD: il tuo nome ci resterà.', cta: 'Come funziona' },
-  pl: { eyebrow: 'PROGRAM PROMOTORÓW', title: 'Opowiedz o SoloMD — Twoje imię w nim zostanie.', cta: 'Jak to działa' },
-  nl: { eyebrow: 'PROMOTERPROGRAMMA', title: 'Vertel over SoloMD — je naam komt erin.', cta: 'Zo werkt het' },
-  tr: { eyebrow: 'TANITIM PROGRAMI', title: "SoloMD'yi anlat, adın onda yer alsın.", cta: 'Nasıl çalışır' },
-  sv: { eyebrow: 'PROMOTORPROGRAM', title: 'Berätta om SoloMD — ditt namn hamnar i den.', cta: 'Så funkar det' },
-  uk: { eyebrow: 'ПРОГРАМА ПРОМОУТЕРІВ', title: 'Розкажіть про SoloMD — і ваше ім’я буде в ньому.', cta: 'Як це працює' },
-}[lang];
 const ONE_LINE_LABEL = {
   en: 'Or one-line install',
   zh: '或一键安装命令',
@@ -114,14 +95,6 @@ const initialStarsText = initialStars > 0 ? fmtStars(initialStars) : '';
 const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownloads) : '';
 ---
 
-<a class="brand-update-banner" href={promoteHref}>
-  <img class="brand-update-banner__mark" src="/favicon.svg?v=4.11.4" alt="" width="46" height="46" />
-  <span class="brand-update-banner__copy">
-    <span class="brand-update-banner__eyebrow">{PROMOTE_BANNER.eyebrow}</span>
-    <span class="brand-update-banner__title">{PROMOTE_BANNER.title}</span>
-  </span>
-  <span class="brand-update-banner__cta">{PROMOTE_BANNER.cta} <span aria-hidden="true">→</span></span>
-</a>
 
 
 <section class="hero">
@@ -404,70 +377,6 @@ const initialDownloadsText = initialDownloads > 0 ? fmtDownloads(initialDownload
 </script>
 
 <style>
-  /* The visual identity changed in v4.11.3. Put the story above the product
-     pitch so returning visitors immediately understand the unfamiliar icon. */
-  .brand-update-banner {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-    text-decoration: none;
-    padding: 17px 24px;
-    background:
-      radial-gradient(circle at 30% 10%, rgba(255, 159, 64, 0.18), transparent 32%),
-      #121110;
-    color: #fff9ef;
-    border-bottom: 1px solid rgba(255, 159, 64, 0.24);
-    transition: background-color 0.16s;
-  }
-  .brand-update-banner:hover {
-    background-color: #1b1916;
-  }
-  .brand-update-banner__mark {
-    width: 46px;
-    height: 46px;
-    border-radius: 11px;
-    box-shadow: 0 8px 24px rgba(255, 159, 64, 0.22);
-    flex: 0 0 auto;
-  }
-  .brand-update-banner__copy {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .brand-update-banner__eyebrow {
-    color: #ff9f40;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.15em;
-  }
-  .brand-update-banner__title {
-    color: #fff9ef;
-    font-family: var(--font-serif);
-    font-size: 20px;
-    font-weight: 600;
-  }
-  .brand-update-banner__cta {
-    margin-left: 22px;
-    color: #d7d1c5;
-    font-size: 13px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-  @media (max-width: 640px) {
-    .brand-update-banner {
-      justify-content: flex-start;
-      gap: 12px;
-      padding: 14px 16px;
-    }
-    .brand-update-banner__mark { width: 40px; height: 40px; }
-    .brand-update-banner__title { font-size: 16px; }
-    .brand-update-banner__cta { display: none; }
-  }
-
-  /* Keep Android tester recruitment visible while the temporary brand story
-     occupies the primary announcement slot. */
-
   /* v4.7 release announcement — a calmer info bar under the orange Android
      banner. Calls out the Windows-only editor rebuild so visitors learn
      about it without having to open the What's-new page. */
