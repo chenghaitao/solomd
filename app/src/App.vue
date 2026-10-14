@@ -1166,6 +1166,10 @@ function onWindowBlur() {
 }
 function onWindowFocus() {
   document.documentElement.classList.remove('window-inactive');
+  // The user just came back from Explorer / Finder, which is exactly where a
+  // file gets deleted, moved or renamed behind our back. Cheap (one IPC for
+  // every tab) and it keeps the "file is gone" marks honest.
+  void files.refreshMissingFiles();
 }
 
 /**
@@ -1200,6 +1204,10 @@ onMounted(async () => {
   // CodeMirror path never focused itself, so typing went nowhere until a
   // click). Skipped while a dialog is up or something else has focus.
   focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 5000 });
+  // A restored session names files that may be long gone (deleted, moved, or
+  // on a drive that is not mounted). Mark those tabs before the user can read
+  // the stale text as if the file were still there.
+  void files.refreshMissingFiles();
   void reconcileIosFolder();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar

@@ -6,13 +6,14 @@ import { useToastsStore } from '../stores/toasts';
 import { useTilesStore } from '../stores/tiles';
 import { useSettingsStore } from '../stores/settings';
 import { useWorkspaceStore } from '../stores/workspace';
+import { useMissingFilesStore } from '../stores/missingFiles';
 import { useFiles } from '../composables/useFiles';
 import { requestRevealInTree } from '../composables/useFileTreeReveal';
 import { shortcutLabel } from '../lib/keybindings';
 import { revealLabelKey, usesCommandKey } from '../lib/platform';
 import { useI18n } from '../i18n';
 import Icon from './Icons.vue';
-import type { SplitDirection } from '../types';
+import type { SplitDirection, Tab } from '../types';
 
 const props = withDefaults(
   defineProps<{
@@ -29,6 +30,7 @@ const tabs = useTabsStore();
 const tiles = useTilesStore();
 const settings = useSettingsStore();
 const workspace = useWorkspaceStore();
+const missingFiles = useMissingFilesStore();
 const files = useFiles();
 const { t } = useI18n();
 const macChord = usesCommandKey();
@@ -37,6 +39,21 @@ const macChord = usesCommandKey();
 const newTabChord = shortcutLabel('file.new', settings.keybindings, macChord);
 
 const tabsEl = ref<HTMLElement | null>(null);
+
+/**
+ * Hover text for a tab.
+ *
+ * A tab whose file is gone still holds its last-known text — and possibly
+ * unsaved edits — so the name alone reads as if the file were still at that
+ * path; a same-named file opened from somewhere else would look identical. Say
+ * so, in the user's words: the path, then "deleted".
+ */
+function tabTitle(tab: Tab): string {
+  const base = tab.filePath || tab.fileName;
+  return missingFiles.isMissing(tab.filePath)
+    ? `${base} - ${t('tabMenu.fileMissing')}`
+    : base;
+}
 
 // #263 / #306 — dragging a tab onto the editor splits it, and the new pane
 // had no visible way to close: closing its tab just refills the pane with
@@ -414,6 +431,7 @@ onBeforeUnmount(() => {
         :class="{
           'tab--active': tab.id === activeTabId,
           'tab--dirty': tabs.isDirty(tab.id),
+          'tab--missing': missingFiles.isMissing(tab.filePath),
           'tab--dragging': tiles.dragTabId === tab.id,
         }"
         role="tab"
@@ -422,7 +440,7 @@ onBeforeUnmount(() => {
         @pointerdown="onTabPointerDown($event, tab.id)"
         @mousedown.middle="onMiddlePointerDown($event, tab.id)"
         @contextmenu="onContextMenu($event, tab.id)"
-        :title="tab.filePath || tab.fileName"
+        :title="tabTitle(tab)"
       >
         <span class="tab__name">{{ tab.fileName }}</span>
         <!-- One 16px slot at the end: the unsaved dot sits in it until the
@@ -498,9 +516,12 @@ onBeforeUnmount(() => {
           v-for="tl in tabs.tabs"
           :key="tl.id"
           class="ctx-item tablist__item"
-          :class="{ 'tablist__item--active': tl.id === activeTabId }"
+          :class="{
+            'tablist__item--active': tl.id === activeTabId,
+            'tablist__item--missing': missingFiles.isMissing(tl.filePath),
+          }"
           role="menuitem"
-          :title="tl.filePath || tl.fileName"
+          :title="tabTitle(tl)"
           @click="pickFromTabList(tl.id)"
         >
           <span class="tablist__name">{{ tl.fileName }}</span>
@@ -638,6 +659,15 @@ onBeforeUnmount(() => {
 .tab__name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* The file behind the tab is gone — deleted in Explorer/Finder, moved to
+   another folder, renamed outside the app, or on a drive that is not mounted.
+   Marked the way VS Code marks the same state: the name struck through, in the
+   danger colour, so the tab can keep showing its buffer without pretending the
+   file is still at that path. The full path + "deleted" is in the tooltip. */
+.tab--missing .tab__name {
+  text-decoration: line-through;
+  color: var(--danger);
 }
 .tab__end {
   position: relative;
@@ -786,6 +816,10 @@ onBeforeUnmount(() => {
 }
 .tablist__item--active {
   font-weight: 600;
+}
+.tablist__item--missing .tablist__name {
+  text-decoration: line-through;
+  color: var(--danger);
 }
 .tablist__dot {
   width: 6px;

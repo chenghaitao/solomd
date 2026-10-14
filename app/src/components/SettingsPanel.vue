@@ -265,11 +265,32 @@ const { checking: checkingUpdate, manualCheckUpdate } = useUpdateCheck();
 
 const settingDefault = ref(false);
 
+/** What `set_as_default_markdown_editor` returns (src-tauri/src/set_default.rs). */
+type SetDefaultOutcome = { ok: boolean; code: string; count: number; detail: string };
+
+// The Rust command is language-neutral on purpose — it reports a code, and the
+// toast follows the UI language here. `detail` is raw OS diagnostics (OSStatus,
+// registry path + error, xdg-mime stderr) interpolated as a value, not prose.
+const SET_DEFAULT_RESULT_KEY: Record<string, string> = {
+  doneMacos: 'settings.setDefaultDoneMacos',
+  failedMacos: 'settings.setDefaultFailedMacos',
+  doneWindows: 'settings.setDefaultDoneWindows',
+  failedWindows: 'settings.setDefaultFailedWindows',
+  doneLinux: 'settings.setDefaultDoneLinux',
+  failedLinux: 'settings.setDefaultFailedLinux',
+  failedUnsupported: 'settings.setDefaultFailedUnsupported',
+};
+
 async function setAsDefault() {
   settingDefault.value = true;
   try {
-    const msg = await invoke<string>('set_as_default_markdown_editor');
-    toasts.success(msg);
+    const res = await invoke<SetDefaultOutcome>('set_as_default_markdown_editor');
+    const text = t(SET_DEFAULT_RESULT_KEY[res.code] ?? 'settings.setDefaultFailedUnknown', {
+      count: String(res.count),
+      detail: res.detail,
+    });
+    if (res.ok) toasts.success(text);
+    else toasts.error(text);
   } catch (e) {
     toasts.error(String(e));
   } finally {

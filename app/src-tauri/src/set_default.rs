@@ -5,26 +5,57 @@
 //   - Windows → HKCU\Software\Classes\... + SHChangeNotify
 //   - Linux   → xdg-mime default solomd.desktop <mime>
 //
-// The Rust command returns Ok(message) on success, Err(message) otherwise.
-// The frontend surfaces this to the user via toast.
+// The command reports a language-neutral `code` instead of English prose: it
+// used to hand back ready-made sentences ("Set as default for 4 Markdown
+// extension(s)…"), so the toast stayed English on every non-English UI. The
+// frontend maps the code to a translated string (SettingsPanel.vue).
+//
+// Codes: `doneMacos` / `failedMacos`, `doneWindows` / `failedWindows`,
+// `doneLinux` / `failedLinux`, `failedUnsupported`.
+
+use serde::Serialize;
+
+/// Outcome of one "set as default" attempt. `detail` carries raw OS
+/// diagnostics (OSStatus, registry path + error, xdg-mime stderr) — a value the
+/// frontend interpolates into a translated sentence, never a sentence itself.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDefaultOutcome {
+    pub ok: bool,
+    pub code: String,
+    /// Number of file associations applied; 0 on failure.
+    pub count: u32,
+    pub detail: String,
+}
+
+impl SetDefaultOutcome {
+    fn done(code: &str, count: u32) -> Self {
+        Self { ok: true, code: code.to_string(), count, detail: String::new() }
+    }
+
+    fn failed(code: &str, detail: impl Into<String>) -> Self {
+        Self { ok: false, code: code.to_string(), count: 0, detail: detail.into() }
+    }
+}
 
 #[tauri::command]
-pub fn set_as_default_markdown_editor() -> Result<String, String> {
+pub fn set_as_default_markdown_editor() -> SetDefaultOutcome {
+    // Exactly one arm survives `cfg`, so it is always this function's tail.
     #[cfg(target_os = "macos")]
     {
-        return macos::set_default();
+        macos::set_default()
     }
     #[cfg(target_os = "windows")]
     {
-        return windows::set_default();
+        windows::set_default()
     }
     #[cfg(target_os = "linux")]
     {
-        return linux::set_default();
+        linux::set_default()
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        Err("Unsupported platform".to_string())
+        SetDefaultOutcome::failed("failedUnsupported", String::new())
     }
 }
 
@@ -34,6 +65,7 @@ pub fn set_as_default_markdown_editor() -> Result<String, String> {
 
 #[cfg(target_os = "macos")]
 mod macos {
+    use super::SetDefaultOutcome;
     use core_foundation::base::TCFType;
     use core_foundation::string::{CFString, CFStringRef};
 
@@ -49,7 +81,7 @@ mod macos {
         ) -> i32;
     }
 
-    pub fn set_default() -> Result<String, String> {
+    pub fn set_default() -> SetDefaultOutcome {
         // Bundle identifier declared in tauri.conf.json
         let bundle_id = CFString::new("app.solomd");
 
@@ -81,15 +113,12 @@ mod macos {
         }
 
         if ok_count > 0 {
-            Ok(format!(
-                "Set as default for {} Markdown type(s). You may need to restart Finder.",
-                ok_count
-            ))
+            SetDefaultOutcome::done("doneMacos", ok_count)
         } else {
-            Err(format!(
-                "LaunchServices rejected the request (OSStatus {}). Try right-click → Get Info → Open with → Change All.",
-                first_error.unwrap_or(-1)
-            ))
+            SetDefaultOutcome::failed(
+                "failedMacos",
+                format!("OSStatus {}", first_error.unwrap_or(-1)),
+            )
         }
     }
 }
@@ -100,14 +129,23 @@ mod macos {
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use super::SetDefaultOutcome;
     use std::env;
     use std::path::{Path, PathBuf};
     use winreg::enums::*;
     use winreg::RegKey;
 
-    pub fn set_default() -> Result<String, String> {
-        let exe_path_buf =
-            env::current_exe().map_err(|e| format!("Can't locate current executable: {e}"))?;
+    pub fn set_default() -> SetDefaultOutcome {
+        match register() {
+            Ok(count) => SetDefaultOutcome::done("doneWindows", count),
+            Err(detail) => SetDefaultOutcome::failed("failedWindows", detail),
+        }
+    }
+
+    /// Applies the registry changes. `Err` is the failing registry path plus the
+    /// OS error — technical text the frontend shows as a value.
+    fn register() -> Result<u32, String> {
+        let exe_path_buf = env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
         let exe_path = exe_path_buf.to_string_lossy().to_string();
 
         let command_value = format!("\"{}\" \"%1\"", exe_path);
@@ -120,26 +158,28 @@ mod windows {
         let app_root = r"Software\Classes\Applications\SoloMD.exe";
         let (app_key, _) = hkcu
             .create_subkey(app_root)
-            .map_err(|e| format!("Can't create Applications key: {e}"))?;
+            .map_err(|e| format!("{app_root}: {e}"))?;
         app_key
             .set_value("FriendlyAppName", &"SoloMD")
-            .map_err(|e| format!("Can't set FriendlyAppName: {e}"))?;
+            .map_err(|e| format!("{app_root}\\FriendlyAppName: {e}"))?;
 
         // Supported file extensions
+        let supported_types = format!("{app_root}\\SupportedTypes");
         let (st_key, _) = hkcu
-            .create_subkey(format!("{}\\SupportedTypes", app_root))
-            .map_err(|e| format!("Can't create SupportedTypes: {e}"))?;
+            .create_subkey(&supported_types)
+            .map_err(|e| format!("{supported_types}: {e}"))?;
         for ext in &[".md", ".markdown", ".mdown", ".mkd", ".txt"] {
             st_key.set_value(ext, &"").ok();
         }
 
         // Shell open command
+        let shell_open = format!("{app_root}\\shell\\open\\command");
         let (cmd_key, _) = hkcu
-            .create_subkey(format!("{}\\shell\\open\\command", app_root))
-            .map_err(|e| format!("Can't create shell command: {e}"))?;
+            .create_subkey(&shell_open)
+            .map_err(|e| format!("{shell_open}: {e}"))?;
         cmd_key
             .set_value("", &command_value.as_str())
-            .map_err(|e| format!("Can't set shell command: {e}"))?;
+            .map_err(|e| format!("{shell_open}: {e}"))?;
 
         // 2. Create our own ProgIDs with a dedicated document icon and open
         //    command. Do not point DefaultIcon at SoloMD.exe: Windows will then
@@ -193,10 +233,7 @@ mod windows {
             sh_change_notify();
         }
 
-        Ok(format!(
-            "Registered as default for {} Markdown extension(s). You may need to sign out / in for the taskbar icon to refresh.",
-            ok_count
-        ))
+        Ok(ok_count)
     }
 
     fn register_progid(
@@ -208,18 +245,20 @@ mod windows {
     ) -> Result<(), String> {
         let (progid_key, _) = hkcu
             .create_subkey(progid_root)
-            .map_err(|e| format!("Can't create ProgId: {e}"))?;
+            .map_err(|e| format!("{progid_root}: {e}"))?;
         progid_key.set_value("", &type_name).ok();
         progid_key.set_value("FriendlyTypeName", &type_name).ok();
 
+        let icon_path = format!("{progid_root}\\DefaultIcon");
         let (icon_key, _) = hkcu
-            .create_subkey(format!("{}\\DefaultIcon", progid_root))
-            .map_err(|e| format!("Can't create DefaultIcon: {e}"))?;
+            .create_subkey(&icon_path)
+            .map_err(|e| format!("{icon_path}: {e}"))?;
         icon_key.set_value("", &icon_value).ok();
 
+        let progid_cmd_path = format!("{progid_root}\\shell\\open\\command");
         let (progid_cmd_key, _) = hkcu
-            .create_subkey(format!("{}\\shell\\open\\command", progid_root))
-            .map_err(|e| format!("Can't create ProgId open command: {e}"))?;
+            .create_subkey(&progid_cmd_path)
+            .map_err(|e| format!("{progid_cmd_path}: {e}"))?;
         progid_cmd_key.set_value("", &command_value).ok();
 
         Ok(())
@@ -264,9 +303,10 @@ mod windows {
 
 #[cfg(target_os = "linux")]
 mod linux {
+    use super::SetDefaultOutcome;
     use std::process::Command;
 
-    pub fn set_default() -> Result<String, String> {
+    pub fn set_default() -> SetDefaultOutcome {
         // The .desktop file name comes from Tauri's deb/rpm packaging.
         // With [[bin]] name = "SoloMD" in Cargo.toml, the file is SoloMD.desktop.
         let desktop_file = "SoloMD.desktop";
@@ -286,21 +326,18 @@ mod linux {
                     ok_count += 1;
                 }
                 Ok(out) => {
-                    last_error = String::from_utf8_lossy(&out.stderr).to_string();
+                    last_error = String::from_utf8_lossy(&out.stderr).trim().to_string();
                 }
                 Err(e) => {
-                    last_error = format!("Failed to run xdg-mime: {e}");
+                    last_error = e.to_string();
                 }
             }
         }
 
         if ok_count > 0 {
-            Ok(format!("Set as default for {} MIME type(s).", ok_count))
+            SetDefaultOutcome::done("doneLinux", ok_count)
         } else {
-            Err(format!(
-                "xdg-mime failed. Install `xdg-utils` and try again. Error: {}",
-                last_error
-            ))
+            SetDefaultOutcome::failed("failedLinux", last_error)
         }
     }
 }

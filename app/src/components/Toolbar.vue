@@ -552,6 +552,67 @@ watch(menubarOpen, () => {
 // menu anchors" from pane scrolls.
 const toolbarRef = ref<HTMLElement | null>(null);
 
+// ── Title bar: keep the centred title clear of the in-app menus ─────────────
+// The app name + the active file's name sit centred in the 44px bar, while the
+// in-app menus grow left-to-right from the brand mark. Dragged narrow the two
+// met mid-bar and the title ran underneath the menu labels. The file name is
+// already on its tab, so the title just steps aside once it no longer fits in
+// the free space between the menus and the caption buttons.
+const menubarEl = ref<HTMLElement | null>(null);
+const winControlsEl = ref<HTMLElement | null>(null);
+/** Off-layout twin of the title, so a short name is measured, not the clamp. */
+const titleMeasureEl = ref<HTMLElement | null>(null);
+const titlebarTitle = computed(() =>
+  tabs.activeTab?.fileName ? `${tabs.activeTab.fileName} — SoloMD` : 'SoloMD',
+);
+const titlebarShowTitle = ref(true);
+/** Clearance needed on both sides of the centred title; below this it collides. */
+const TITLEBAR_TITLE_GAP = 12;
+
+function measureTitlebarTitle() {
+  if (!isTitlebar.value) return;
+  const bar = toolbarRef.value;
+  const menu = menubarEl.value;
+  if (!bar || !menu) return;
+  const barRect = bar.getBoundingClientRect();
+  const width = barRect.width;
+  if (!width) return;
+  const menuRight = menu.getBoundingClientRect().right - barRect.left;
+  const controlsLeft = winControlsEl.value
+    ? winControlsEl.value.getBoundingClientRect().left - barRect.left
+    : width;
+  // `max-width: 40%` is a clamp on the box, not on the text — measure the text,
+  // so "a.md — SoloMD" stays visible on a window where a long name would not.
+  const natural = titleMeasureEl.value?.getBoundingClientRect().width ?? 0;
+  const half = Math.min(natural, width * 0.4) / 2;
+  const centre = width / 2;
+  titlebarShowTitle.value =
+    centre - half - menuRight >= TITLEBAR_TITLE_GAP &&
+    controlsLeft - (centre + half) >= TITLEBAR_TITLE_GAP;
+}
+
+// Nothing this touches is in the flow the measurement reads (the title and the
+// measuring twin are both out of layout), so an observer callback can never
+// make itself fire again.
+let titlebarRO: ResizeObserver | null = null;
+onMounted(() => {
+  if (!isTitlebar.value) return;
+  // Measure before the first paint, so the title never flashes in the narrow
+  // window it is about to be hidden in.
+  measureTitlebarTitle();
+  if (typeof ResizeObserver === 'undefined') return;
+  const bar = toolbarRef.value;
+  if (!bar) return;
+  titlebarRO = new ResizeObserver(measureTitlebarTitle);
+  titlebarRO.observe(bar);
+});
+// The menus change width with the language, the title with the active tab.
+watch([titlebarTitle, () => settings.language], () => void nextTick(measureTitlebarTitle));
+onBeforeUnmount(() => {
+  titlebarRO?.disconnect();
+  titlebarRO = null;
+});
+
 // ── Windows caption buttons (min / max / close) ─────────────────────────────
 const isMaximized = ref(false);
 const maxBtnHover = ref(false);
@@ -779,7 +840,7 @@ onBeforeUnmount(() => {
     @dblclick="onTitleBarDblClick"
   >
     <span class="titlebar__icon" aria-hidden="true"><BrandMark :size="18" /></span>
-    <nav class="menubar" data-no-drag :aria-label="t('menubar.file')">
+    <nav ref="menubarEl" class="menubar" data-no-drag :aria-label="t('menubar.file')">
       <button
         v-for="m in menubarTree"
         :key="m.id"
@@ -845,8 +906,8 @@ onBeforeUnmount(() => {
         </div>
       </Teleport>
     </nav>
-    <span class="titlebar__title" aria-hidden="true">{{ tabs.activeTab?.fileName ? `${tabs.activeTab.fileName} — SoloMD` : 'SoloMD' }}</span>
-    <div class="win-controls" data-no-drag>
+    <span v-if="titlebarShowTitle" class="titlebar__title" aria-hidden="true">{{ titlebarTitle }}</span>
+    <div ref="winControlsEl" class="win-controls" data-no-drag>
       <button class="win-controls__btn" @click="winMinimize" :title="t('menubar.minimize')" tabindex="-1">
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" stroke-width="1" /></svg>
       </button>
@@ -865,6 +926,9 @@ onBeforeUnmount(() => {
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" /></svg>
       </button>
     </div>
+    <!-- Never displayed: the same text without the 40% clamp, so the fit test
+         reads the title's real width instead of the box's. -->
+    <span ref="titleMeasureEl" class="titlebar__title-measure" aria-hidden="true">{{ titlebarTitle }}</span>
   </div>
 
   <!-- ── The header row (every desktop platform; iPad too) ────────────── -->
@@ -1592,6 +1656,19 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--text-3);
   pointer-events: none;
+}
+/* Measured, never painted. `position: fixed` keeps it out of the title bar's
+   layout and out of any scrollable overflow, and the absent `max-width` is the
+   whole point — this is the unclamped width the fit test compares against. */
+.titlebar__title-measure {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 12px;
+  z-index: -1;
 }
 .menubar {
   display: flex;

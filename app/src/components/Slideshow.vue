@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { renderMarkdown } from '../lib/markdown';
 import { loadRenderDeps } from '../lib/render-deps';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useI18n } from '../i18n';
 import Reveal from 'reveal.js';
 import 'reveal.js/reveal.css';
 
@@ -31,6 +32,7 @@ const total = ref(0);
 const idx = ref(0);
 const showHelp = ref(false);
 const title = ref('');
+const { t } = useI18n();
 
 type RevealDeck = InstanceType<typeof Reveal>;
 let deck: RevealDeck | null = null;
@@ -311,26 +313,31 @@ onBeforeUnmount(() => {
     <div ref="slidesRef" class="slides"></div>
     <div class="slide__hud" @click.stop>
       <span class="slide__pos">{{ idx + 1 }} / {{ total }}</span>
-      <span class="slide__hint">F fullscreen · ? help · Esc exit</span>
+      <span class="slide__hint">{{ t('slideshowHelp.hint') }}</span>
     </div>
     <div v-if="showHelp" class="slide__help" @click.stop="showHelp = false">
       <div class="slide__help-card">
-        <h2>Slideshow Shortcuts</h2>
+        <h2>{{ t('slideshowHelp.title') }}</h2>
         <table>
           <tbody>
-            <tr><td>Next slide</td><td>→ ↓ Space PageDown</td></tr>
-            <tr><td>Previous slide</td><td>← ↑ PageUp</td></tr>
-            <tr><td>First / last slide</td><td>Home / End</td></tr>
-            <tr><td>Toggle fullscreen</td><td>F</td></tr>
-            <tr><td>Show / hide this help</td><td>?</td></tr>
-            <tr><td>Exit</td><td>Esc</td></tr>
-            <tr><td>Vertical sub-slides</td><td>Use <code>--</code> separator</td></tr>
+            <tr><td>{{ t('slideshowHelp.next') }}</td><td>→ ↓ Space PageDown</td></tr>
+            <tr><td>{{ t('slideshowHelp.prev') }}</td><td>← ↑ PageUp</td></tr>
+            <tr><td>{{ t('slideshowHelp.firstLast') }}</td><td>Home / End</td></tr>
+            <tr><td>{{ t('slideshowHelp.fullscreen') }}</td><td>F</td></tr>
+            <tr><td>{{ t('slideshowHelp.showHelp') }}</td><td>?</td></tr>
+            <tr><td>{{ t('slideshowHelp.exit') }}</td><td>Esc</td></tr>
+            <tr>
+              <td>{{ t('slideshowHelp.vertical') }}</td>
+              <td>{{ t('slideshowHelp.separatorBefore') }} <code>--</code> {{ t('slideshowHelp.separatorAfter') }}</td>
+            </tr>
           </tbody>
         </table>
         <p class="slide__help-foot">
-          Slides split by <code>---</code> (horizontal) or <code>--</code>
-          (vertical). Add a background with
-          <code>&lt;!-- bg: ./image.jpg --&gt;</code> at the top of any slide.
+          {{ t('slideshowHelp.footerSplit') }} <code>---</code>
+          {{ t('slideshowHelp.footerHorizontal') }} {{ t('slideshowHelp.footerOr') }} <code>--</code>
+          {{ t('slideshowHelp.footerVerticalEnd') }}
+          <code>&lt;!-- bg: ./image.jpg --&gt;</code>
+          {{ t('slideshowHelp.footerAtTop') }}
         </p>
       </div>
     </div>

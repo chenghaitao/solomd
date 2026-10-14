@@ -594,6 +594,18 @@ pub fn fs_dir_exists(path: String) -> bool {
     Path::new(&path).is_dir()
 }
 
+/// Which of `paths` are regular files on disk right now — one call for the whole
+/// tab list, because a restored session can name twenty files and a round trip
+/// each is twenty IPC hops for a question the filesystem answers in microseconds.
+///
+/// A missing path, a directory, or one inside an unmounted drive all read as
+/// `false`: the caller marks such a tab as "the file is gone", so "cannot prove
+/// it is here" and "not here" are deliberately the same answer.
+#[tauri::command]
+pub fn fs_files_exist(paths: Vec<String>) -> Vec<bool> {
+    paths.iter().map(|p| Path::new(p).is_file()).collect()
+}
+
 #[tauri::command]
 pub fn fs_rename(from: String, to: String) -> Result<(), String> {
     let from_p = Path::new(&from);

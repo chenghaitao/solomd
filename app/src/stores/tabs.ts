@@ -5,6 +5,7 @@ import { useSettingsStore } from './settings';
 import { useTilesStore } from './tiles';
 import { useWritingSessionStore } from './writingSession';
 import { useWindowsStore } from './windows';
+import { useMissingFilesStore } from './missingFiles';
 import { stampGoalSetAtIfMissing } from '../composables/useWritingGoals';
 
 // Legacy / global key (used when per-workspace tabs is OFF, and as the
@@ -386,6 +387,10 @@ export const useTabsStore = defineStore('tabs', {
       }
       t.savedContent = t.content;
       t.language = inferLanguage(t.fileName);
+      // The tab now points at a file we just wrote, so it is certainly on
+      // disk: clear any "file is gone" mark at once instead of waiting for the
+      // next window focus to recompute it.
+      useMissingFilesStore().clear(filePath);
       // v2.5 — push a "saved" anchor into the writing-session store so the
       // popover can show "since last save" instead of "since open".
       try {

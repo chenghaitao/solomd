@@ -14,6 +14,7 @@ import { useSettingsStore } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
 import { useRecentEditsStore } from '../stores/recentEdits';
 import { useWindowsStore } from '../stores/windows';
+import { useMissingFilesStore } from '../stores/missingFiles';
 import { openImageOverlay, type OverlayStrings } from '../lib/image-overlay';
 import { openPath as openWithSystemDefault } from '@tauri-apps/plugin-opener';
 import { useI18n } from '../i18n';
@@ -1027,6 +1028,44 @@ export function useFiles() {
     tabs.closeTab(id);
   }
 
+  /**
+   * Mark the tabs whose backing file is no longer on disk.
+   *
+   * A restored session brings the tabs back but not the files behind them:
+   * deleted in Explorer, moved to another folder, renamed outside the app, or
+   * on a drive that is not mounted. The tab kept showing its last-known text
+   * with nothing saying the file was gone, and a same-named file opened from
+   * elsewhere was indistinguishable from it. PaneTabBar strikes the name
+   * through for whatever this marks.
+   *
+   * Run on launch and on every window focus, so putting the file back clears
+   * the mark without a relaunch. A failed call leaves the previous answer
+   * alone rather than marking every tab as gone.
+   */
+  async function refreshMissingFiles(): Promise<void> {
+    const missing = useMissingFilesStore();
+    const candidates: string[] = [];
+    for (const tab of tabs.tabs) {
+      const p = tab.filePath;
+      // A SAF vault path ("saf:…") and an Android `content://` URI are not
+      // filesystem paths at all — `std::fs` cannot answer for them, and its
+      // "no" would be a lie. Untitled tabs have no path to check.
+      if (!p || isSafPath(p) || p.startsWith('content://')) continue;
+      candidates.push(p);
+    }
+    if (candidates.length === 0) {
+      missing.set([]);
+      return;
+    }
+    try {
+      const present = await invoke<boolean[]>('fs_files_exist', { paths: candidates });
+      missing.set(candidates.filter((_, i) => !present[i]));
+    } catch (e) {
+      // No such command (mobile builds) or a dead IPC — keep what we had.
+      console.warn('fs_files_exist unavailable', e);
+    }
+  }
+
   return {
     newFile,
     newTextFile,
@@ -1048,6 +1087,7 @@ export function useFiles() {
     saveTab,
     autoSaveDirtyTabs,
     closeTabSafe,
+    refreshMissingFiles,
     reopenClosedTab,
     spawnAuxWindow,
   };
