@@ -12,6 +12,7 @@ import { isWindowsDesktop } from '../lib/platform';
 import { FORMAT_KINDS, type FormatKind } from '../lib/md-format';
 import { MARKDOWN_ONLY_COMMANDS, type EditorCommand } from '../lib/editor-commands';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { tableEditor } from '../lib/table-editor-bus';
 
@@ -143,6 +144,7 @@ export function useShortcuts(hooks: Hooks = {}) {
     'editor.tableEditor': () => runById('editor.tableEditor'),
     'editor.formulaEditor': () => runById('editor.formulaEditor'),
     'export.copyHtml': () => void exporter.copyAsHtml(),
+    'export.copyWord': () => void exporter.copyAsWord(),
     // Markdown is what most people actually want to paste elsewhere (issues,
     // chat, other editors), so it earns the second copy binding. Plain-text
     // and PNG stay palette-only — they're one-off exports.
@@ -232,6 +234,21 @@ export function useShortcuts(hooks: Hooks = {}) {
   };
 
   function handler(e: KeyboardEvent) {
+    // #423 — F12 opens the webview inspector (DevTools) so custom CSS theme
+    // authors can inspect DOM structure and CSS variables even when browser
+    // accelerator keys are disabled on Windows WebView2.
+    if (
+      !IS_APP_STORE_BUILD &&
+      (e.code === 'F12' || e.key === 'F12') &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      !e.shiftKey
+    ) {
+      e.preventDefault();
+      void invoke('open_devtools_window').catch(() => {});
+      return;
+    }
     const raw = eventToCombo(e);
     if (!raw) return;
     // A key event without a `code` (synthetic input, some remote-desktop and

@@ -146,6 +146,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'export.pdf', label: 'Export as PDF (Image)', category: 'file', defaults: [] },
   { id: 'export.image', label: 'Export as Image', category: 'file', defaults: [] },
   { id: 'export.copyHtml', label: 'Copy as HTML', category: 'file', defaults: ['Mod+Shift+C'] },
+  { id: 'export.copyWord', label: 'Copy as Word', category: 'file', defaults: [] },
   { id: 'export.copyMd', label: 'Copy as Markdown', category: 'file', defaults: ['Mod+Alt+C'] },
   { id: 'inbox.open', label: 'Open Inbox', category: 'file', defaults: [] },
   { id: 'inbox.toggle', label: 'Toggle Inbox Flag / Organize', category: 'file', defaults: ['Mod+E'] },

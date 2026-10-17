@@ -742,6 +742,9 @@ watchEffect(() => {
   document.documentElement.setAttribute('data-theme', dataThemeFor(settings.theme, !!settings.customCssPath));
   // 5.0 tokens: the exact default palette stays out of a marketplace theme's way.
   document.documentElement.toggleAttribute('data-custom-theme', !!settings.customCssPath);
+  if (isIOS()) {
+    invoke('ios_set_appearance', { dark: themeFamily(settings.theme) === 'dark' }).catch(() => {});
+  }
   const overriddenBy = settings.customCssPath;
   if (!themeAppliedOnce) {
     themeAppliedOnce = true;
@@ -1163,7 +1166,19 @@ function onWindowFocus() {
  * instead of an empty, unreadable tree.
  */
 async function reconcileIosFolder() {
-  if (!isIOS() || !workspace.currentFolder) return;
+  if (!workspace.currentFolder) return;
+  if (isMacOS()) {
+    try {
+      const reopened = await invoke<string | null>('ios_restore_folder');
+      if (reopened && reopened !== workspace.currentFolder) {
+        workspace.setFolder(reopened);
+      }
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  if (!isIOS()) return;
   try {
     const docs = (await documentDir()).replace(/\/+$/, '');
     const cur = workspace.currentFolder;

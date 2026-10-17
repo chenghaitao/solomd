@@ -244,6 +244,59 @@ fn force_close_window(window: tauri::Window) {
     window.close().ok();
 }
 
+/// #423 — Open the webview inspector (DevTools) so theme authors can inspect
+/// DOM structure and CSS variables when writing custom themes.
+#[tauri::command]
+fn open_devtools_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        window
+            .with_webview(|platform| unsafe {
+                let Ok(core) = platform.controller().CoreWebView2() else { return };
+                if let Ok(settings) = core.Settings() {
+                    let _ = settings.SetAreDevToolsEnabled(true);
+                }
+                let _ = core.OpenDevToolsWindow();
+            })
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if !app_build::IS_APP_STORE {
+            let _ = window.with_webview(|platform| unsafe {
+                use objc2::msg_send;
+                use objc2::runtime::{AnyClass, AnyObject, Bool};
+                let wv = platform.inner() as *mut AnyObject;
+                if wv.is_null() {
+                    return;
+                }
+                let cfg: *mut AnyObject = msg_send![wv, configuration];
+                if !cfg.is_null() {
+                    let prefs: *mut AnyObject = msg_send![cfg, preferences];
+                    if !prefs.is_null() {
+                        if let Some(ns_num_cls) = AnyClass::get("NSNumber") {
+                            let yes: *mut AnyObject =
+                                msg_send![ns_num_cls, numberWithBool: Bool::YES];
+                            let key =
+                                objc2_foundation::NSString::from_str("developerExtrasEnabled");
+                            let _: () = msg_send![prefs, setValue: yes, forKey: &*key];
+                        }
+                    }
+                }
+                let inspector: *mut AnyObject = msg_send![wv, _inspector];
+                if !inspector.is_null() {
+                    let _: () = msg_send![inspector, show: wv];
+                }
+            });
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = window;
+    }
+    Ok(())
+}
+
 /// True (and consumed) when `label`'s frontend already confirmed this close.
 fn take_close_confirmation(label: &str) -> bool {
     let Ok(mut confirmed) = CLOSE_CONFIRMED.lock() else { return false };
@@ -736,8 +789,11 @@ pub fn run_with(initial_file: Option<String>) {
             app_build::app_build_info,
             store_review::request_store_review,
             ios_folder::ios_pick_folder,
+            ios_folder::macos_bookmark_folder,
             ios_folder::ios_restore_folder,
+            ios_folder::ios_set_appearance,
             ios_folder::ios_scoped_files,
+            open_devtools_window,
             recipe_runner::recipes_list,
             recipe_runner::recipes_get,
             recipe_runner::recipes_save,
@@ -762,6 +818,14 @@ pub fn run_with(initial_file: Option<String>) {
             let _ = app_handle.emit("solomd://menu", id);
         })
         .setup(|app| {
+            // #428 — Reopen the last bookmarked workspace folder on macOS ahead
+            // of the frontend's initial `list_dir` call so `~/Documents` and
+            // other user-selected folders keep their security-scoped access.
+            #[cfg(target_os = "macos")]
+            {
+                let _ = ios_folder::ios_restore_folder(app.handle().clone());
+            }
+
             // A minimal startup menu (app menu + Edit) — the frontend sends
             // the full, localized one (`set_menu_spec`) as soon as it mounts.
             // Windows: no native menu — the frameless window renders its own

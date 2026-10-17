@@ -158,9 +158,12 @@ pub fn run() {
             // catch documents opened in place from the Files app before tao
             // drops their security scope (setup runs inside
             // didFinishLaunching, ahead of a cold launch's open-URL call).
-            #[cfg(target_os = "ios")]
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
             {
                 let _ = ios_folder::ios_restore_folder(app.handle().clone());
+            }
+            #[cfg(target_os = "ios")]
+            {
                 ios_folder::hook_open_url();
             }
             // Show the window only after first paint to suppress the
@@ -194,7 +197,9 @@ pub fn run() {
             app_build::app_build_info,
             store_review::request_store_review,
             ios_folder::ios_pick_folder,
+            ios_folder::macos_bookmark_folder,
             ios_folder::ios_restore_folder,
+            ios_folder::ios_set_appearance,
             ios_folder::ios_scoped_files,
             commands::read_file,
             commands::read_binary_file,

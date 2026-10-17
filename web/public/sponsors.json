@@ -7,7 +7,25 @@
       "github": "tyysoft"
     }
   ],
-  "promoters": [],
+  "promoters": [
+    {
+      "name": "Garfield",
+      "since": "2026-10",
+      "platform": "X (Twitter)",
+      "url": "https://x.com/Garfield_OxO/status/2110654220894343301",
+      "ref": "Garfield",
+      "github": "PioneerSunOvO"
+    },
+    {
+      "name": "lcfactorization",
+      "since": "2026-10",
+      "platform": "CSDN",
+      "url": "https://blog.csdn.net/stereohomology/article/details/167864282",
+      "github": "lcfactorization",
+      "featured": true,
+      "quote": "SoloMD已完全替代Typora等、且更优雅！"
+    }
+  ],
   "testers": [
     {
       "name": "张工",

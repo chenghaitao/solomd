@@ -317,19 +317,48 @@ async function loadDir(path: string): Promise<{ children: Node[]; truncated: boo
     // A successful listing clears the "folder is gone" state, so putting the
     // folder back (or reconnecting the drive) recovers on the next refresh
     // rather than needing the workspace re-picked.
-    if (path === workspace.currentFolder) rootMissing.value = false;
+    if (path === workspace.currentFolder) {
+      rootMissing.value = false;
+      rootError.value = '';
+    }
     return { children: sortChildren(path, filtered), truncated };
   } catch (e) {
+    // #428 — On macOS/iOS, if the initial root listing fails with EPERM before
+    // the security-scoped bookmark was restored, restore once and retry.
+    if (path === workspace.currentFolder) {
+      try {
+        const restored = await invoke<string | null>('ios_restore_folder');
+        if (restored) {
+          const retryEntries = await invoke<Entry[]>('list_dir', {
+            path: restored,
+            showHidden: settings.explorerShowHidden,
+            withTimes: sortNeedsTimes(sortMode.value),
+          });
+          let truncated = false;
+          const filtered: Node[] = [];
+          for (const entry of retryEntries) {
+            if (entry.name === TRUNCATED_SENTINEL && !entry.is_dir && entry.path === '') {
+              truncated = true;
+              continue;
+            }
+            if (isDeletePending(entry.path)) continue;
+            if (hiddenInTree(entry)) continue;
+            filtered.push({ ...entry });
+          }
+          rootMissing.value = false;
+          rootError.value = '';
+          return { children: sortChildren(restored, filtered), truncated };
+        }
+      } catch {
+        /* fall through to error state below */
+      }
+    }
     console.error('list_dir failed', e);
-    // Only the root's disappearance is worth a special state; a subfolder that
-    // vanished mid-expand just lists as empty.
+    // Only the root's disappearance or permission denial is worth a special
+    // state; a subfolder that vanished mid-expand just lists as empty.
     if (path === workspace.currentFolder) {
       rootError.value = String(e);
-      try {
-        rootMissing.value = !(await invoke<boolean>('fs_dir_exists', { path }));
-      } catch {
-        rootMissing.value = false;
-      }
+      rootMissing.value = true;
     }
     return { children: [], truncated: false };
   }
