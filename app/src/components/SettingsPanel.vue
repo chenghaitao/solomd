@@ -48,6 +48,7 @@ import RecipesSettings from './RecipesSettings.vue';
 import GithubSyncSettings from './GithubSyncSettings.vue';
 import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
+import LanguageToolSettings from './LanguageToolSettings.vue';
 import ThemeMarketplace from './ThemeMarketplace.vue';
 import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime, resolveWindowsEditorEngine } from '../lib/platform';
 import type { WindowsEditorEngine } from '../lib/platform';
@@ -1465,6 +1466,10 @@ function onSelectPdfFont(v: string) {
           </div>
           <p v-if="settings.spellcheckEnabled" class="setting-hint">{{ t('settings.spellcheckLangHint') }}</p>
         </section>
+
+        <!-- LanguageTool grammar / style checking — right under Hunspell,
+             which steps back while LanguageTool handles spelling. -->
+        <div data-cat="writing"><LanguageToolSettings /></div>
 
         <section data-cat="integrations">
           <h3 class="settings__group-title">

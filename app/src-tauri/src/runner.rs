@@ -18,6 +18,9 @@ mod workspace_index;
 
 #[path = "spellcheck.rs"]
 mod spellcheck;
+// LanguageTool grammar / style checking — local server, Premium or public API.
+#[path = "languagetool.rs"]
+mod languagetool;
 
 // #102 — AI key storage abstraction; declared before ai_proxy which uses it.
 #[path = "ai_keystore.rs"]
@@ -611,6 +614,13 @@ pub fn run_with(initial_file: Option<String>) {
             spellcheck::spellcheck_load_user_dict,
             spellcheck::spellcheck_list_dicts,
             spellcheck::spellcheck_dicts_dir,
+            languagetool::languagetool_check,
+            languagetool::languagetool_detect,
+            languagetool::languagetool_set_api_key,
+            languagetool::languagetool_has_api_key,
+            languagetool::languagetool_clear_api_key,
+            languagetool::languagetool_words_add,
+            languagetool::languagetool_words_list,
             ai_proxy::ai_set_key,
             ai_proxy::ai_has_key,
             ai_proxy::ai_clear_key,

@@ -8,6 +8,8 @@ pub mod image_upload;
 pub mod search;
 pub mod workspace_index;
 pub mod spellcheck;
+// LanguageTool grammar / style checking — local server, Premium or public API.
+pub mod languagetool;
 // #102 — cross-platform AI key storage (OS keyring + Android encrypted-file
 // fallback). Declared before ai_proxy, which delegates to it.
 pub mod ai_keystore;
@@ -242,6 +244,13 @@ pub fn run() {
             spellcheck::spellcheck_load_user_dict,
             spellcheck::spellcheck_list_dicts,
             spellcheck::spellcheck_dicts_dir,
+            languagetool::languagetool_check,
+            languagetool::languagetool_detect,
+            languagetool::languagetool_set_api_key,
+            languagetool::languagetool_has_api_key,
+            languagetool::languagetool_clear_api_key,
+            languagetool::languagetool_words_add,
+            languagetool::languagetool_words_list,
             ai_proxy::ai_set_key,
             ai_proxy::ai_has_key,
             ai_proxy::ai_clear_key,

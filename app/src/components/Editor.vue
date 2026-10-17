@@ -82,6 +82,8 @@ import { slashCommandsExtension } from '../lib/cm-slash-commands';
 import { useI18n } from '../i18n';
 import { spellcheckExtension } from '../lib/cm-spellcheck';
 import { spellcheckTheme } from '../lib/cm-spellcheck-theme';
+import { languagetoolExtension, languagetoolHitAt, type LtHit } from '../lib/cm-languagetool';
+import { languagetoolCoversSpelling, ltAddWord, ltDisableRule, ltIgnore, matchWords } from '../lib/languagetool';
 import { usePandocExport } from '../composables/usePandocExport';
 import type { CitationEntry } from '../lib/citations';
 import { taskListExtension } from '../lib/cm-task-list';
@@ -3157,6 +3159,9 @@ const editorCtx = ref<{
 // #376 — the misspelled word the menu was opened on, for replacing it with a
 // suggestion. `el` is the textarea on the Windows paths, null for CodeMirror.
 let ctxSpell: { el: HTMLTextAreaElement | null; from: number; to: number; word: string } | null = null;
+// The LanguageTool match the menu was opened on (CodeMirror only); when set,
+// `ctxSpell` holds its range and the menu items act on LanguageTool.
+let ctxLt: LtHit | null = null;
 let ctxSeq = 0;
 let ctxTextarea: HTMLTextAreaElement | null = null;
 // #362 — the rendered image the menu was opened on (CodeMirror live-edit
@@ -3190,11 +3195,13 @@ async function onEditorContextMenu(event: MouseEvent) {
   // the pointer's offset in it, and where that line starts in the editor.
   let spellProbe: { el: HTMLTextAreaElement | null; line: string; offset: number; base: number; selFrom: number; selTo: number } | null = null;
   const spellOn = props.spellCheck || settings.spellcheckEnabled;
+  let ltHit: LtHit | null = null;
   if (!usePlainWindowsEditor) {
     hasSelection = !!view && !view.state.selection.main.empty;
     ctxTextarea = null;
+    const pos = view ? view.posAtCoords({ x: event.clientX, y: event.clientY }) : null;
+    if (view && pos != null && settings.ltMode !== 'off') ltHit = languagetoolHitAt(view, pos);
     if (spellOn && view) {
-      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
       if (pos != null) {
         const line = view.state.doc.lineAt(pos);
         const sel = view.state.selection.main;
@@ -3235,8 +3242,21 @@ async function onEditorContextMenu(event: MouseEvent) {
   ctxImage = img instanceof HTMLImageElement && img.src ? img : null;
   const seq = ++ctxSeq;
   ctxSpell = null;
+  ctxLt = null;
   let spell: EditorMenuSpell | null = null;
-  if (spellProbe) {
+  const sel = view?.state.selection.main;
+  if (ltHit && (!hasSelection || (sel && sel.from === ltHit.from && sel.to === ltHit.to))) {
+    ctxLt = ltHit;
+    ctxSpell = { el: null, from: ltHit.from, to: ltHit.to, word: ltHit.text };
+    spell = {
+      word: ltHit.text,
+      suggestions: ltHit.match.replacements,
+      canAdd: ltHit.match.issueType === 'misspelling',
+      message: ltHit.match.message,
+      canIgnore: true,
+      addWords: matchWords(ltHit.text),
+    };
+  } else if (spellProbe) {
     const hit = await lookupMisspelling(spellProbe.line, spellProbe.offset, settings.spellcheckLang);
     if (seq !== ctxSeq) return; // a newer right-click took over
     if (hit) {
@@ -3267,6 +3287,7 @@ function onEditorMenuReplace(word: string) {
   editorCtx.value = null;
   const target = ctxSpell;
   ctxSpell = null;
+  ctxLt = null;
   ctxTextarea = null;
   ctxImage = null;
   if (!target) return;
@@ -3294,11 +3315,26 @@ function onEditorMenuReplace(word: string) {
 async function onEditorMenuAddWord(word: string) {
   editorCtx.value = null;
   ctxSpell = null;
+  const lt = ctxLt;
+  ctxLt = null;
   try {
-    await addToSpellDict(word);
+    if (lt) await ltAddWord(word);
+    else await addToSpellDict(word);
   } catch (err) {
     console.warn('[spellcheck] add to dictionary failed', err);
   }
+  view?.focus();
+}
+
+/** LanguageTool: ignore this match (session) or switch its rule off. */
+function onEditorMenuLtIgnore(disableRule: boolean) {
+  editorCtx.value = null;
+  ctxSpell = null;
+  const lt = ctxLt;
+  ctxLt = null;
+  if (!lt) return;
+  if (disableRule) ltDisableRule(lt.match.ruleId);
+  else ltIgnore(lt.match, lt.text);
   view?.focus();
 }
 
@@ -3809,8 +3845,11 @@ function buildExtensions() {
             activateOnTyping: false,
           }),
           ...(IS_APP_STORE_BUILD ? [] : [aiKeyCompartment.of(aiRewriteExtension(currentAiRewriteKey()))]),
-          spellcheckExtension({ enabled: () => settings.spellcheckEnabled }),
+          // Hunspell steps back while LanguageTool handles spelling, and
+          // takes over again if the LanguageTool server goes away.
+          spellcheckExtension({ enabled: () => settings.spellcheckEnabled && !languagetoolCoversSpelling() }),
           spellcheckTheme,
+          languagetoolExtension({ enabled: () => settings.ltMode !== 'off' }),
           slashCompartment.of(slashExt()),
         ]
       : []),
@@ -5469,6 +5508,8 @@ const cls = computed(() => ({
       @action="onEditorMenuAction"
       @replace="onEditorMenuReplace"
       @add-word="onEditorMenuAddWord"
+      @lt-ignore="onEditorMenuLtIgnore(false)"
+      @lt-disable-rule="onEditorMenuLtIgnore(true)"
       @close="editorCtx = null"
     />
   </Teleport>
