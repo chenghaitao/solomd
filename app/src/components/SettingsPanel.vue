@@ -48,6 +48,7 @@ import RecipesSettings from './RecipesSettings.vue';
 import GithubSyncSettings from './GithubSyncSettings.vue';
 import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
+import LanguageToolSettings from './LanguageToolSettings.vue';
 import ThemeMarketplace from './ThemeMarketplace.vue';
 import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime, resolveWindowsEditorEngine } from '../lib/platform';
 import type { WindowsEditorEngine } from '../lib/platform';
@@ -1218,7 +1219,7 @@ function onSelectPdfFont(v: string) {
 
         <section data-cat="editing">
           <label>
-            <input type="checkbox" :checked="settings.livePreview" @change="settings.toggleLivePreview()" />
+            <input type="checkbox" :checked="settings.viewMode === 'liveEdit' || (settings.viewMode === 'split' && settings.livePreview)" @change="settings.toggleLivePreview()" />
             {{ t('settings.livePreview') }}
           </label>
         </section>
@@ -1605,6 +1606,10 @@ function onSelectPdfFont(v: string) {
           </div>
           <p v-if="settings.spellcheckEnabled" class="setting-hint">{{ t('settings.spellcheckLangHint') }}</p>
         </section>
+
+        <!-- LanguageTool grammar / style checking — right under Hunspell,
+             which steps back while LanguageTool handles spelling. -->
+        <div data-cat="writing"><LanguageToolSettings /></div>
 
         <section data-cat="integrations">
           <h3 class="settings__group-title">
@@ -2436,6 +2441,7 @@ function onSelectPdfFont(v: string) {
           <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
             <button @click="pickCustomCss">{{ t('settings.pickCss') }}</button>
             <button @click="openThemeMarketplace">{{ t('themes.browseBtn') }}</button>
+            <button v-if="!IS_APP_STORE_BUILD && !isMobile" type="button" @click="invoke('open_devtools_window').catch(() => {})">DevTools (F12)</button>
             <button v-if="settings.customCssPath" @click="settings.setCustomCssPath('')">{{ t('settings.clear') }}</button>
           </div>
           <div v-if="settings.customCssPath" class="css-path-row" style="font-size: 11px; color: var(--text-faint); word-break: break-all; margin-top: 4px;">
@@ -2960,6 +2966,11 @@ function onSelectPdfFont(v: string) {
   row-gap: 4px;
   min-height: 24px;
 }
+/* #426: Guard label column from collapsing to 0px on narrow iPad Split View /
+   Stage Manager windows by giving both label and control flexible bounds. */
+.settings__body > section:has(> label:first-child:not(:has(input, select, textarea)) + :is(select, input:not([type='checkbox']):not([type='radio']), .settings__field)) {
+  grid-template-columns: minmax(120px, 1fr) minmax(130px, 240px);
+}
 .settings__body > section > * {
   grid-column: 1 / -1;
   min-width: 0;
@@ -2973,7 +2984,6 @@ function onSelectPdfFont(v: string) {
   gap: 8px;
 }
 /* A plain caption label ("Theme", "Font size: 16px") is the row's label. */
-.settings__body > section > label:first-child:not(:has(input, select, textarea)),
 .settings__body > section > label:first-child:not(:has(input, select, textarea)) {
   grid-column: 1;
 }
@@ -2983,11 +2993,13 @@ function onSelectPdfFont(v: string) {
 .settings__body > section > label:first-child:not(:has(input, select, textarea)) + .settings__field {
   grid-column: 2;
   grid-row: 1;
-  width: 240px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 240px;
+  justify-self: end;
 }
 .settings__body > section > label:first-child:not(:has(input, select, textarea)) + input[type='range'] {
-  width: 200px;
+  width: 100%;
+  max-width: 200px;
 }
 
 /* Checkbox rows: the text on the left, a switch on the right. */
@@ -3325,7 +3337,9 @@ input[type='range']:disabled {
   background: var(--bg);
 }
 .ds-modal.settings-modal .ds-modal__head {
-  padding-bottom: 10px;
+  /* 12px total gap to the search row; 6px of it lives in .settings__search
+     so the focus ring is not clipped by the scrolling body. */
+  padding-bottom: 6px;
 }
 .ds-modal.settings-modal .ds-modal__body {
   padding: 0;

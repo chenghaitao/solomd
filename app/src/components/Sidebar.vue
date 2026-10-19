@@ -28,7 +28,9 @@ import { useInbox } from '../composables/useInbox';
 import { useInboxView } from '../composables/useInboxView';
 import { useDailyNotes } from '../composables/useDailyNotes';
 import { shortcutLabel } from '../lib/keybindings';
-import { usesCommandKey } from '../lib/platform';
+import { isMobile, usesCommandKey } from '../lib/platform';
+import { isSafPath } from '../lib/saf-fs';
+import { parentDirOf } from '../lib/new-file-target';
 import { useI18n } from '../i18n';
 
 const props = withDefaults(
@@ -165,6 +167,27 @@ function openFolder() {
 function pickFolder(path: string) {
   workspace.setFolder(path);
 }
+
+// 2026-10-13 feedback — a single .md opened with no folder open left the
+// sidebar on a bare "Open a folder" card, with no way to reach the file's
+// own folder. Re-rooting on every open is opt-in
+// (settings.revealInFileTreeOnOpen — a file in ~/ or Downloads would list and
+// index that whole folder), so the empty state offers it as one click; the
+// tree's follow-active watcher then reveals the file.
+const currentFileFolder = computed(() => {
+  if (isMobile()) return null;
+  const file = tabs.activeTab?.filePath;
+  if (!file || isSafPath(file)) return null;
+  const dir = parentDirOf(file);
+  // Never a volume root ("C:", "/") — far too big to list as a workspace.
+  if (!dir || /^[A-Za-z]:$/.test(dir)) return null;
+  const parts = dir.split(/[\\/]/).filter(Boolean);
+  return {
+    path: dir,
+    name: parts[parts.length - 1] ?? dir,
+    parent: parts.length > 1 ? parts.slice(0, -1).join('/') : '',
+  };
+});
 
 // ── width + resize (moved here from FileTree) ───────────────────────────────
 const resizing = ref(false);
@@ -346,6 +369,19 @@ onBeforeUnmount(() => {
         <button class="sb__primary" type="button" @click="openFolder">
           {{ t('sidebar.emptyButton') }}
         </button>
+        <div v-if="currentFileFolder" class="sb__empty-recent">
+          <div class="sb__label sb__label--center">{{ t('sidebar.currentFileFolder') }}</div>
+          <button
+            class="sb__row sb__row--folder"
+            type="button"
+            :title="currentFileFolder.path"
+            @click="pickFolder(currentFileFolder.path)"
+          >
+            <Icon name="folder-sm" :size="16" class="sb__row-icon" />
+            <span class="sb__row-label">{{ currentFileFolder.name }}</span>
+            <span class="sb__row-sub">{{ currentFileFolder.parent }}</span>
+          </button>
+        </div>
         <div v-if="recentFolders.length" class="sb__empty-recent">
           <div class="sb__label sb__label--center">{{ t('sidebar.recentFolders') }}</div>
           <button

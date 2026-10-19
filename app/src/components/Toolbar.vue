@@ -1051,6 +1051,10 @@ onBeforeUnmount(() => {
               <span class="dropdown__name">{{ t('toolbar.copyHtml') }}</span>
               <span v-if="chord('export.copyHtml')" class="dropdown__shortcut">{{ chord('export.copyHtml') }}</span>
             </button>
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.copyAsWord())">
+              <span class="dropdown__name">{{ t('toolbar.copyWord') }}</span>
+              <span v-if="chord('export.copyWord')" class="dropdown__shortcut">{{ chord('export.copyWord') }}</span>
+            </button>
             <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.copyAsPlainText())">
               <span class="dropdown__name">{{ t('toolbar.copyPlain') }}</span>
             </button>

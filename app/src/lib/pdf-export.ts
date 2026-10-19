@@ -26,6 +26,7 @@ const EXPORT_TIMEOUT_MS = 30_000;
 
 const PDF_CSS = `
   body { margin: 0; }
+  .html2pdf__overlay, iframe.html2canvas-container { pointer-events: none !important; }
   .pdf-page {
     box-sizing: border-box;
     /* The container html2pdf hands us is exactly the printable width of the

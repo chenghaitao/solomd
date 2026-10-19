@@ -100,11 +100,17 @@ function onSelection(text: string) {
   }
 }
 
+let markScrollDriver: ((which: 'editor' | 'preview', ms?: number) => void) | null = null;
+
 function gotoLine(line: number) {
   if (settings.viewMode === 'preview') {
     previewRef.value?.scrollToLine(line);
   } else {
+    markScrollDriver?.('editor', 400);
     editorRef.value?.gotoLine(line);
+    if (settings.viewMode === 'split') {
+      previewRef.value?.scrollToLine(line);
+    }
   }
 }
 
@@ -239,6 +245,7 @@ function bindScrollSync() {
   if (syncPreviewScroll) syncPreviewScroll();
   syncEditorScroll = null;
   syncPreviewScroll = null;
+  markScrollDriver = null;
   resizeObserver?.disconnect();
   resizeObserver = null;
 
@@ -270,10 +277,18 @@ function bindScrollSync() {
   // momentum keep the same driver.
   let activePane: 'editor' | 'preview' | null = null;
   let activeTimer: ReturnType<typeof setTimeout> | null = null;
-  const markActive = (which: 'editor' | 'preview') => {
+  const markActive = (which: 'editor' | 'preview', ms = 250) => {
     activePane = which;
     if (activeTimer) clearTimeout(activeTimer);
-    activeTimer = setTimeout(() => { activePane = null; }, 250);
+    activeTimer = setTimeout(() => { activePane = null; }, ms);
+  };
+  markScrollDriver = markActive;
+  const releaseSyncGuard = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        syncGuard = false;
+      });
+    });
   };
   const intentEvents = ['wheel', 'pointerdown', 'touchstart', 'keydown'] as const;
   const editorIntent = () => markActive('editor');
@@ -301,7 +316,7 @@ function bindScrollSync() {
       if (emax > 0 && pmax > 0) {
         syncGuard = true;
         preview.scrollTop = (editor.scrollTop / emax) * pmax;
-        requestAnimationFrame(() => { syncGuard = false; });
+        releaseSyncGuard();
       }
       return;
     }
@@ -328,7 +343,7 @@ function bindScrollSync() {
     }
     syncGuard = true;
     preview.scrollTop += target - wrapRect.top - 8;
-    requestAnimationFrame(() => { syncGuard = false; });
+    releaseSyncGuard();
   };
 
   const onPreviewScroll = () => {
@@ -369,7 +384,7 @@ function bindScrollSync() {
     } else if (cmRef?.scrollToLine) {
       cmRef.scrollToLine(targetLine);
     }
-    requestAnimationFrame(() => { syncGuard = false; });
+    releaseSyncGuard();
   };
 
   editor.addEventListener('scroll', onEditorScroll, { passive: true });
@@ -390,7 +405,7 @@ function bindScrollSync() {
         if (editor.scrollTop <= 0) {
           syncGuard = true;
           preview.scrollTop = 0;
-          requestAnimationFrame(() => { syncGuard = false; });
+          releaseSyncGuard();
           return;
         }
         onEditorScroll();
@@ -407,6 +422,7 @@ function bindScrollSync() {
     preview.removeEventListener('scroll', onPreviewScroll);
     for (const ev of intentEvents) preview.removeEventListener(ev, previewIntent);
     if (activeTimer) clearTimeout(activeTimer);
+    markScrollDriver = null;
   };
 }
 

@@ -4,7 +4,8 @@ import App from './App.vue';
 import { followHtmlLang, isLang, loadLocale } from './i18n';
 import { useSettingsStore } from './stores/settings';
 import { reanchorIosContainerPaths } from './lib/ios-container';
-import { isWindowsDesktop } from './lib/platform';
+import { isMobile, isWindowsDesktop } from './lib/platform';
+import { installNativeMenuGuard } from './lib/native-menu-guard';
 import { preloadRenderDeps } from './lib/render-deps';
 import './styles/cjk-font.css';
 import './styles/main.css';
@@ -39,6 +40,8 @@ const app = createApp(rootComponent);
 const pinia = createPinia();
 app.use(pinia);
 followHtmlLang();
+// No browser Back / Reload / Print menu on app chrome (lib/native-menu-guard).
+installNativeMenuGuard({ mobile: isMobile(), dev: import.meta.env.DEV });
 
 // The locale dictionaries are code-split — only English is bundled, the other
 // 13 are chunks (they were ~1.1 MB inside the entry chunk before). Await the

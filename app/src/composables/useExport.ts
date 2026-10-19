@@ -621,6 +621,40 @@ export function useExport() {
     }
   }
 
+  /**
+   * #427 — Copy rendered Markdown as Word-ready rich HTML + MathML so pasting
+   * into Microsoft Word / WPS Office preserves native equations, multi-line
+   * code blocks, bordered tables, and per-section ordered list numbering.
+   */
+  async function copyAsWord() {
+    const src = copySource();
+    if (!src) return;
+    await loadRenderDeps();
+    const { buildWordClipboardHtml } = await import('../lib/word-clipboard');
+    const wordHtml = buildWordClipboardHtml(renderMarkdown(src.source));
+    const plain = stripMarkdown(src.source);
+    const okMsg = t(src.isSelection ? 'toast.copiedSelectionAsWord' : 'toast.copiedAsWord');
+    if (hasNativeClipboardWrite()) {
+      try {
+        const item = new ClipboardItem({
+          'text/html': new Blob([wordHtml], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        });
+        await navigator.clipboard.write([item]);
+        toasts.success(okMsg);
+        return;
+      } catch {
+        // fall through to Tauri plugin
+      }
+    }
+    try {
+      await writeHtml(wordHtml, plain);
+      toasts.success(okMsg);
+    } catch (e) {
+      toasts.error(t('toast.copyFailed', { error: String(e) }));
+    }
+  }
+
   async function copyAsPlainText() {
     const src = copySource();
     if (!src) return;
@@ -758,6 +792,7 @@ export function useExport() {
     exportPdfPrint,
     exportImage,
     copyAsHtml,
+    copyAsWord,
     copyAsPlainText,
     copyAsMarkdown,
     copyAsImage,

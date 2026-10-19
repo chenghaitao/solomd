@@ -206,6 +206,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
         item('export.pandocCustom', t('cmd.export.pandocCustom')),
         sep,
         item('export.copyHtml', t('cmd.export.copyHtml')),
+        item('export.copyWord', t('cmd.export.copyWord')),
         item('export.copyMd', t('cmd.export.copyMd')),
         item('export.copyPlain', t('cmd.export.copyPlain')),
         item('export.copyImage', t('cmd.export.copyImage')),
@@ -490,7 +491,9 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('help.welcomeTour', t('menubar.welcomeTour')),
     ...(ctx.updateCheckAvailable ? [sep, item('help.checkUpdate', t('menubar.checkUpdate'))] : []),
     sep,
-    item('help.about', t('menubar.about')),
+    // Inside Help the context is clear, so Windows / Linux say just "About"
+    // (user feedback 2026-10-14); macOS keeps the HIG "About SoloMD".
+    item('help.about', mac ? t('menubar.about') : t('menubar.aboutShort')),
   ];
 
   const menus: TopMenu[] = [

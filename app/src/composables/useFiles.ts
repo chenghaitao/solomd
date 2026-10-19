@@ -6,7 +6,7 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { documentDir, desktopDir, homeDir, join } from '@tauri-apps/api/path';
-import { isIOS, isAndroid } from '../lib/platform';
+import { isIOS, isAndroid, isMacOS } from '../lib/platform';
 import { isNarrowViewport } from './useViewport';
 import { useTabsStore } from '../stores/tabs';
 import { useWorkspaceStore } from '../stores/workspace';
@@ -749,6 +749,9 @@ export function useFiles() {
       defaultPath: await pickerStartDir(),
     });
     if (!selected || typeof selected !== 'string') return;
+    if (isMacOS()) {
+      await invoke('macos_bookmark_folder', { path: selected }).catch(() => {});
+    }
     workspace.setFolder(selected);
     if (!settings.showFileTree) settings.toggleFileTree();
   }

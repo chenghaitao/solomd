@@ -760,6 +760,9 @@ watchEffect(() => {
   document.documentElement.setAttribute('data-theme', dataThemeFor(settings.theme, !!settings.customCssPath));
   // 5.0 tokens: the exact default palette stays out of a marketplace theme's way.
   document.documentElement.toggleAttribute('data-custom-theme', !!settings.customCssPath);
+  if (isIOS()) {
+    invoke('ios_set_appearance', { dark: themeFamily(settings.theme) === 'dark' }).catch(() => {});
+  }
   const overriddenBy = settings.customCssPath;
   if (!themeAppliedOnce) {
     themeAppliedOnce = true;
@@ -972,7 +975,15 @@ async function runEditHistory(kind: 'undo' | 'redo') {
       return;
     }
   }
-  document.execCommand(kind);
+  const isExternalInput =
+    active instanceof HTMLElement &&
+    !active.closest('.plain-host') &&
+    (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+  if (isExternalInput) {
+    document.execCommand(kind);
+    return;
+  }
+  window.dispatchEvent(new CustomEvent('solomd:editor-history', { detail: { op: kind } }));
 }
 
 /**
@@ -1181,7 +1192,19 @@ function onWindowFocus() {
  * instead of an empty, unreadable tree.
  */
 async function reconcileIosFolder() {
-  if (!isIOS() || !workspace.currentFolder) return;
+  if (!workspace.currentFolder) return;
+  if (isMacOS()) {
+    try {
+      const reopened = await invoke<string | null>('ios_restore_folder');
+      if (reopened && reopened !== workspace.currentFolder) {
+        workspace.setFolder(reopened);
+      }
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  if (!isIOS()) return;
   try {
     const docs = (await documentDir()).replace(/\/+$/, '');
     const cur = workspace.currentFolder;
@@ -1662,6 +1685,13 @@ function onOpenAgentWizard() {
   wizardOpen.value = true;
 }
 
+function onLeaveCenterOverlay() {
+  if (inboxViewOpen.value) inboxViewOpen.value = false;
+  if (basesOpen.value) basesOpen.value = false;
+  if (typeLensOpen.value) typeLensOpen.value = false;
+  if (viewOpen.value) viewOpen.value = false;
+}
+
 window.addEventListener('solomd:wiki-open', onWikiOpen as EventListener);
 window.addEventListener('solomd:ai-rewrite-accept', onAIRewriteAccept as EventListener);
 window.addEventListener('solomd:ai-rewrite-cancel', onAIRewriteCancel as EventListener);
@@ -1673,6 +1703,7 @@ window.addEventListener(TYPE_LENS_OPEN_EVENT, onOpenTypeLens as EventListener);
 window.addEventListener(TYPE_LENS_CLOSE_EVENT, onCloseTypeLens as EventListener);
 window.addEventListener(VIEW_OPEN_EVENT, onOpenView as EventListener);
 window.addEventListener(VIEW_CLOSE_EVENT, onCloseView as EventListener);
+window.addEventListener('solomd:leave-center-overlay', onLeaveCenterOverlay);
 window.addEventListener('solomd:open-settings', onOpenSettingsEvent as EventListener);
 
 function onPageHide() {
@@ -1698,6 +1729,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('solomd:ai-rewrite-cancel', onAIRewriteCancel as EventListener);
   window.removeEventListener(BASES_OPEN_EVENT, onOpenBases as EventListener);
   window.removeEventListener(BASES_CLOSE_EVENT, onCloseBases as EventListener);
+  window.removeEventListener('solomd:leave-center-overlay', onLeaveCenterOverlay);
   window.removeEventListener(INBOX_OPEN_EVENT, onOpenInbox as EventListener);
   window.removeEventListener(INBOX_CLOSE_EVENT, onCloseInbox as EventListener);
   window.removeEventListener(TYPE_LENS_OPEN_EVENT, onOpenTypeLens as EventListener);

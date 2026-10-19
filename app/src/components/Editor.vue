@@ -82,6 +82,8 @@ import { slashCommandsExtension } from '../lib/cm-slash-commands';
 import { useI18n } from '../i18n';
 import { spellcheckExtension } from '../lib/cm-spellcheck';
 import { spellcheckTheme } from '../lib/cm-spellcheck-theme';
+import { languagetoolExtension, languagetoolHitAt, type LtHit } from '../lib/cm-languagetool';
+import { languagetoolCoversSpelling, ltAddWord, ltDisableRule, ltIgnore, matchWords } from '../lib/languagetool';
 import { usePandocExport } from '../composables/usePandocExport';
 import type { CitationEntry } from '../lib/citations';
 import { taskListExtension } from '../lib/cm-task-list';
@@ -96,6 +98,7 @@ import { useRenderDepsVersion } from '../composables/useRenderDepsVersion';
 import { attachCodeCopyButtons } from '../lib/code-copy';
 import { plantumlSvgUrl } from '../lib/plantuml';
 import { stableClickSelection } from '../lib/cm-stable-click';
+import { cjkDoubleClickSelection } from '../lib/cm-cjk-dblclick';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
 import { SLASH_BLOCKS, filterBlocks, expandSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
@@ -1230,8 +1233,8 @@ function plainSetCaret(pos: number) {
   const el = plainEditor.value;
   if (!el) return;
   const safe = Math.max(0, Math.min(pos, el.value.length));
-  el.focus();
   el.setSelectionRange(safe, safe);
+  el.focus({ preventScroll: true });
   emitPlainCursorAndSelection();
 }
 
@@ -1462,6 +1465,8 @@ function recordPlainHistory() {
 }
 
 function applyPlainContent(content: string, caret: number) {
+  plainSelectAll.value = false;
+  plainSelectAllPending = false;
   plainText.value = content;
   tabs.setContent(props.tab.id, content);
   const safe = Math.max(0, Math.min(caret, content.length));
@@ -1470,14 +1475,14 @@ function applyPlainContent(content: string, caret: number) {
       const el = plainEditor.value;
       if (el) {
         if (el.value !== content) el.value = content;
-        el.focus();
         el.setSelectionRange(safe, safe);
+        el.focus({ preventScroll: true });
       }
       emitPlainCursorAndSelection();
     });
     return;
   }
-  nextTick(() => plainSetCaret(safe));
+  plainSetCaret(safe);
 }
 
 function plainUndo() {
@@ -2119,23 +2124,41 @@ function computePlainTabEdit(
   return { value, selStart, selEnd };
 }
 
+/**
+ * Extract the lowercase letter for a Ctrl/Cmd chord in the plain editor.
+ * On Windows WebView2 with an IME attached (even in English mode), Ctrl+Z/Y/F/A/J
+ * can arrive with `event.key === 'Process'` (`keyCode === 229`) and physical key
+ * in `event.code` (`KeyZ`, etc.) — see `eventToCombo` in `lib/keybindings.ts`.
+ */
+function plainModLetter(event: KeyboardEvent): string {
+  const raw = event.key;
+  if (raw && raw !== 'Process' && event.keyCode !== 229 && raw.length === 1) {
+    return raw.toLowerCase();
+  }
+  if ((raw === 'Process' || event.keyCode === 229) && /^Key[A-Z]$/.test(event.code)) {
+    return event.code.slice(3).toLowerCase();
+  }
+  return '';
+}
+
 /** Shared keydown handling (undo/redo, Tab indent) for the plain editors. */
 function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   const mod = event.ctrlKey || event.metaKey;
-  if (mod && !event.altKey && (event.key === 'f' || event.key === 'F')) {
+  const letter = mod ? plainModLetter(event) : '';
+  if (mod && !event.altKey && letter === 'f') {
     event.preventDefault();
     // #389 — Ctrl/⌘+F opens the find bar, and pressing it again closes it.
     if (plainFindOpen.value) closePlainFind(true);
     else openPlainFind();
     return true;
   }
-  if (mod && !event.altKey && (event.key === 'z' || event.key === 'Z')) {
+  if (mod && !event.altKey && letter === 'z') {
     event.preventDefault();
     if (event.shiftKey) plainRedo();
     else plainUndo();
     return true;
   }
-  if (mod && !event.altKey && (event.key === 'y' || event.key === 'Y')) {
+  if (mod && !event.altKey && letter === 'y') {
     event.preventDefault();
     plainRedo();
     return true;
@@ -2154,7 +2177,7 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   //     a textarea selection there also mirrors into `window.getSelection()`,
   //     so we clear that stray document Range too (harmless on Mac/Linux where
   //     it's already empty).
-  if (mod && !event.altKey && (event.key === 'a' || event.key === 'A')) {
+  if (mod && !event.altKey && letter === 'a') {
     event.preventDefault();
     if (plainLiveEnabled.value) {
       enterPlainSelectAll();
@@ -2172,7 +2195,7 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   // Ctrl/Cmd+J — AI rewrite of the selection (matches cm-ai-rewrite). The
   // overlay + accept path are shared with the CodeMirror editor; accept replaces
   // the (retained) selection via the insert-markdown channel.
-  if (!IS_APP_STORE_BUILD && mod && !event.altKey && (event.key === 'j' || event.key === 'J')) {
+  if (!IS_APP_STORE_BUILD && mod && !event.altKey && letter === 'j') {
     const sel = plainAbsoluteSelection();
     const text = plainSelectionText();
     if (sel && text) {
@@ -2286,7 +2309,13 @@ function plainFirstRowEnd(el: HTMLTextAreaElement, text: string): number {
 }
 
 function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
-  if (plainComposing.value) return;
+  if (plainComposing.value) {
+    if ((event.ctrlKey || event.metaKey) && !event.isComposing) {
+      plainComposing.value = false;
+    } else {
+      return;
+    }
+  }
   if (handleAutocompleteKeydown(event)) return;
   if (handlePlainKeydownShared(event)) return;
   if (handlePlainCrossBlockNav(event)) return;
@@ -2425,7 +2454,13 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
 }
 
 function handlePlainEditorKeydown(event: KeyboardEvent) {
-  if (plainComposing.value) return;
+  if (plainComposing.value) {
+    if ((event.ctrlKey || event.metaKey) && !event.isComposing) {
+      plainComposing.value = false;
+    } else {
+      return;
+    }
+  }
   // Must come before the shared handler: ↑/↓/Enter/Tab/Esc belong to the
   // popup while it is open (Gitee IK6JCC).
   if (handleAutocompleteKeydown(event)) return;
@@ -2692,6 +2727,8 @@ function activatePlainBlock(index: number, caret?: number, holdScroll = false) {
   nextTick(() => {
     const el = plainBlockEditors.value[plainActiveBlock.value];
     if (!el) return;
+    const block = plainBlocks.value[plainActiveBlock.value];
+    if (block && el.value !== block.text) el.value = block.text;
     el.focus({ preventScroll: holdScroll });
     if (caret != null) {
       const pos = Math.max(0, Math.min(caret, el.value.length));
@@ -3183,6 +3220,9 @@ const editorCtx = ref<{
 // #376 — the misspelled word the menu was opened on, for replacing it with a
 // suggestion. `el` is the textarea on the Windows paths, null for CodeMirror.
 let ctxSpell: { el: HTMLTextAreaElement | null; from: number; to: number; word: string } | null = null;
+// The LanguageTool match the menu was opened on (CodeMirror only); when set,
+// `ctxSpell` holds its range and the menu items act on LanguageTool.
+let ctxLt: LtHit | null = null;
 let ctxSeq = 0;
 let ctxTextarea: HTMLTextAreaElement | null = null;
 // #362 — the rendered image the menu was opened on (CodeMirror live-edit
@@ -3216,11 +3256,13 @@ async function onEditorContextMenu(event: MouseEvent) {
   // the pointer's offset in it, and where that line starts in the editor.
   let spellProbe: { el: HTMLTextAreaElement | null; line: string; offset: number; base: number; selFrom: number; selTo: number } | null = null;
   const spellOn = props.spellCheck || settings.spellcheckEnabled;
+  let ltHit: LtHit | null = null;
   if (!usePlainWindowsEditor) {
     hasSelection = !!view && !view.state.selection.main.empty;
     ctxTextarea = null;
+    const pos = view ? view.posAtCoords({ x: event.clientX, y: event.clientY }) : null;
+    if (view && pos != null && settings.ltMode !== 'off') ltHit = languagetoolHitAt(view, pos);
     if (spellOn && view) {
-      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
       if (pos != null) {
         const line = view.state.doc.lineAt(pos);
         const sel = view.state.selection.main;
@@ -3261,8 +3303,21 @@ async function onEditorContextMenu(event: MouseEvent) {
   ctxImage = img instanceof HTMLImageElement && img.src ? img : null;
   const seq = ++ctxSeq;
   ctxSpell = null;
+  ctxLt = null;
   let spell: EditorMenuSpell | null = null;
-  if (spellProbe) {
+  const sel = view?.state.selection.main;
+  if (ltHit && (!hasSelection || (sel && sel.from === ltHit.from && sel.to === ltHit.to))) {
+    ctxLt = ltHit;
+    ctxSpell = { el: null, from: ltHit.from, to: ltHit.to, word: ltHit.text };
+    spell = {
+      word: ltHit.text,
+      suggestions: ltHit.match.replacements,
+      canAdd: ltHit.match.issueType === 'misspelling',
+      message: ltHit.match.message,
+      canIgnore: true,
+      addWords: matchWords(ltHit.text),
+    };
+  } else if (spellProbe) {
     const hit = await lookupMisspelling(spellProbe.line, spellProbe.offset, settings.spellcheckLang);
     if (seq !== ctxSeq) return; // a newer right-click took over
     if (hit) {
@@ -3293,6 +3348,7 @@ function onEditorMenuReplace(word: string) {
   editorCtx.value = null;
   const target = ctxSpell;
   ctxSpell = null;
+  ctxLt = null;
   ctxTextarea = null;
   ctxImage = null;
   if (!target) return;
@@ -3320,11 +3376,26 @@ function onEditorMenuReplace(word: string) {
 async function onEditorMenuAddWord(word: string) {
   editorCtx.value = null;
   ctxSpell = null;
+  const lt = ctxLt;
+  ctxLt = null;
   try {
-    await addToSpellDict(word);
+    if (lt) await ltAddWord(word);
+    else await addToSpellDict(word);
   } catch (err) {
     console.warn('[spellcheck] add to dictionary failed', err);
   }
+  view?.focus();
+}
+
+/** LanguageTool: ignore this match (session) or switch its rule off. */
+function onEditorMenuLtIgnore(disableRule: boolean) {
+  editorCtx.value = null;
+  ctxSpell = null;
+  const lt = ctxLt;
+  ctxLt = null;
+  if (!lt) return;
+  if (disableRule) ltDisableRule(lt.match.ruleId);
+  else ltIgnore(lt.match, lt.text);
   view?.focus();
 }
 
@@ -3645,41 +3716,52 @@ function richExtensionsFor(tab: Tab) {
     // lines + GFM tables into block widgets when the cursor is elsewhere.
     // Cursor enters → widget unmounts → source returns. Image paths
     // resolve via the same extractImageRoot used by Preview/Export.
-    return liveEditExtension([
-      liveBlocksExtension({
-        getImageRoot: () => extractImageRoot(tab.content || ''),
-        getFilePath: () => tab.filePath,
-        // F7 — live tldraw whiteboard theme + writeback.
-        getBoardTheme: () => ({
-          colorScheme: settings.theme === 'dark' ? 'dark' : 'light',
-          locale: settings.language || 'en',
+    return [
+      ...liveEditExtension([
+        liveBlocksExtension({
+          getImageRoot: () => extractImageRoot(tab.content || ''),
+          getFilePath: () => tab.filePath,
+          // F7 — live tldraw whiteboard theme + writeback.
+          getBoardTheme: () => ({
+            colorScheme: settings.theme === 'dark' ? 'dark' : 'light',
+            locale: settings.language || 'en',
+          }),
+          getTabId: () => tab.id,
+          // #354 — diagrams follow the app's light/dark family, like preview.
+          getMermaidTheme: () => mermaidThemeFor(settings.theme),
+          getPlantuml: () => ({
+            enabled: settings.plantumlEnabled,
+            server: settings.plantumlServer,
+          }),
+          // #353 — "Always show Markdown markers": keep every block's source.
+          keepSource: () => settings.alwaysShowMarkers,
+          getBoardStrings: () => ({
+            loading: t('whiteboard.loading'),
+            openFull: t('whiteboard.openFull'),
+            loadFailed: t('whiteboard.loadFailed'),
+          }),
+          onBoardEdit: (boardId, snapshotJson) => {
+            const cur = tabs.tabs.find((x) => x.id === tab.id);
+            if (!cur) return;
+            const next = replaceBoardSnapshot(cur.content || '', boardId, snapshotJson);
+            if (next !== cur.content) tabs.setContent(tab.id, next);
+          },
         }),
-        getTabId: () => tab.id,
-        // #354 — diagrams follow the app's light/dark family, like preview.
-        getMermaidTheme: () => mermaidThemeFor(settings.theme),
-        getPlantuml: () => ({
-          enabled: settings.plantumlEnabled,
-          server: settings.plantumlServer,
-        }),
-        // #353 — "Always show Markdown markers": keep every block's source.
-        keepSource: () => settings.alwaysShowMarkers,
-        getBoardStrings: () => ({
-          loading: t('whiteboard.loading'),
-          openFull: t('whiteboard.openFull'),
-          loadFailed: t('whiteboard.loadFailed'),
-        }),
-        onBoardEdit: (boardId, snapshotJson) => {
-          const cur = tabs.tabs.find((x) => x.id === tab.id);
-          if (!cur) return;
-          const next = replaceBoardSnapshot(cur.content || '', boardId, snapshotJson);
-          if (next !== cur.content) tabs.setContent(tab.id, next);
-        },
-      }),
-      liveBlocksTheme,
-    ], { showMarkers: settings.alwaysShowMarkers });
+        liveBlocksTheme,
+      ], { showMarkers: settings.alwaysShowMarkers }),
+      ...(settings.alwaysShowMarkers ? [] : [taskListExtension(), wikilinkExtension()]),
+    ];
+  }
+  // In 'edit' (源码 / Source mode), always render raw Markdown source — never
+  // hide markers, enlarge headings, or swap task/wikilink syntax for widgets.
+  if (settings.viewMode === 'edit') {
+    return richHighlightOnly();
   }
   return settings.livePreview
-    ? livePreviewExtension({ showMarkers: settings.alwaysShowMarkers })
+    ? [
+        ...livePreviewExtension({ showMarkers: settings.alwaysShowMarkers }),
+        ...(settings.alwaysShowMarkers ? [] : [taskListExtension(), wikilinkExtension()]),
+      ]
     : richHighlightOnly();
 }
 
@@ -3805,7 +3887,6 @@ function buildExtensions() {
     imagePasteExtension(imagePasteOpts()),
     ...(!windowsImeSafeMode && props.tab.language === 'markdown' && !markdownSafeMode
       ? [
-          wikilinkExtension(),
           tagAutocompleteExtension(),
           citationsExtension(() => cachedCitations),
           // #297 — opens itself on the third backtick of a fence opener.
@@ -3829,17 +3910,22 @@ function buildExtensions() {
             activateOnTyping: false,
           }),
           ...(IS_APP_STORE_BUILD ? [] : [aiKeyCompartment.of(aiRewriteExtension(currentAiRewriteKey()))]),
-          spellcheckExtension({ enabled: () => settings.spellcheckEnabled }),
+          // Hunspell steps back while LanguageTool handles spelling, and
+          // takes over again if the LanguageTool server goes away.
+          spellcheckExtension({ enabled: () => settings.spellcheckEnabled && !languagetoolCoversSpelling() }),
           spellcheckTheme,
+          languagetoolExtension({ enabled: () => settings.ltMode !== 'off' }),
           slashCompartment.of(slashExt()),
         ]
       : []),
-    ...(windowsImeSafeMode || markdownSafeMode ? [] : [taskListExtension()]),
     foldCompartment.of(foldExtensionFor(settings.foldingEnabled)),
     sessionRestoreExtension(props.tab.id),
     // #167 — clicks during async widget renders (post tab-switch) must not
     // turn into phantom multi-line selections when the layout shifts.
     stableClickSelection(),
+    // Double-click on CJK picks a word (Intl.Segmenter, same as ⌘D), not the
+    // whole run between two punctuation marks.
+    cjkDoubleClickSelection(),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) {
         const text = u.state.doc.toString();
@@ -3902,7 +3988,9 @@ onMounted(() => {
   window.addEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
   window.addEventListener('solomd:editor-command', onEditorCommand as EventListener);
   window.addEventListener('solomd:editor-history', onEditorHistory as EventListener);
+  window.addEventListener('keydown', onPlainWindowKeydown);
   cleanupTransformCase = () => {
+    window.removeEventListener('keydown', onPlainWindowKeydown);
     window.removeEventListener('solomd:editor-history', onEditorHistory as EventListener);
     window.removeEventListener('solomd:transform-case', onTransformCase as EventListener);
     window.removeEventListener('solomd:format-markdown', onFormatMarkdown as EventListener);
@@ -4205,6 +4293,40 @@ function onEditorHistory(e: Event) {
   }
   if (op === 'redo') plainRedo();
   else plainUndo();
+}
+
+/**
+ * #416 — In the Windows live block editor, each block is its own `<textarea>`
+ * that mounts/unmounts as the active block changes, or loses focus when the
+ * user clicks a rendered block, task checkbox, fold toggle, or blank space.
+ * If Ctrl+Z / Ctrl+Y is pressed while no `<input>`/`<textarea>` has focus,
+ * route it to `plainUndo` / `plainRedo` on the active tab's plain editor.
+ */
+function onPlainWindowKeydown(event: KeyboardEvent) {
+  if (!usePlainWindowsEditor || event.defaultPrevented) return;
+  if (props.tab.id !== tabs.activeId) return;
+  if (settings.viewMode === 'preview' || settings.viewMode === 'reading') return;
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLElement &&
+    (active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.tagName === 'SELECT' ||
+      active.isContentEditable)
+  ) {
+    return;
+  }
+  const mod = event.ctrlKey || event.metaKey;
+  if (!mod || event.altKey) return;
+  const letter = plainModLetter(event);
+  if (letter === 'z') {
+    event.preventDefault();
+    if (event.shiftKey) plainRedo();
+    else plainUndo();
+  } else if (letter === 'y') {
+    event.preventDefault();
+    plainRedo();
+  }
 }
 
 /**
@@ -4926,7 +5048,7 @@ function gotoLine(line: number) {
   const lineObj = view.state.doc.line(safe);
   view.dispatch({
     selection: { anchor: lineObj.from },
-    effects: EditorView.scrollIntoView(lineObj.from, { y: 'start', yMargin: 40 }),
+    effects: EditorView.scrollIntoView(lineObj.from, { y: 'start', yMargin: 8 }),
   });
   view.focus();
 }
@@ -5081,7 +5203,8 @@ function getViewLine(): number | null {
       // Largest line whose measured top is at/above the viewport top, plus
       // the fraction of that line already scrolled past — split-pane sync
       // interpolates on it so the panes stay level inside tall wrapped lines.
-      const y = Math.max(0, top - plainPaddingTopPx(el));
+      // Matches the 8px top margin subtracted in `plainScrollToLine`.
+      const y = Math.max(0, top > 0 ? top - plainPaddingTopPx(el) + 8 : 0);
       let lo = 0;
       let hi = tops.length - 1;
       while (lo < hi) {
@@ -5093,14 +5216,15 @@ function getViewLine(): number | null {
       const frac = h > 0 ? Math.min(0.999, (y - tops[lo]) / h) : 0;
       return lo + 1 + Math.max(0, frac);
     }
-    const line = Math.max(1, Math.floor(top / plainLineHeightPx()) + 1);
+    const line = Math.max(1, Math.floor((top > 0 ? top + 8 : 0) / plainLineHeightPx()) + 1);
     return line;
   }
   if (!view) return null;
   // Block heights are measured from the top of the document; scrollTop also
   // counts the content's top padding above it (56px in 5.0). Mixing the two
-  // put the split panes that far apart.
-  const top = view.scrollDOM.scrollTop - docTopInScroller(view);
+  // put the split panes that far apart. Matches the 8px yMargin in scrollToLine.
+  const rawTop = view.scrollDOM.scrollTop;
+  const top = rawTop > 0 ? rawTop - docTopInScroller(view) + 8 : 0;
   const block = view.lineBlockAtHeight(Math.max(0, top));
   const frac =
     block.height > 0 ? Math.max(0, Math.min(0.999, (top - block.top) / block.height)) : 0;
@@ -5462,6 +5586,8 @@ const cls = computed(() => ({
       @action="onEditorMenuAction"
       @replace="onEditorMenuReplace"
       @add-word="onEditorMenuAddWord"
+      @lt-ignore="onEditorMenuLtIgnore(false)"
+      @lt-disable-rule="onEditorMenuLtIgnore(true)"
       @close="editorCtx = null"
     />
   </Teleport>
@@ -5967,7 +6093,6 @@ const cls = computed(() => ({
   margin: 1.6em 0;
 }
 .plain-block__render :deep(img) {
-  display: block;
   max-width: 100%;
   height: auto;
   border-radius: 6px;

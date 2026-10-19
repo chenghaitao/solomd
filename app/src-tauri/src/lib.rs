@@ -6,6 +6,8 @@ pub mod image_upload;
 pub mod search;
 pub mod workspace_index;
 pub mod spellcheck;
+// LanguageTool grammar / style checking — local server, Premium or public API.
+pub mod languagetool;
 // #102 — cross-platform AI key storage (OS keyring + Android encrypted-file
 // fallback). Declared before ai_proxy, which delegates to it.
 pub mod ai_keystore;
@@ -154,9 +156,12 @@ pub fn run() {
             // catch documents opened in place from the Files app before tao
             // drops their security scope (setup runs inside
             // didFinishLaunching, ahead of a cold launch's open-URL call).
-            #[cfg(target_os = "ios")]
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
             {
                 let _ = ios_folder::ios_restore_folder(app.handle().clone());
+            }
+            #[cfg(target_os = "ios")]
+            {
                 ios_folder::hook_open_url();
             }
             // Show the window only after first paint to suppress the
@@ -189,7 +194,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_build::app_build_info,
             ios_folder::ios_pick_folder,
+            ios_folder::macos_bookmark_folder,
             ios_folder::ios_restore_folder,
+            ios_folder::ios_set_appearance,
             ios_folder::ios_scoped_files,
             commands::read_file,
             commands::read_binary_file,
@@ -239,6 +246,13 @@ pub fn run() {
             spellcheck::spellcheck_load_user_dict,
             spellcheck::spellcheck_list_dicts,
             spellcheck::spellcheck_dicts_dir,
+            languagetool::languagetool_check,
+            languagetool::languagetool_detect,
+            languagetool::languagetool_set_api_key,
+            languagetool::languagetool_has_api_key,
+            languagetool::languagetool_clear_api_key,
+            languagetool::languagetool_words_add,
+            languagetool::languagetool_words_list,
             ai_proxy::ai_set_key,
             ai_proxy::ai_has_key,
             ai_proxy::ai_clear_key,

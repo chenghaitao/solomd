@@ -100,6 +100,7 @@ interface Settings {
    *  restores all previously-enabled panes in their previous state. */
   rightSidebarHidden: boolean;
   livePreview: boolean;
+  v503SourceModeMigrated?: boolean;
   // Editor super features
   spellCheck: boolean;
   focusMode: boolean;
@@ -390,6 +391,25 @@ interface Settings {
   // becomes selectable. Kept separate from the UI `language` setting: people
   // routinely run an English interface while writing Spanish.
   spellcheckLang: string;
+  // LanguageTool grammar / style checking (lib/languagetool.ts). Off by
+  // default: 'local' talks to a server the user runs, 'premium' and 'public'
+  // send text to languagetool.org, which Settings states plainly. The Premium
+  // API key lives in the OS keychain, never here.
+  ltMode: LtMode;
+  ltLocalUrl: string;
+  /** Premium account e-mail (LanguageTool's `username`). */
+  ltUsername: string;
+  /** 'auto' or a LanguageTool code (`de-DE`); a note's front matter `lang:` wins. */
+  ltLanguage: string;
+  ltMotherTongue: string;
+  /** With 'auto': variants to prefer, e.g. `en-GB,de-DE`. */
+  ltPreferredVariants: string;
+  ltLevel: 'default' | 'picky';
+  ltDisabledRules: string[];
+  /** Words the user accepted from a LanguageTool spelling match. */
+  ltUserWords: string[];
+  /** Check the whole note in the background, not just what's on screen. */
+  ltCheckWholeDoc: boolean;
   smartQuotes: boolean;
   /** #180 — per-action shortcut overrides. Only what the user changed is
    *  stored; a `null` value means they unbound the action entirely, and a
@@ -619,7 +639,8 @@ function defaults(): Settings {
     // 5.0 — writing first: a new install opens on the text alone; the right
     // sidebar is one click (or ⌘⌥B) away. Saved settings are untouched.
     rightSidebarHidden: true,
-    livePreview: true,
+    livePreview: false,
+    v503SourceModeMigrated: true,
     spellCheck: true,
     focusMode: false,
     toolbarHidden: false,
@@ -737,6 +758,16 @@ function defaults(): Settings {
     markdownListContinue: true,
     markdownAutoNumber: true,
     spellcheckLang: 'en_US',
+    ltMode: 'off',
+    ltLocalUrl: 'http://localhost:8081',
+    ltUsername: '',
+    ltLanguage: 'auto',
+    ltMotherTongue: '',
+    ltPreferredVariants: '',
+    ltLevel: 'default',
+    ltDisabledRules: [],
+    ltUserWords: [],
+    ltCheckWholeDoc: false,
     smartQuotes: false,
     keybindings: {},
     smartQuotesOptInMigrated: true,
@@ -814,6 +845,17 @@ export function clampSplitRatio(n: unknown): number {
   return Math.round(Math.max(SPLIT_RATIO_MIN, Math.min(SPLIT_RATIO_MAX, v)) * 10) / 10;
 }
 
+export type LtMode = 'off' | 'local' | 'premium' | 'public';
+export const LT_MODES: readonly LtMode[] = ['off', 'local', 'premium', 'public'];
+
+/** Keep only the strings of a saved list (tampered / older blobs). */
+function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : [];
+}
+
+/** Fired after any LanguageTool setting changes, so open editors re-check. */
+export const LT_SETTINGS_CHANGED_EVENT = 'solomd:languagetool-settings-changed';
+
 function load(): Settings {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -841,6 +883,10 @@ function load(): Settings {
         }
       }
       merged.splitRatio = clampSplitRatio(merged.splitRatio);
+      if (!LT_MODES.includes(merged.ltMode)) merged.ltMode = 'off';
+      if (merged.ltLevel !== 'picky') merged.ltLevel = 'default';
+      merged.ltDisabledRules = stringList(parsed.ltDisabledRules);
+      merged.ltUserWords = stringList(parsed.ltUserWords);
       // The old default Ctrl+Alt+M was also the formula editor's chord, and
       // the global registration always won. Users who never changed it move to
       // the new default; a chord someone picked is theirs to keep.
@@ -913,6 +959,10 @@ function load(): Settings {
       // Drop them once; nothing reads them any more.
       delete (merged as unknown as Record<string, unknown>).telemetryEnabled;
       delete (merged as unknown as Record<string, unknown>).telemetryNoticeAck;
+      if (!parsed.v503SourceModeMigrated) {
+        merged.livePreview = false;
+        merged.v503SourceModeMigrated = true;
+      }
       // D6 — a theme outside the built-in list (e.g. a hand-edited or
       // MCP-written 'system') rendered as a bare white page; reset it to the
       // default, and treat a literal 'system' as the follow-OS option.
@@ -1216,8 +1266,12 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
     toggleLivePreview() {
-      this.livePreview = !this.livePreview;
-      this.persist();
+      if (this.viewMode === 'split') {
+        this.livePreview = !this.livePreview;
+        this.persist();
+        return;
+      }
+      this.setViewMode(this.viewMode === 'liveEdit' ? 'edit' : 'liveEdit');
     },
     toggleSpellCheck() {
       this.spellCheck = !this.spellCheck;
@@ -1636,6 +1690,25 @@ export const useSettingsStore = defineStore('settings', {
     setSpellcheckLang(code: string) {
       this.spellcheckLang = code || 'en_US';
       this.persist();
+    },
+    /** Patch any LanguageTool setting(s); open editors re-check. */
+    setLanguageTool(patch: Partial<Pick<Settings,
+      'ltMode' | 'ltLocalUrl' | 'ltUsername' | 'ltLanguage' | 'ltMotherTongue'
+      | 'ltPreferredVariants' | 'ltLevel' | 'ltDisabledRules' | 'ltUserWords' | 'ltCheckWholeDoc'>>) {
+      Object.assign(this, patch);
+      this.persist();
+      try {
+        window.dispatchEvent(new CustomEvent(LT_SETTINGS_CHANGED_EVENT));
+      } catch {}
+    },
+    ltDisableRule(ruleId: string) {
+      if (!ruleId || this.ltDisabledRules.includes(ruleId)) return;
+      this.setLanguageTool({ ltDisabledRules: [...this.ltDisabledRules, ruleId] });
+    },
+    ltAddUserWord(word: string) {
+      const w = word.trim();
+      if (!w || this.ltUserWords.includes(w)) return;
+      this.setLanguageTool({ ltUserWords: [...this.ltUserWords, w] });
     },
     toggleSmartQuotes() {
       this.smartQuotes = !this.smartQuotes;

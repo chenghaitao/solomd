@@ -28,6 +28,12 @@ export interface EditorMenuSpell {
   word: string;
   suggestions: string[];
   canAdd: boolean;
+  /** LanguageTool: the explanation shown above the suggestions. */
+  message?: string;
+  /** LanguageTool: offer "Ignore" and "Disable rule". */
+  canIgnore?: boolean;
+  /** LanguageTool: a match covering several words gets one "Add" per word. */
+  addWords?: string[];
 }
 
 // `hasImage`: the right-click landed on a rendered image (#362) — offer
@@ -43,6 +49,8 @@ const emit = defineEmits<{
   (e: 'action', id: EditorMenuAction): void;
   (e: 'replace', word: string): void;
   (e: 'add-word', word: string): void;
+  (e: 'lt-ignore'): void;
+  (e: 'lt-disable-rule'): void;
   (e: 'close'): void;
 }>();
 
@@ -119,6 +127,7 @@ onBeforeUnmount(() => {
     @contextmenu.prevent
   >
     <template v-if="props.spell">
+      <div v-if="props.spell.message" class="editor-ctx__message">{{ props.spell.message }}</div>
       <button
         v-for="s in props.spell.suggestions"
         :key="'sugg-' + s"
@@ -129,7 +138,7 @@ onBeforeUnmount(() => {
         @mousedown.prevent
         @click="emit('replace', s)"
       >
-        <span class="editor-ctx__label">{{ s }}</span>
+        <span class="editor-ctx__label">{{ s === '' ? t('languagetool.remove') : s }}</span>
       </button>
       <button
         v-if="props.spell.suggestions.length === 0"
@@ -143,8 +152,22 @@ onBeforeUnmount(() => {
       >
         <span class="editor-ctx__label">{{ t('spellcheck.noSuggestions') }}</span>
       </button>
+      <template v-if="props.spell.canAdd && props.spell.addWords && props.spell.addWords.length > 1">
+        <button
+          v-for="w in props.spell.addWords"
+          :key="'add-' + w"
+          type="button"
+          role="menuitem"
+          class="editor-ctx__item"
+          data-action="addToDict"
+          @mousedown.prevent
+          @click="emit('add-word', w)"
+        >
+          <span class="editor-ctx__label">{{ t('languagetool.addWord', { word: w }) }}</span>
+        </button>
+      </template>
       <button
-        v-if="props.spell.canAdd"
+        v-else-if="props.spell.canAdd"
         type="button"
         role="menuitem"
         class="editor-ctx__item"
@@ -154,6 +177,28 @@ onBeforeUnmount(() => {
       >
         <span class="editor-ctx__label">{{ t('spellcheck.addToDict') }}</span>
       </button>
+      <template v-if="props.spell.canIgnore">
+        <button
+          type="button"
+          role="menuitem"
+          class="editor-ctx__item"
+          data-action="ltIgnore"
+          @mousedown.prevent
+          @click="emit('lt-ignore')"
+        >
+          <span class="editor-ctx__label">{{ t('languagetool.ignore') }}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          class="editor-ctx__item"
+          data-action="ltDisableRule"
+          @mousedown.prevent
+          @click="emit('lt-disable-rule')"
+        >
+          <span class="editor-ctx__label">{{ t('languagetool.disableRule') }}</span>
+        </button>
+      </template>
     </template>
     <template v-for="item in items" :key="item.id">
       <div v-if="item.sep" class="editor-ctx__sep" />
@@ -207,6 +252,14 @@ onBeforeUnmount(() => {
 }
 .editor-ctx__item--suggestion {
   font-weight: 600;
+}
+.editor-ctx__message {
+  max-width: 300px;
+  padding: 4px 10px 6px;
+  color: var(--text-muted, var(--text));
+  font-size: 12px;
+  line-height: 1.4;
+  user-select: text;
 }
 .editor-ctx__item:disabled {
   color: var(--text-faint);
