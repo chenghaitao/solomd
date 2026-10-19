@@ -2,26 +2,101 @@
 
 本仓库是 **[zhitongblog/solomd](https://github.com/zhitongblog/solomd)** 的 fork（**chenghaitao/solomd**）。
 
-本文件只记录 **本 fork 自己的改动**，以及 **与上游的功能点差异**。上游发布的 v4.x 功能请见上游仓库的
-Releases；每次合并上游的节点单独记在「上游同步」一节里。
+本文件记录 **本仓库自己的改动**、**与上游的功能点差异**，以及每次同步上游的处理过程。
+上游发布的功能请见上游仓库的 Releases。
+
+本仓库是个人使用的分支：功能与产品方向以上游为准，这里只做本地需要的改动。
 
 几条约定：
 
-- **版本号沿用上游的序号**，因此可能与上游重号（上游先占了 4.14.0 / 4.14.1，本 fork 用
-  4.14.1 / 4.14.2 / 4.14.3 与之区分）。自 5.0.0 起与上游同号 —— 本 fork 就是"上游 5.0.0 减去
-  推广/遥测/商店分发，再加上本地自研修复"。**上游已合并但尚未发版的小补丁，本 fork 会先走一个小版本号
-  （如 5.0.0 → 5.0.1）**，因此有时会跑在上游前面。
+- **版本号沿用上游的序号**，因此可能与上游重号（上游先占了 4.14.0 / 4.14.1，本仓库用
+  4.14.1 / 4.14.2 / 4.14.3 与之区分）。自 5.0.0 起与上游同号，代码以上游为基线，另叠加本地改动与修复。
+  **上游已合并但尚未发版的小补丁，本仓库会先走一个小版本号（如 5.0.0 → 5.0.1）**，
+  因此有时会跑在上游前面。
 - 拉取上游一律 `git fetch upstream --no-tags`：两边都有 `v4.13.3` 标签，带 `--tags` 会被拒或被
   `--force` 悄悄改写本地标签。
-- 本 fork 的 release 由 CI 产出，默认是 **draft**，需要在 GitHub 上手动 Publish 才对外可见。
+- 本仓库的 release 由 CI 产出，默认是 **draft**，需要在 GitHub 上手动 Publish 才对外可见。
+
+---
+
+## [5.0.4] — 2026-10-19
+
+一条线：**把格式栏的表格入口补齐** —— 尺寸对话框与网格编辑器各归各位，表格编辑器的对齐组补上说明；
+**同步上游 14 个提交**（LanguageTool 语法检查、1013 反馈批次、Word 导出与平台修复、CodeMirror 源码模式回归）。
+
+### 1. 格式栏的表格入口
+
+表格图标的悬停面板原本只有网格拖拽与「可视化编辑…」两条通道，而后一条**接错了线**：它派发的是
+`insert.table`，弹出来的还是插入尺寸对话框，网格编辑器从工具栏根本进不去。现在四条通道各司其职 ——
+
+| 操作 | 结果 |
+|---|---|
+| 点表格图标 | 打开尺寸对话框（`insert.table`） |
+| 悬停网格按住拖拽 | 直接插入对应尺寸的表格 |
+| 「自定义表格…（3 × 2）」 | 打开尺寸对话框（新增一行） |
+| 「可视化编辑…」 | 打开**网格编辑器**（`editor.tableEditor`），编辑光标所在的那张表 |
+
+- **括号里的数字取 `INSERT_TABLE_DEFAULT_COLS/ROWS`（3 × 2）**，即对话框实际打开时的默认值。
+  `#387` 定下对话框不记忆上次尺寸，所以这里不能填网格读数 —— 那会承诺一个对话框不会显示的尺寸。
+  新键 `formatBar.tableCustom`，带 `{cols}` / `{rows}` 占位符，15 个语言。
+- 「可视化编辑…」排在「自定义表格…」之后，顺序与插入的先后习惯一致（先定尺寸，再改内容）。
+- `editor.tableEditor` 只编辑**光标所在**的表格，不在表格内时走既有提示 `tableEditor.notInTable`。
+
+### 2. 表格编辑器对齐组的提示
+
+四个对齐按钮此前只有字形、没有 `title`，悬停什么都不显示（行 / 列的增删按钮本来就有）。补齐 4 个键，
+15 个语言：`tableEditor.alignDefault` / `alignLeft` / `alignCenter` / `alignRight`。
+
+留空的那一项读作**「默认对齐」而不是「左对齐」** —— 它的实际含义是分隔行不加冒号、由阅读器决定对齐方式，
+写成「左对齐」会与实际行为不符。
+
+### 3. 同步上游 14 个提交
+
+| 上游提交 | 内容 | 处置 |
+|---|---|---|
+| `874aa491` / `a3f159cb` | **LanguageTool 语法与风格检查**（本地服务、Premium、公共 API 三种接法；`cm-languagetool.ts` 装饰层、`lt-annotate.ts` 标注、设置页一节） | 取用（产品功能，+4,083 行） |
+| `1aba1d7a` | 1013 反馈批次：CJK 双击分词（`Intl.Segmenter`）、非编辑区屏蔽默认右键菜单、设置搜索框焦点环、单文件时侧栏「上一级」按钮、纯文本编辑器 IME 组合键（#416）、分栏视图焦点滚动（#414）、切换笔记时关闭 Inbox / Bases / TypeLens 浮层（#411）、行内并排 `<img>`（#257）、PDF 导出遮罩 `pointer-events`（#378）、CJK 校对批量应用前确认 | 取用 |
+| `493fc6bd` | CodeMirror **纯源码模式回归**修复；幻灯片加浅色主题与字号缩放 | 取用（回归修复） |
+| `a7dc9457` | Word 导出列表编号与复制为 Word（#427）、iPadOS 设置页与外观（#425 #426）、macOS 文件夹授权（#428）、Windows ShellNew（#429）、DevTools 快捷键（#423） | 取用 |
+| `8b4384ab` | 撤销上一版「下载链接回退到 5.0.0」 | 取用（官网） |
+| `68b5d1fd` `d89a1081` `7d9ee76b` `fbdfae77` | 上游把版本号 bump 到 5.0.2，并同步官网、`Cargo.lock`、mcpb manifest | **以本仓库为准**，app 保持 5.0.4 |
+| `f7f90a53` `78576de7` `1751eef2` `66dddd9c` | 上游 bump 到 5.0.3，官网文案同步，`release.sh` 里补 `Cargo.lock` / mcpb manifest 同步与 iOS `AccentColor`，MAS 版本默认取 `package.json` | 版本号同样以本仓库为准；脚本与官网文案取用 |
+
+上游对官网（`web/`）这轮只有文档与文案更新，没有带回遥测或推广相关内容 —— 合并后 `promote` 页面、
+`api/track`、`ANALYTICS.md` 依旧不存在，隐私页也没有「匿名统计」表述。`app-store/` 本轮零改动。
+
+### 4. 合并冲突处置
+
+| 文件 | 处置 |
+|---|---|
+| `README.md` / `README.zh.md` / `web/public/sponsors.json` | 取本仓库侧 |
+| `app/src/stores/settings.ts` | 两边都留：本地对 `telemetryEnabled` / `telemetryNoticeAck` 的清理迁移 + 上游新增的 `v503SourceModeMigrated`（把旧的 `livePreview=false` 迁到 `viewMode`） |
+| `app/src/components/SettingsPanel.vue` | 设置搜索框焦点环的裁切，两边都动过：保留本地的 sticky 搜索行（`padding: 6px 24px 12px`、背景 `var(--bg)`），同时接受上游收紧的表头内边距，两者叠加后总间距 12px |
+| `app/src/components/Slideshow.vue` | 保留本地已多语言化的模板，把上游新增的控件移植进来：主题切换、字号缩放（− / % / +）、两行帮助与改写的提示语，新增 7 个 `slideshowHelp` 键（15 个语言）；`readInitialThemeAndLang` 的返回值收敛为 `{theme}`，随之删掉已无用的 `isZh` |
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `vue-tsc --noEmit` | 退出 0 |
+| `node --test` | **510 / 510 通过**（含上游 LanguageTool 新增用例） |
+| `vite build` | 成功，入口 `index-*.js` **897.10 kB**（gzip 286.26 kB） |
+| vendor 分包 | **1,738.17 kB / gzip 530.02 kB**，与上一版逐字节一致 |
+
+### 说明
+
+- **版本号取 5.0.4**：上游已发布 5.0.2 / 5.0.3，tag 已被占用。
+- 本文件的叙事口径本版做了统一：只记录**本地做了什么、为什么这么做**。功能与产品方向以上游为准，
+  这个仓库只保留自己需要的那部分改动。
+- 上游的 `#378`（PDF 导出遮罩挡住窗口拖动）与本仓库记录的 `#378`（Windows 窗口阴影）是同一个 issue 编号下的
+  两件事，互不覆盖，都在。
 
 ---
 
 ## [5.0.3] — 2026-10-14
 
 一条线：**撤销 5.0.2 刚上的自研「修复格式」引擎**（一次点击连带改多处、不可控），**同步上游 5 个提交**，
-并把 **`web/` 官网与 `app-store/` 商店素材恢复与上游保持一致** —— 同步的同时把 fork 的立场（无遥测、无推广）
-重新贴回官网。
+并把 **`web/` 官网与 `app-store/` 商店素材恢复与上游保持一致** —— 同步之后再贴回本仓库对官网的本地改动。
 
 ### 1. 撤销自研的 Markdown「修复格式」引擎
 
@@ -49,15 +124,15 @@ Releases；每次合并上游的节点单独记在「上游同步」一节里。
 | 上游提交 | 内容 | 处置 |
 |---|---|---|
 | `371f37fd` | `fix(sidebar): show sidebar collapse button on Windows and Linux too` | **取用**（真实产品修复） |
-| `78dc6479` | 致谢名单补一位测试者 | 取用（名单数据，无推广位） |
-| `1889ef67` / `46af04ee` | 上游把版本号 bump 到 5.0.1（含 `mcp-server`） | **以 fork 为准**，app 保持 5.0.3 |
+| `78dc6479` | 致谢名单补一位测试者 | 取用（名单数据） |
+| `1889ef67` / `46af04ee` | 上游把版本号 bump 到 5.0.1（含 `mcp-server`） | **以本仓库为准**，app 保持 5.0.3 |
 | `73c88c2d` | 官网下载链接回退 5.0.0、等 5.0.1 发版 | 由第 3 节的整目录同步吸收 |
 
-README（中英）与 `web/public/sponsors.json` 的冲突按 **fork 侧** 解决。
+README（中英）与 `web/public/sponsors.json` 的冲突按 **本仓库一侧** 解决。
 
-### 3. `web/` 与 `app-store/` 恢复与上游同步（同步的同时保住立场）
+### 3. `web/` 与 `app-store/` 恢复与上游同步（同步的同时保留本地改动）
 
-做法是**先整目录取上游**（`git checkout upstream/main -- web app-store`），再把 fork 的去遥测 / 去推广改造
+做法是**先整目录取上游**（`git checkout upstream/main -- web app-store`），再把本仓库对官网的本地改动
 **逐处重新贴回**（补丁 `git apply` 打不上 —— 上游相关行已重构，改为逐条精确替换）。
 
 | 目录 | 规模 |
@@ -65,16 +140,16 @@ README（中英）与 `web/public/sponsors.json` 的冲突按 **fork 侧** 解�
 | `app-store/` | **369 个纯新增、0 删除**：4.14.5–4.14.11 各语言发版说明 + `app-store/v5/` 商店素材（截图、`shared.json`） |
 | `web/` | 59 个文件（24 新增 / 35 修改）：官网样式、v5 截图、i18n、隐私 / 安全 / 设置文档页 |
 
-同步后**必须再贴回**的部分（否则立场直接回退）：
+同步后**必须再贴回**的部分（否则会被上游内容覆盖）：
 
-| 剔除对象 | 涉及文件 |
+| 不纳入的内容 | 涉及文件 |
 |---|---|
 | 遥测服务端 | `web/functions/api/track.ts`、`web/functions/api/admin/stats.ts`、`web/ANALYTICS.md` |
 | 推广计划页与组件 | `components/Promote.astro`、`pages/promote.astro`、`pages/zh/promote.astro`；`lib/supporters.ts` 里的 promoter 与 `PROMOTE_*` 常量 |
 | 首页推广横幅 | `Hero.astro` 的 `PROMOTE_BANNER` 与 `.brand-update-banner` 样式 |
 | 返利码埋点 | `Layout.astro` 里那段 `?ref=` → `/api/track` 的 `sendBeacon` 脚本 |
 | 赞助组件里的推广块 | `Sponsor.astro` 的 `.promote-card` / `.promote-featured` / `.promote-quote`；致谢页的「推广者 / Promoters」分区 |
-| 文案里的假陈述 | 隐私政策（中英）、安全白皮书（中英）、`FactPack`、`translations.ts`、对比页 —— 「匿名统计可关」一律改成「完全无遥测」 |
+| 官网文案 | 隐私政策（中英）、安全白皮书（中英）、`FactPack`、`translations.ts`、对比页 —— 统计相关表述改为与实际行为一致 |
 
 ### 验证
 
@@ -87,16 +162,16 @@ README（中英）与 `web/public/sponsors.json` 的冲突按 **fork 侧** 解�
 
 ### 说明
 
-- **本版把「上游同步」拆成了两笔提交**：一笔是纯上游内容（`web/` + `app-store/`），另一笔是把 fork 的
-  去遥测 / 去推广改造重新贴回。撤销修复引擎另有独立提交，互不混装，便于逐笔审阅。
+- **本版把「上游同步」拆成了两笔提交**：一笔是纯上游内容（`web/` + `app-store/`），另一笔是对官网的
+  本地改动。撤销修复引擎另有独立提交，互不混装，便于逐笔审阅。
 - 官网那篇文章 `blog/v3-5-5-font-fix-self-hosted-analytics` 仍保留原样 —— 它是历史记录，写法上提到
-  `api/track` 与 `web/ANALYTICS.md`，这两者在本 fork 已不存在；如需一并改写请单独提。
+  `api/track` 与 `web/ANALYTICS.md`，这两者在本仓库已不存在；如需一并改写请单独提。
 
 ---
 
 ## [5.0.2] — 2026-10-14
 
-一条线：**本 fork 自研改动，无上游同步**。六件事 —— 新增**页面内格式工具栏**（设置里可关）；
+一条线：**本仓库自研改动，无上游同步**。六件事 —— 新增**页面内格式工具栏**（设置里可关）；
 设置页高度改为可拖拽调整，基础页的 29 项设置搬进新的「编辑」分类；「设为默认编辑器」的提示不再固定英文；
 窄窗口下标题栏不再压住菜单栏；标签页标出已经被删掉的文件；「修复格式」换成一个真的会修 **Markdown 语法**
 的自研引擎（原先只是 Prettier 重排）。
@@ -270,7 +345,7 @@ Windows 无边框标题栏里 `文件名 — SoloMD` 居中显示，菜单（文
 
 上游 `03d38a68..353f95aa`：**3 个提交**、**4 个文件**、+155 / −18。
 分叉点 `03d38a68` 正是上次同步（5.0.0）合并的上游 tip，两侧边界干净。
-这 4 个文件 fork 侧**从未改过**（`git log 03d38a68..HEAD -- <4 files>` 为空），
+这 4 个文件本仓库一侧**从未改过**（`git log 03d38a68..HEAD -- <4 files>` 为空），
 因此 `git merge upstream/main` **一次干净通过，无冲突**，无异于常规重放。
 
 | 上游提交 | 内容 | 落地文件 |
@@ -283,7 +358,7 @@ Windows 无边框标题栏里 `文件名 — SoloMD` 居中显示，菜单（文
 不算 `deep` 的反链，而传 `list_notes` 返回的 `deep.md` 也匹配不到任何东西。现在按 `#278` 起 App 侧
 解析器的同一套规则匹配。
 
-**排除项**：本轮上游未触及 `web/` / `app-store/` / `server.json` / 推广 / 遥测，无需回退；
+**排除项**：本轮上游未触及 `web/` / `app-store/` / `server.json`，无需回退；
 合并后排除项**零回流**。MCP 源码属**产品功能**，原样跟进。
 
 ### 已发现的既有缺陷（不属本次同步，本轮未修）
@@ -313,7 +388,7 @@ if raw.components().any(|c| matches!(c, Component::ParentDir)) { return Err(...)
 
 对 verbatim 路径**静默失效**。上游 CI 只跑 `app/src-tauri` 的 `cargo test --lib/--bin`，
 **不跑 `mcp-server`**，所以这个失败在 CI 里从未暴露。
-按 fork 立场「MCP 源码原样保留、跟进上游修复」，本轮**不擅自改**，另行向上游报。
+MCP 源码按**产品功能**处理，跟随上游修复；本轮**不擅自改**，另行向上游报。
 
 ### 验证
 
@@ -332,8 +407,8 @@ if raw.components().any(|c| matches!(c, Component::ParentDir)) { return Err(...)
 
 一条线：**同步上游 129 个提交**（上游 4.14.11 → **5.0.0**，即 `feat/v5-ui` 大版本合并）。
 v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板解剖、手机外壳、模糊命令匹配、
-真正的「跟随系统」主题等。上游的推广 / 赞助 / 遥测 / 商店与 MCP 分发登记一律不落地；
-本 fork 的 9 项自研修复（#395 #390 #381 #389 #387 #385 #384 #382 #378）与构建脚本全部保留。
+真正的「跟随系统」主题等。上游的推广、赞助、遥测、商店分发与 MCP 登记相关内容不纳入；
+本仓库的 9 项自研修复（#395 #390 #381 #389 #387 #385 #384 #382 #378）与构建脚本全部保留。
 
 ### 上游同步
 
@@ -342,14 +417,14 @@ v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板
 
 落地方式沿用上次：**真实 `git merge upstream/main`，在冲突处逐个取舍**。初始 34 个冲突文件，
 回退 `web/` 与 `app-store/` 后剩 **24 个**，其中 18 个需人工取舍，其余重叠文件由 git 自动合并。
-合并后相对 fork HEAD 净改动 **391 个文件**（新增 218 / 修改 172 / 删除 1）。
+合并后相对本仓库 HEAD 净改动 **391 个文件**（新增 218 / 修改 172 / 删除 1）。
 
-**排除（不落地）**
+**排除（不纳入）**
 
 | 项 | 上游 5.0 的内容 | 处置 |
 |---|---|---|
-| 遥测 | 重新引入 `TelemetryBanner.vue`、设置页「匿名用量」开关、`lib/telemetry.ts`、各处的 `track(...)` | 全不落地；`TelemetryBanner.vue` 删除，`settings.ts` 保留迁移代码继续清理 `telemetryEnabled` / `telemetryNoticeAck` |
-| 求 star / 推广 | `scheduleStarPrompt` 一类提醒、`AboutDialog` 的 promoters 区块与 promote 按钮 | 不落地（fork 原有的 sponsors / testers 感谢名单保留） |
+| 遥测 | 重新引入 `TelemetryBanner.vue`、设置页「匿名用量」开关、`lib/telemetry.ts`、各处的 `track(...)` | 删除；`settings.ts` 保留迁移代码继续清理 `telemetryEnabled` / `telemetryNoticeAck` |
+| star 提醒 / 推广 | `scheduleStarPrompt` 一类提醒、`AboutDialog` 的 promoters 区块与 promote 按钮 | 不纳入（原有的 sponsors / testers 感谢名单保留） |
 | App Store / 商店分发 | `app-store/` 整目录、`scripts/asc-apply-metadata.py`、`asc-upload-screenshots.py`、`verify-mac-signed-interactive.py` | 整目录回退 + 脚本删除 |
 | 官网 `web/` | 5.0 版站点、真实截图、whats-new、llms | 整目录回退（仍冻结在 4.14.x） |
 | MCP Registry 登记 | `server.json` | 冻结；`mcp-server/src` 作为**产品功能**原样跟进（mcpb manifest 已随版本号到 5.0.0） |
@@ -375,8 +450,8 @@ v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板
 
 | 内容 | 备注 |
 |---|---|
-| `fix(render): preserve URL-valued Markdown link labels (#395)` | **与 fork 4.14.12 的方案一致**（按位置判断前一兄弟是 `(` 的 `LinkMark`）；fork 保留抽取出来的 `lib/link-destination.ts` + 8 例单测 |
-| `fix(table): guard table editor draft against backdrop click and background tab closure (#381, #390)` | 上游也独立做了；fork 保留自己的「应用 / 丢弃 / 取消」浮层，**接入上游的 `solomd:table-close-request` 事件**（App.vue / useShortcuts 派发） |
+| `fix(render): preserve URL-valued Markdown link labels (#395)` | **与本地 4.14.12 的方案一致**（按位置判断前一兄弟是 `(` 的 `LinkMark`）；本仓库保留抽取出来的 `lib/link-destination.ts` + 8 例单测 |
+| `fix(table): guard table editor draft against backdrop click and background tab closure (#381, #390)` | 上游也独立做了；本仓库保留自己的「应用 / 丢弃 / 取消」浮层，**接入上游的 `solomd:table-close-request` 事件**（App.vue / useShortcuts 派发） |
 | `fix(session): remember the caret per tab`、`fix(editor): a new note takes focus`、`fix(fs): save UTF-16LE/BE files as UTF-16`、`fix(docx): keep math in Word export`、`fix(export): embed relative images, drop front matter`、`fix(format): code block and bold/italic toggle off from inside`、`fix(commands): transforms read the editor's current text`、`fix(quick-switcher): stop offering renamed and deleted files`、`fix(backlinks): file-absolute link lines`、`fix(split): the panes line up again` 等 | 全部纳入 |
 
 工程 / 测试
@@ -384,10 +459,10 @@ v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板
 | 上游提交 | 内容 |
 |---|---|
 | `test: one command for the frontend unit tests, and CI runs them` | `app/scripts/run-tests.sh` + `.github/workflows/tests.yml`（node:test + Rust lib 测试） |
-| `test-hooks.mjs`（随上一条） | **Node 解析钩子：无扩展名相对导入自动补 `.ts`** —— 正是 fork 之前那 8 个失败用例的根因，纳入后 **482/482 全绿** |
+| `test-hooks.mjs`（随上一条） | **Node 解析钩子：无扩展名相对导入自动补 `.ts`** —— 正是本仓库之前那 8 个失败用例的根因，纳入后 **482/482 全绿** |
 | `chore(deps): Tauri 2.12` | `@tauri-apps/*` 全线升到 2.12.x |
-| `test: Windows regression suite` + `scripts/regress/*` | 上游的四平台手工回归套件（mac/win/linux/android，71 个用例）；**删除 `K05-telemetry-setting.js`**（它检验的正是 fork 已删掉的「匿名用量」开关），`lib/setup.js` 与 `README.md` 里的遥测措辞一并改掉 |
-| `chore(v5): drop the unused StatusBar` | 上游删掉未被渲染的 `StatusBar.vue`；fork 侧同名文件未被改过，安全跟随（`PomodoroPill` / `WritingGoals` 已改挂在 `StatsPill` 下） |
+| `test: Windows regression suite` + `scripts/regress/*` | 上游的四平台手工回归套件（mac/win/linux/android，71 个用例）；**删除 `K05-telemetry-setting.js`**（它检验的正是本仓库已删掉的「匿名用量」开关），`lib/setup.js` 与 `README.md` 里的遥测措辞一并改掉 |
+| `chore(v5): drop the unused StatusBar` | 上游删掉未被渲染的 `StatusBar.vue`；本仓库一侧同名文件未被改过，安全跟随（`PomodoroPill` / `WritingGoals` 已改挂在 `StatsPill` 下） |
 
 ### 冲突取舍
 
@@ -395,27 +470,27 @@ v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板
 
 | 文件 | 取舍 |
 |---|---|
-| `app/src/components/Editor.vue` | **两者都留**：v5 的查找面板（`createFindPanel`）与 fork 的 #389「Ctrl+F 切换」共存（`searchPanelOpen` 仍然有效） |
-| `app/src/components/Preview.vue` | **保留 fork 的阅读模式排版**（#143/#384：衬线字、`--content-font-size` 不放大、两侧"纸页"阴影、`tbody` 隔行底纹），**拒绝上游 5.0 §5**（那次把阅读模式改回与编辑器同字体、只留更大的页边距） |
-| `app/src/components/TableEditor.vue` | 保留 fork 的 #390/#381/#382（`baseline` 脏检查 + 自绘确认浮层 + 列选择条），**摘掉上游那套重复实现**（`initialTable` / `closeConfirm` / `DsModal` 确认框），只留上游的 `solomd:table-close-request` 监听并把 `:inert` 接到 fork 的浮层上 |
-| `app/src/lib/keybindings.ts` | 取上游（v5 的 `category` 重分类 + 去掉重复项），再回植 fork 的 `insert.table` |
-| `app/src/components/Toolbar.vue` | 取上游 v5 结构，再回植 fork 的 `openInsertTable()`（改走上游的 `closeAllDropdowns()`）与两个列表续行/自动编号 flat 按钮；这两个按钮按 v5 的窄屏约定加了 `!isNarrow`（`isNarrow` = 视口 ≤600px 的手机布局） |
-| `app/src/lib/cm-live-render.ts` | 保留 fork 的 `isLinkDestinationUrl()`（行为与上游一致，但有独立单测） |
-| `app/src/stores/settings.ts` | 两者都留：fork 的遥测 key 清理 + 上游的系统主题校验 |
-| `app/vite.config.ts` | 两者都留：fork 的 `VENDOR_GROUPS` 手工分包 + 上游的 katex 插件 stub |
-| `README.md` | 保留 fork 的 GitHub Releases / Windows-only 说明与 `chenghaitao` 链接；取上游「16 tools」措辞；删掉上游的 brew / install.sh / winget 安装段 |
+| `app/src/components/Editor.vue` | **两者都留**：v5 的查找面板（`createFindPanel`）与本仓库的 #389「Ctrl+F 切换」共存（`searchPanelOpen` 仍然有效） |
+| `app/src/components/Preview.vue` | **保留本仓库的阅读模式排版**（#143/#384：衬线字、`--content-font-size` 不放大、两侧"纸页"阴影、`tbody` 隔行底纹），**拒绝上游 5.0 §5**（那次把阅读模式改回与编辑器同字体、只留更大的页边距） |
+| `app/src/components/TableEditor.vue` | 保留本仓库的 #390/#381/#382（`baseline` 脏检查 + 自绘确认浮层 + 列选择条），**摘掉上游那套重复实现**（`initialTable` / `closeConfirm` / `DsModal` 确认框），只留上游的 `solomd:table-close-request` 监听并把 `:inert` 接到本仓库的浮层上 |
+| `app/src/lib/keybindings.ts` | 取上游（v5 的 `category` 重分类 + 去掉重复项），再回植本仓库的 `insert.table` |
+| `app/src/components/Toolbar.vue` | 取上游 v5 结构，再回植本仓库的 `openInsertTable()`（改走上游的 `closeAllDropdowns()`）与两个列表续行/自动编号 flat 按钮；这两个按钮按 v5 的窄屏约定加了 `!isNarrow`（`isNarrow` = 视口 ≤600px 的手机布局） |
+| `app/src/lib/cm-live-render.ts` | 保留本仓库的 `isLinkDestinationUrl()`（行为与上游一致，但有独立单测） |
+| `app/src/stores/settings.ts` | 两者都留：本仓库的遥测 key 清理 + 上游的系统主题校验 |
+| `app/vite.config.ts` | 两者都留：本仓库的 `VENDOR_GROUPS` 手工分包 + 上游的 katex 插件 stub |
+| `README.md` | 保留本仓库的 GitHub Releases / Windows-only 说明与 `chenghaitao` 链接；取上游「16 tools」措辞；删掉上游的 brew / install.sh / winget 安装段 |
 | `app/src/i18n/zh.ts` | 9 个冲突块**全取上游**（`en.ts` 是权威键集，上游补了 `openLensTooltip` / `modes` / `removeTag` 等新键，缺键 `vue-tsc` 会报错），同时把上游翻译工具产出的双引号统一回单引号 |
 
 ### 验证
 
 - `vue-tsc --noEmit` **干净**（16 个语言文件按 `Record<Lang, () => Promise<I18n>>` 全量核对）。
 - `vite build` 入口 chunk **1,738.17 kB / gzip 530.02 kB**，与 4.14.13 基线**逐字节一致**（无包体回归；
-  fork 的 `VENDOR_GROUPS` 分包仍在生效，`vendor-editor` / `vendor-katex` / `vendor-preview` 均在）。
+  本仓库的 `VENDOR_GROUPS` 分包仍在生效，`vendor-editor` / `vendor-katex` / `vendor-preview` 均在）。
 - `bash app/scripts/run-tests.sh`：**482 用例 / 482 通过 / 0 失败**。上次同步时那 8 个失败
   （无扩展名相对导入）是上游 `test-hooks.mjs` 解析钩子修好的。
 - 排除项零回流：全仓 `app/src` 已无 `lib/telemetry` / `TelemetryBanner` / `track(` 引用；
-  `web/`、`app-store/`、`server.json` 与 fork HEAD 逐字节相同。
-- fork 自研零丢失：`build.bat` / `release.bat` / `scripts/bump-version.js` / `scripts/package-portable-win.ps1` /
+  `web/`、`app-store/`、`server.json` 与本仓库 HEAD 逐字节相同。
+- 本地自研零丢失：`build.bat` / `release.bat` / `scripts/bump-version.js` / `scripts/package-portable-win.ps1` /
   `lib/link-destination.ts`(+test) / `lib/insert-table.ts` / `InsertTableDialog.vue` / `lib/file-link.ts` 全部在位。
 - 版本号四处一致（`app/package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`）= **5.0.0**。
 
@@ -423,7 +498,7 @@ v5 是一次界面重构：设计令牌层、52px 头部 + 整列侧栏、面板
 
 ## [4.14.12] — 2026-10-10
 
-一条线：**一次修完 9 个待办 issue**（全部是本 fork 自研，本版**不含任何上游同步**），外加设置界面的中文补全。
+一条线：**一次修完 9 个待办 issue**（全部是本仓库自研，本版**不含任何上游同步**），外加设置界面的中文补全。
 改动集中在编辑器 / 表格 / 文件链接三条线，另含一处窗口外观修正。
 
 ### 文件链接（#380）
@@ -544,7 +619,7 @@ href 刻意保留 `file:` 前缀（裸 `C:\…` 会被 sanitizer 的 `ALLOWED_UR
 ## [4.14.11] — 2026-10-09
 
 一条线：**同步上游 43 个提交**（上游 4.14.10 之后 → 4.14.11），只取纯产品代码的功能与修复；
-市场推广 / 赞助 / 遥测 / 商店与 MCP 分发登记一律不落地；本地改动（遥测移除、列表续行开关、
+市场推广、赞助、遥测、商店与 MCP 分发登记相关内容不纳入；本地改动（列表续行开关、
 启动懒加载、i18n 分包、文件新鲜度兜底巡检）全部保留。
 
 ### 上游同步
@@ -641,7 +716,7 @@ MCP（产品功能，原样保留）
 
 | 上游提交 | 内容 | 理由 |
 |---|---|---|
-| `20feffb7` | 版本号 4.14.11（4 个版本源） | 版本号由本 fork 的 `bump-version.js` 统一改 |
+| `20feffb7` | 版本号 4.14.11（4 个版本源） | 版本号由本仓库的 `bump-version.js` 统一改 |
 | `56e41b78` `f0f22279` | App Store 发版说明 14 种语言（28 个文件） | 商店分发 |
 | `cdf48cec` | 官网版本号 / whats-new / llms.txt | 官网分发 |
 | `4ccc6006` | `solomd-mcp` 4.14.11 bundle manifest + Registry `server.json` | manifest 见下；`server.json` 是上游的 Registry 登记条目，冻结 |
@@ -649,19 +724,19 @@ MCP（产品功能，原样保留）
 ### 合并取舍（本地特性怎么保下来的）
 
 - **排除路径整体回退**：`web/`、`app-store/` 用 `git restore --source=HEAD` 回退，与合并前**逐字节零差异**；
-  `server.json` 取本 fork 版本（冻结在上游旧值，本 fork 未登记任何 MCP Registry）。
+  `server.json` 取本仓库版本（冻结在上游旧值，本仓库未登记任何 MCP Registry）。
 - **`mcp-server/mcpb/manifest.json` 保留上游版**：这轮它不只是改版本号，还把 4 个工具
   （`export_note` / `get_outline` / `read_agent_trace` / `write_note`）的描述同步到新的 mcp-server 源码——
-  正是上面 `27fe16dd` 的产品修复的一部分；版本 `4.14.11` 与本 fork 相同，无需回退。
+  正是上面 `27fe16dd` 的产品修复的一部分；版本 `4.14.11` 与本仓库相同，无需回退。
 - **`App.vue`**：上游新加的 `focusActiveEditorSoon(...)`（产品，焦点修复）与 `scheduleStarPrompt()`
-  （排除，求 star）挤在同一个 hunk 里——**保留焦点修复、摘除 star prompt**。
+  （排除，star 提醒）挤在同一个 hunk 里——**保留焦点修复、摘除 star prompt**。
 - **`useFileWatcher.ts`**：本地 30 秒兜底巡检 `startWatchdog()` 与上游新加的 `keydown` 捕获监听
   落在同一处，**两者都保留**。
-- **`app-menu.ts`**：上游新增模块里的无扩展名导入 `'./keybindings'`，按本 fork 约定补成
+- **`app-menu.ts`**：上游新增模块里的无扩展名导入 `'./keybindings'`，按本仓库约定补成
   `'./keybindings.ts'`，使其新增的 `app-menu.test.ts` 能被 `node --test` 直接跑。
 - **MCP 源码是产品功能，原样保留**：与上几次「只改 manifest、零源码改动」不同，这轮上游对
   `mcp-server/src/` 有真实修复（`27fe16dd`），全部保留。
-- **顺带补齐无扩展名导入（fork 的 `node --test` 约定）**：`md-format.ts`、`docx-export.ts`、
+- **顺带补齐无扩展名导入（本仓库的 `node --test` 约定）**：`md-format.ts`、`docx-export.ts`、
   `diagram-export.ts`、`markdown.ts`、`stores/types.ts` 以及两个新测试文件里的相对导入补上 `.ts`，
   使本轮新增 / 改动的测试可以就地跑通（仓库本就开启 `allowImportingTsExtensions`，多处以 `.ts` 导入）。
 - 其余重叠文件（15 个 i18n、`Editor.vue`、`SettingsPanel.vue`、`Toolbar.vue`、`useExport.ts`、
@@ -673,7 +748,7 @@ MCP（产品功能，原样保留）
 - `vue-tsc --noEmit` 通过（`I18n` 类型由 `en` 推导，键不一致必报错）。
 - `vite build` 通过（22.05s）。入口 chunk `index-DdF9T1vb.js` **1,738.17 kB / gzip 530.02 kB**，
   与合并前**完全一致**（1,738.17 / 530.02）——说明本轮并入的修复没有改变入口体积。
-- 单元测试（fork 的 `node --test` 跑法）本轮新增 / 改动的 13 个测试文件：**115 / 115 通过**。
+- 单元测试（本仓库的 `node --test` 跑法）本轮新增 / 改动的 13 个测试文件：**115 / 115 通过**。
 - 本地改动零丢失：`git diff --name-only 3a83d7e..main`（268 个）对
   `git diff --name-only upstream/main`（282 个）做差集，**被吃掉的一侧为空**。
 - 排除项零回流：`telemetry` / `TelemetryBanner` / `scheduleStarPrompt` / `starPrompt` /
@@ -689,8 +764,8 @@ MCP（产品功能，原样保留）
 ## [4.14.10] — 2026-10-07
 
 一条线：**同步上游 55 个提交**（横跨上游 4.14.8 / 4.14.9 / 4.14.10 三个版本窗口），把窗口期内的编辑器、
-菜单、工具栏与启动性能修复整体纳入；市场推广 / 赞助 / 遥测 / 商店与 MCP 分发内容一律不落地；
-本地改动（遥测移除、列表续行开关、启动懒加载、i18n 分包）全部保留。
+菜单、工具栏与启动性能修复整体纳入；市场推广、赞助、遥测、商店与 MCP 分发内容不纳入；
+本地改动（列表续行开关、启动懒加载、i18n 分包）全部保留。
 
 ### 上游同步
 
@@ -726,7 +801,7 @@ MCP（产品功能，原样保留）
 
 | 上游提交 | 内容 |
 |---|---|
-| `6641c01d` `376e9e7e` `41fd8820` | 新增 `auto` 引擎：WebView2 ≥ 154 用 CodeMirror，否则回退原生 textarea；中途 `376e9e7e` 曾把 CodeMirror 设为 Windows 默认，`41fd8820` 又因搜狗输入法在 WebView2 154 上掉字母而改回**原生为默认**——本 fork 取最终态 |
+| `6641c01d` `376e9e7e` `41fd8820` | 新增 `auto` 引擎：WebView2 ≥ 154 用 CodeMirror，否则回退原生 textarea；中途 `376e9e7e` 曾把 CodeMirror 设为 Windows 默认，`41fd8820` 又因搜狗输入法在 WebView2 154 上掉字母而改回**原生为默认**——本仓库取最终态 |
 
 界面 / 菜单 / 工具栏
 
@@ -753,10 +828,10 @@ MCP（产品功能，原样保留）
 
 | 上游提交 | 内容 |
 |---|---|
-| `67a82b94` | `ios-container` 测试改用 `node:test`（与本 fork 约定一致） |
+| `67a82b94` | `ios-container` 测试改用 `node:test`（与本仓库约定一致） |
 | `a3233d88` | Gitee 同步往返 e2e 测试（真实同步代码：推→拉→改→推→拉） |
 | `bf49ac1a` `a7b937af` `b6324cca` `f020f728` | Windows 真输入法打字测试台、`?imetrace` 事件追踪（DEV 限定）、`?forceCodeMirror` QA 钩子、UI-steps 驱动 |
-| `8da63163` | 测试者致谢（**仅 App 内 About 对话框的「感谢测试者」一节**；官网 thanks 页属排除项） |
+| `8da63163` | 测试者致谢（**仅 App 内 About 对话框的「感谢测试者」一节**；官网 thanks 页不在同步范围内） |
 
 **排除（12 个提交 + 140 个文件）**
 
@@ -765,7 +840,7 @@ MCP（产品功能，原样保留）
 | `6a9e09f6` `c4a58f3e` `cf037966` | 版本号 4.14.8 / 4.14.9 / 4.14.10 + App Store 发版说明（140 个文件） | 商店分发 |
 | `51a29dd6` `05197291` `015b2a38` `a8e6ec42` | `solomd-mcp` 4.14.8~4.14.10 bundle manifest + Registry `server.json` | MCP **分发登记**（不带任何 MCP 源码改动，产品功能见下） |
 | `3a83d7eb` `bff7ef22` `7111c273` `099cda42` | 官网版本号 / whats-new / llms.txt / llms-full.txt / MS Store 版本 pin | 官网分发 |
-| `8be38f60` | Gitee 镜像只上传本次 release 的资产 | 上游镜像脚本（本 fork 已删 `scripts/release-to-gitee.sh`） |
+| `8be38f60` | Gitee 镜像只上传本次 release 的资产 | 上游镜像脚本（本仓库已删 `scripts/release-to-gitee.sh`） |
 
 ### 合并取舍（本地特性怎么保下来的）
 
@@ -775,40 +850,40 @@ MCP（产品功能，原样保留）
 - **星标 / 推广 / 赞助 / 商店评分**：`star-prompt.ts`、`web/src/pages/promote.astro`、`Promote.astro`、
   `supporters.ts`、`add-supporter.py`、`store_review.rs`（含 `request_store_review` 命令与 App Store
   评分弹窗）保持不存在；About 对话框只保留「感谢赞助者」与新增的「感谢测试者」，
-  推广者列表与 `📣 帮忙推广` 按钮不落地；`Star on GitHub` 文案维持本 fork 的 `GitHub`。
-- **整目录回退到本 fork**：`web/`（官网）、`app-store/`、`README.md` / `README.zh.md`、
+  推广者列表与 `📣 帮忙推广` 按钮不引入；`Star on GitHub` 文案维持本仓库的 `GitHub`。
+- **整目录回退到本仓库**：`web/`（官网）、`app-store/`、`README.md` / `README.zh.md`、
   `.github/` `.gitee/`、`scripts/update-sponsors-readme.py`。与合并前逐字节零差异。
 - **MCP 是产品功能，原样保留**：上游本轮对 `mcp-server/` 的**全部**改动只有
   `mcp-server/mcpb/manifest.json` 里一个版本字符串，**零行源码改动**——所以 MCP 功能一点没丢：
   `mcp-server/src/**`、`README.md`、`build.rs`、`tests/`、`Cargo.lock` 与上游逐字节一致
-  （唯一差异是本 fork 自己加的 `[lints.rust] linker_messages = "allow"`），发布链路也照旧——
+  （唯一差异是本仓库自己加的 `[lints.rust] linker_messages = "allow"`），发布链路也照旧——
   `release.yml` 的 `build-mcp-sidecar.sh` 通过 Tauri `externalBin` 把 `solomd-mcp` **打进应用本体**，
   每个 release 另出 `solomd-mcp-linux-x64/arm64`、`win-x64/arm64` 独立包，
   配套 `install-mcp.sh` / `publish-mcp-crate.sh` / `build-mcpb.sh`。
   被挡在门外的是**上游自己的分发登记信息**，不是功能：`server.json` 里
   `name = io.github.zhitongblog/solomd`、`identifier` 指向上游 release 资产与其 sha256
-  （fork 未登记任何 MCP Registry），`build-mcpb.sh` 里 `REPO=zhitongblog/solomd` 也是从上游取二进制；
+  （本仓库未登记任何 MCP Registry），`build-mcpb.sh` 里 `REPO=zhitongblog/solomd` 也是从上游取二进制；
   而 mcpb manifest 的 `version` 在打包时由 `build-mcpb.sh <X.Y.Z>` 用命令行参数**直接覆盖**
   （`m["version"] = os.environ["VER"]`，工具清单同样由活的 `tools/list` 重写），
   所以仓库里这个值只是「上次打包留下的痕迹」，不是构建输入。
-  本次仍把这份 manifest 的版本从冻结的 4.14.4 对齐到 **4.14.10**（它描述的是本 fork 自己出的
+  本次仍把这份 manifest 的版本从冻结的 4.14.4 对齐到 **4.14.10**（它描述的是本仓库自己出的
   `.mcpb` 制品，跟着 app 版本走更诚实）；`server.json` 保持冻结——那是上游的 Registry 条目。
-- **`Toolbar.vue`**：以上游的单行工具栏为基底（五种视图模式收进下拉），把本 fork 的两个列表开关
+- **`Toolbar.vue`**：以上游的单行工具栏为基底（五种视图模式收进下拉），把本仓库的两个列表开关
   （项目符号续行 / 自动编号）补回插入下拉所在的 `toolbar__group` 内，并加上 `v-if="isMarkdown"`；
   上游新引入的 3 处 `track()` 摘除。
 - **`Editor.vue`**：keymap 采用上游的 `baseKeymapCompartment` 结构（应用级和弦从 CodeMirror 的
-  keymap 里过滤掉），本 fork 的 `listContinuationKeymap()` 置于其前以优先于普通换行；
+  keymap 里过滤掉），本仓库的 `listContinuationKeymap()` 置于其前以优先于普通换行；
   导入合并上游的 `EditorMenuSpell` / `spell-suggest`。
 - **`App.vue`**：整体采用上游的懒加载方案——本地此前用 `defineAsyncComponent` 只做了面板懒加载，
   上游的 `useLazyComponent` 连**关闭状态的对话框**（命令面板、快速切换、设置、搜索、关于…）也一并延迟，
-  是超集，故取上游；本 fork 已自动合并的「删除 `scheduleStarPrompt()` / `track('app_launched')` /
+  是超集，故取上游；本仓库已自动合并的「删除 `scheduleStarPrompt()` / `track('app_launched')` /
   `<TelemetryBanner />`」三处删除保持生效。
 - **`main.ts`**：三方合并——iOS 容器重定位（本地保留）、上游新增的 WebView2 版本探测（挂载前必须已知）、
   本地 i18n 分包语言包加载，统一进一个 `Promise.all` + 1.5s 上界。
 - **`code-languages.ts`**：上游与本地做了**同一件事**（把 13 个 lezer 语法包从 `support()` 改成
   `load()` 按需加载），取上游版本，注释改为上游措辞。
-- **`ios-container.test.ts`**：上游把该测试改写成 `node:test`（`describe/it`），与本 fork 约定一致，取上游。
-- **`app-menu.ts`**：上游新增模块里唯一带无扩展名相对导入的（`from './keybindings'`），按本 fork 约定
+- **`ios-container.test.ts`**：上游把该测试改写成 `node:test`（`describe/it`），与本仓库约定一致，取上游。
+- **`app-menu.ts`**：上游新增模块里唯一带无扩展名相对导入的（`from './keybindings'`），按本仓库约定
   补成 `'./keybindings.ts'`，使上游新增的 `app-menu.test.ts`（菜单覆盖测试）能被 `node --test` 直接跑。
 - **版本号**：取 **4.14.10**（与上游同号，按本文件开头的约定）；上游的三个 bump 提交不引入，
   由 `scripts/bump-version.js 4.14.10` 统一改四处版本源。
@@ -818,7 +893,7 @@ MCP（产品功能，原样保留）
 - `vue-tsc --noEmit` 通过。
 - `vite build` 通过（32.5s）。入口 chunk `index-CeSBQsdm.js` **1,738.17 kB / gzip 530.02 kB**，
   与合并前本地的 1,737.95 kB 基本持平——说明本轮并入的启动优化与本地已有优化没有互相抵消。
-- 单元测试（fork 的 `node:test` 跑法）：**232 个用例，222 通过，10 失败**。10 个失败全部是
+- 单元测试（本仓库的 `node:test` 跑法）：**232 个用例，222 通过，10 失败**。10 个失败全部是
   **既有问题**（`node --test` 解析不了无扩展名的相对导入），对应测试文件与合并前逐字节一致；
   本轮新增/改动的测试（`app-menu` `editor-commands` `path-key` `plain-nav` `keybindings` `platform`
   `ios-container`）**108/108 通过**。
@@ -832,7 +907,7 @@ MCP（产品功能，原样保留）
 ## [4.14.9] — 2026-10-03
 
 一条线：**同步上游 25 个提交**（上游 4.14.4 之后，横跨 4.14.5 / 4.14.6 / 4.14.7 三个版本窗口），
-**只取纯产品代码的功能与修复**——市场推广 / 赞助 / 商店与 MCP 分发内容一律不引入；本地改动全部保留。
+**只取纯产品代码的功能与修复**——市场推广、赞助、商店与 MCP 分发内容不纳入；本地改动全部保留。
 
 ### 上游同步
 
@@ -858,7 +933,7 @@ MCP（产品功能，原样保留）
 |---|---|---|
 | `2a93f9a` | promoter 计划（"像赞助者一样署名"） | 推广 + 赞助 |
 | `d1cb547` | App / About / Release / README 求 GitHub star | 推广 |
-| `44c1162` | 官网 Hero 求 star 按钮 + 实时计数 | 推广 |
+| `44c1162` | 官网 Hero 的 star 按钮 + 实时计数 | 推广 |
 | `07767dd` | 把"零遥测"文案改成"opt-out 匿名统计" | 推广文案 + 遥测 |
 | `06a39c3` | App Store 构建弹 Apple 评分框 | 推广 / 评价引导 |
 | `1efb96d` | App Store 构建发送使用数据 | 遥测 |
@@ -880,19 +955,19 @@ MCP（产品功能，原样保留）
 - **i18n**：`1063e76` 的 15 个语言文件里，incoming 侧同时含**保留的 `iosFolder`** 与被排除的 **`starPrompt`**，
   逐文件只保留 `iosFolder`、丢弃 `starPrompt`。
 - **Rust**：`1063e76` 的 `lib.rs` / `runner.rs` 冲突里同样混入被排除的 `store_review`，
-  只保留 `ios_folder`（`store_review.rs` 不落地）。
-- **`main.ts`**：保留 fork 的按需语言包挂载，叠加上游的 iOS 路径重定位（iOS 侧限时 1.5s，语言包完整后再挂载）。
+  只保留 `ios_folder`（`store_review.rs` 不引入）。
+- **`main.ts`**：保留本仓库的按需语言包挂载，叠加上游的 iOS 路径重定位（iOS 侧限时 1.5s，语言包完整后再挂载）。
 - **`Cargo.toml`**：`objc2-foundation` 增加 `NSURL` / `NSGeometry` 特性——这是保留的 `ios_folder.rs` 所需，
   虽然该特性原属被排除的 iOS 提交，这里按依赖需要保留。
-- **MCP manifest**：`3fcd132`（winget 修复）附带把 `manifest.json` 版本抬到 4.14.5；因 MCP 分发属排除项，
+- **MCP manifest**：`3fcd132`（winget 修复）附带把 `manifest.json` 版本抬到 4.14.5；因 MCP 分发不在同步范围内，
   已回退到已注册的 4.14.4，令 `mcp-server/` 与 `server.json` 保持零改动。
 
 ### 验证
 
 - `vue-tsc --noEmit` 通过。
 - `vite build` 通过（3392 个模块，约 14.5s）。
-- 随修复带进来的 4 个单元测试用 fork 的 `node:test` 运行：**40 / 40 通过**。其中上游的
-  `ios-container.test.ts` 原本 `import 'vitest'`（本 fork 未装 vitest），已改写为 `node:test`；
+- 随修复带进来的 4 个单元测试用本仓库的 `node:test` 运行：**40 / 40 通过**。其中上游的
+  `ios-container.test.ts` 原本 `import 'vitest'`（本仓库未装 vitest），已改写为 `node:test`；
   并把 `ios-container.ts` 的 `./platform` 补成 `./platform.ts`（仓库本就开启 `allowImportingTsExtensions`，
   多个 lib 文件已用 `.ts` 扩展名），使其可被 `node --test` 解析。
 - 营销 / 赞助 / 分发标记零回流：`store_review`、`starPrompt`、`promote` 页与 `supporters` 均无新增；
@@ -932,8 +1007,8 @@ MCP（产品功能，原样保留）
 
 ### 合并取舍（本地特性怎么保下来的）
 
-- **站点保持无遥测，但把下载统计接回来**：上游把「全渠道下载量」写进了 `web/src/pages/admin/index.astro`，
-  而本 fork 早就删掉了这个文件——它的上一版整页都服务于 `/api/admin/stats` 遥测面板（连同 `/api/track`、
+- **站点不接统计接口，但把下载统计接回来**：上游把「全渠道下载量」写进了 `web/src/pages/admin/index.astro`，
+  而本仓库早就删掉了这个文件——它的上一版整页都服务于 `/api/admin/stats` 遥测面板（连同 `/api/track`、
   `admin/stats.ts`、`ANALYTICS.md` 一并移除）。处理方式是**取上游的下载部分、丢掉遥测部分**：新的 admin 页
   保留 `GET /api/admin/downloads` 的 KPI、GitHub 分平台、逐日三块，删掉 App usage（Events / Devices /
   OS / Locale）、`load()` 与时间范围选择器；配套的 `web/functions/api/admin/downloads.ts`、
@@ -948,9 +1023,9 @@ MCP（产品功能，原样保留）
 
 - `vue-tsc --noEmit` 通过（`I18n` 类型由 `en` 推导，键不一致必报错）。
 - `vite build` 通过（3389 个模块，21 秒）。
-- fork 删除的 7 个文件（`lib/telemetry.ts`、`TelemetryBanner.vue`、`web/functions/api/track.ts`、
+- 本仓库删除的 7 个文件（`lib/telemetry.ts`、`TelemetryBanner.vue`、`web/functions/api/track.ts`、
   `admin/stats.ts`、`web/ANALYTICS.md`、`scripts/release-to-gitee.sh`、`mirror-gitee.yml`）合并后仍不存在；
-  fork 的 11 个文件（`build.bat`、`release.bat`、`scripts/bump-version.js`、
+  本仓库的 11 个文件（`build.bat`、`release.bat`、`scripts/bump-version.js`、
   `scripts/package-portable-win.ps1`、`scripts/release-notes.js`、`CHANGELOG.md`、`app/vite.config.ts`、
   `app/src/i18n/index.ts`、`lib/cm-list-continuation.ts`、`lib/list-continuation.ts`、
   `app/pnpm-workspace.yaml`）都在，且 `vite.config.ts`（+148）、`i18n/index.ts`（+106/-25）等核心改动
@@ -1004,9 +1079,9 @@ MCP（产品功能，原样保留）
   语义不变。
 - **`Editor.vue`** 冲突只在 import 段：上游的右键菜单、`isAndroid` / `isIOS`、`computeListContinuation`
   与本地 `ListContinuationOptions` 类型、`listContinuationKeymap` 取并集，其余自动合并。
-- **`ru.ts`（上游新增）** 既缺本 fork 的 4 个键（`listContinueOn` / `listContinueOff` /
+- **`ru.ts`（上游新增）** 既缺本仓库的 4 个键（`listContinueOn` / `listContinueOff` /
   `autoNumberOn` / `autoNumberOff`，即两个列表续写与自动编号开关的悬停提示），又多出 `telemetry`
-  段（本 fork 的 `en` 里没有这一节，而 `I18n` 类型正是由 `en` 推导）。补键删段后 `vue-tsc` 的两个
+  段（本仓库的 `en` 里没有这一节，而 `I18n` 类型正是由 `en` 推导）。补键删段后 `vue-tsc` 的两个
   报错消失。
 - **版本文件** 的 4 个冲突仍是纯版本号，取本地的 4.14.6（随后 release 会再覆盖）。这次 `Cargo.toml`
   的冲突块只含 `version =` 一行，没有连带吃掉本地的遥测注释 —— 已用 `Select-String` 复核。
@@ -1016,7 +1091,7 @@ MCP（产品功能，原样保留）
 - `pnpm build`（`vue-tsc --noEmit` + vite）通过。
 - `node --test src/lib/*.test.ts`：27 个测试文件 165 条用例，155 通过；失败的 10 个文件全部是既有的
   `ERR_MODULE_NOT_FOUND`（导入链缺 `.ts` 后缀，Node ESM 解析不到），无断言失败。
-- 精确的「本地改动是否被合并吃掉」检查：本地 92 个改动文件在合并后仍全部带 fork 内容
+- 精确的「本地改动是否被合并吃掉」检查：本地 92 个改动文件在合并后仍全部带本仓库内容
   （`Compare-Object` 的 `<=` 侧为空）。
 - 无 `lib/telemetry` 引用、无 `track(` 调用、无遥测文件；`lib/katex-standalone.ts` 的 Windows
   相对 `import.meta.glob` 补丁仍在。
@@ -1057,8 +1132,8 @@ MCP（产品功能，原样保留）
   并未被引用）。单测由上游 11 条 + 本地 7 条合并成 18 条。
 - **入口体积优化**：上游的 `code-languages.ts` 仍是 13 个语法静态导入，本地的按需 `load()` 版本保留
   （`fence-languages.ts` 只读 `name`/`alias`，不受影响）。
-- **无遥测**：上游这些提交不带遥测，但采用上游 `useExport.ts` 会把本地删掉的 `track()` 调用带回来，
-  已重新剔除（`lib/telemetry.ts` 在本 fork 里不存在，否则构建直接失败）。
+- **不引入统计调用**：上游这些提交不带遥测，但采用上游 `useExport.ts` 会把本地删掉的 `track()` 调用带回来，
+  已重新剔除（`lib/telemetry.ts` 在本仓库里不存在，否则构建直接失败）。
 
 ### 顺带修的本地问题
 
@@ -1125,7 +1200,7 @@ capture 监听器会永久残留并继续吞掉 Esc。
 **发布说明改为内联本文件的对应章节**
 
 Release 正文原先固定写死两行链接指向 `solomd.app/whats-new` —— 那是上游的站点、讲的是上游的版本，
-对一个 fork 构建来说恰好是最不该指向的地方；读者还得离开 GitHub 才能知道改了什么。现在
+对本地构建来说恰好是最不该指向的地方；读者还得离开 GitHub 才能知道改了什么。现在
 `.github/workflows/release.yml` 里新增一步，调用 `scripts/release-notes.js <tag>` 取出本文件里
 `## [版本]` 那一节（到下一个 `## ` 标题为止）并内联进「### What's new / 更新内容」。该标签没有对应
 章节时回退为仓库内 CHANGELOG 链接，任何情况下都不会让发布失败。
@@ -1192,7 +1267,7 @@ Microsoft Store 的版本号改到 4.14.1。两者都不涉及应用源码。
 
 ### 文档
 
-- 新增本文件 `CHANGELOG.md`：按版本记录本 fork 的改动，并单列「与上游的功能差异」与「上游同步方式」。
+- 新增本文件 `CHANGELOG.md`：按版本记录本仓库的改动，并单列「与上游的功能差异」与「上游同步方式」。
 - 14 个 `README*.md` 的链接统一指向本仓库（`chenghaitao/solomd`）：徽章、releases、issue、clone 地址。
   删除了上游站点的营销入口（Launch post / How we built it / Website / Security）、Gitee 镜像、
   `## Contact` 章节，以及 `install.sh` / `install.ps1` / `winget` / `brew --cask` 这些会装到上游构建的
@@ -1234,7 +1309,7 @@ Microsoft Store 的版本号改到 4.14.1。两者都不涉及应用源码。
 
 ## [4.13.3] — 2026-09-20
 
-本 fork 的第一个本地版本，基础是上游 4.13.2。
+本仓库的第一个本地版本，基础是上游 4.13.2。
 
 - **移除匿名遥测**：不是「可选关闭」，而是彻底删除。删掉 6 个文件
   （`app/src/components/TelemetryBanner.vue`、`app/src/lib/telemetry.ts`、`web/ANALYTICS.md`、
@@ -1242,12 +1317,12 @@ Microsoft Store 的版本号改到 4.14.1。两者都不涉及应用源码。
   并清理 14 个语言文件、设置项、工具栏入口与站点文案里的相关描述。
 - **#297 ``` 围栏语言联想**：输入 ``` 时给出语言列表（`lib/fence-languages.ts`、
   `lib/cm-fence-completion.ts`，含 174 行测试）。列表从 `lib/code-languages.ts` 派生，不另存一份。
-- **#317 文件新鲜度兜底**：上游有「启动 + 窗口聚焦」两次扫描，本 fork 再加一个每 30 秒的巡检，覆盖
+- **#317 文件新鲜度兜底**：上游有「启动 + 窗口聚焦」两次扫描，本仓库再加一个每 30 秒的巡检，覆盖
   那些不发事件的改动（同步盘、外部编辑器）。
 - **Windows 批处理脚本解析崩溃**：`build.bat` / `release.bat` 里含非 ASCII 字节时，cmd.exe 按控制台
   代码页解码会吞掉 CR，解析器错位并执行半截行。两个脚本改为纯 ASCII + CRLF。
 - **构建与仓库卫生**：pnpm 允许 esbuild / core-js 跑安装脚本；本地产物（`local_build_output/`）加入
-  `.gitignore`；删除上游的 Gitee 镜像 workflow（`mirror-gitee.yml`）与 Gitee 发布脚本（本 fork 没有
+  `.gitignore`；删除上游的 Gitee 镜像 workflow（`mirror-gitee.yml`）与 Gitee 发布脚本（本仓库没有
   对应的 secrets，每次 push 都失败）。
 - 两项后来被上游同等修复取代的改动（合入时取了上游版本，功能上无差异，仅存于历史）：
   「未被监听时磁盘文件变化后刷新标签页」、「无 CodeMirror 时焦点模式与实心光标可用」。
@@ -1256,18 +1331,18 @@ Microsoft Store 的版本号改到 4.14.1。两者都不涉及应用源码。
 
 ## 与上游的功能差异
 
-### 本 fork 去掉的上游行为
+### 未纳入的上游行为
 
-| 上游行为 | 本 fork |
+| 上游行为 | 本仓库 |
 |---|---|
 | 匿名遥测（前端 POST 到 `solomd.app/api/track`，可在设置里关闭） | **完全移除**，应用与站点两侧的采集代码、横幅、后台页、站点文档一并删除 |
-| Gitee 镜像：`mirror-gitee.yml` 工作流 + 发布脚本 | 删除（本 fork 没有 `GITEE_*` secrets，该工作流每次 push 都失败） |
+| Gitee 镜像：`mirror-gitee.yml` 工作流 + 发布脚本 | 删除（本仓库没有 `GITEE_*` secrets，该工作流每次 push 都失败） |
 | README 里的站点营销入口（Launch post / How we built it / Website / Security）与 Gitee 镜像链接 | 已从各语言 README 移除，链接统一指向本仓库 |
 
-保留但与本 fork 定位无关的上游内容：Gitee 作为 **git 托管**的功能（`github_sync.rs` 及其设置界面、
+保留但与本仓库定位无关的上游内容：Gitee 作为 **git 托管**的功能（`github_sync.rs` 及其设置界面、
 `gitee_auth_e2e_test.rs`）、源码注释里的 Gitee issue 号。
 
-### 本 fork 独有的功能与修复
+### 本仓库新增的功能与修复
 
 - ``` 围栏语言联想（#297）。
 - 文件新鲜度 30 秒兜底巡检（#317 的本地部分）。
@@ -1278,7 +1353,7 @@ Microsoft Store 的版本号改到 4.14.1。两者都不涉及应用源码。
 - 前端产物体积与冷启动优化（见 Unreleased 一节）。
 - 文件树层级参考线、选中行、新建文件的默认位置、删除前确认对话框（见 Unreleased 一节）。
 
-### 本 fork 独有的工程与发布设施
+### 本仓库新增的工程与发布设施
 
 上游没有这些文件：`build.bat`、`release.bat`、`scripts/bump-version.js`、
 `scripts/package-portable-win.ps1`、`.gitattributes`、`app/pnpm-workspace.yaml`。
@@ -1301,7 +1376,7 @@ git merge upstream/main               # 冲突基本集中在版本号文件与 
 消失）：
 
 ```powershell
-$forkChanged = git diff --name-only <上次合并点> <本地 HEAD> | Sort-Object   # 本 fork 自己的改动
+$forkChanged = git diff --name-only <上次合并点> <本地 HEAD> | Sort-Object   # 本仓库自己的改动
 $differs     = git diff --name-only upstream/main HEAD | Sort-Object       # 合并后与上游的差异
 Compare-Object $forkChanged $differs | Where-Object { $_.SideIndicator -eq '<=' }   # 必须为空
 ```
