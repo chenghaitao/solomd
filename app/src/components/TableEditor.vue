@@ -131,11 +131,16 @@ function selectColumn(col: number, e: MouseEvent) {
   focused.value = { row: focused.value.row, col };
 }
 
-const ALIGNS: Array<{ value: TableAlign; label: string }> = [
-  { value: null, label: '─' },
-  { value: 'left', label: '⟵' },
-  { value: 'center', label: '↔' },
-  { value: 'right', label: '⟶' },
+/** #382 — the four alignment states, in the order the toolbar shows them.
+ *  `null` is "no marker": the column delimiter loses its colons, and the
+ *  reader decides. The glyphs say nothing on their own — ─ could be a rule,
+ *  ↔ could be a horizontal scrollbar — so each carries the i18n key its hover
+ *  tip is read from, the way the row and column buttons next door do. */
+const ALIGNS: Array<{ value: TableAlign; label: string; tip: string }> = [
+  { value: null, label: '─', tip: 'tableEditor.alignDefault' },
+  { value: 'left', label: '⟵', tip: 'tableEditor.alignLeft' },
+  { value: 'center', label: '↔', tip: 'tableEditor.alignCenter' },
+  { value: 'right', label: '⟶', tip: 'tableEditor.alignRight' },
 ];
 
 /** What a cell holds, as the model stores it. Chromium reports a trailing
@@ -346,6 +351,7 @@ function onKeydown(e: KeyboardEvent) {
             v-for="a in ALIGNS"
             :key="String(a.value)"
             :class="{ 'tbl__on': activeAlign === a.value }"
+            :title="t(a.tip)"
             @click="chooseAlign(a.value)"
           >{{ a.label }}</button>
         </div>

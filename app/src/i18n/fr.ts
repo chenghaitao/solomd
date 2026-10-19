@@ -2037,6 +2037,10 @@ export const fr: I18n = {
     discardBody: 'Le tableau contient des modifications non appliquées. Les appliquer avant de fermer ?',
     discard: 'Abandonner',
     selectColumn: 'Sélectionner une colonne · Maj+clic pour une plage',
+    alignDefault: 'Alignement par défaut (sans marqueur)',
+    alignLeft: 'Aligner à gauche',
+    alignCenter: 'Centrer',
+    alignRight: 'Aligner à droite',
   },
   docx: {
     contents: 'Sommaire',
@@ -2298,6 +2302,7 @@ export const fr: I18n = {
     redo: "Rétablir",
     hideKeyboard: "Masquer le clavier",
     tableTip: "Tableau — faites glisser pour choisir la taille, ou ouvrez l’éditeur visuel",
+    tableCustom: "Tableau personnalisé… ({cols} × {rows})",
     tableVisual: "Éditeur visuel…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

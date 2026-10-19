@@ -30,7 +30,11 @@ import Icon from './Icons.vue';
 import { useI18n } from '../i18n';
 import { useSettingsStore } from '../stores/settings';
 import { useTilesStore } from '../stores/tiles';
-import { tableMarkdown } from '../lib/insert-table';
+import {
+  INSERT_TABLE_DEFAULT_COLS,
+  INSERT_TABLE_DEFAULT_ROWS,
+  tableMarkdown,
+} from '../lib/insert-table';
 import {
   TABLE_GRID_CELLS,
   TABLE_GRID_COLS,
@@ -224,7 +228,10 @@ function insertTable() {
       <Icon name="image" />
     </button>
     <div class="fbar__pop">
-      <!-- The icon opens the visual editor; the grid on hover picks a size. -->
+      <!-- Four ways in: the icon opens the size dialog, dragging the grid on
+           hover drops a table of that size, and the panel's two rows open that
+           same dialog (to type the counts) or the grid editor on the table the
+           caret is already in. -->
       <button
         class="fbar__btn"
         :title="t('formatBar.tableTip')"
@@ -255,7 +262,28 @@ function insertTable() {
             />
           </div>
           <p class="fbar__grid-size">{{ size.cols }} × {{ size.rows }}</p>
-          <button class="fbar__panel-action" @click="command('insert.table')">
+          <!-- Type the counts instead of dragging them. The dialog opens at
+               its own default every time (#387: it does not remember the last
+               size), so the parenthesised numbers are that default, read from
+               the same constants the dialog uses — not the grid readout, which
+               would promise a size the dialog is not going to show. -->
+          <button
+            class="fbar__panel-action"
+            :title="t('insertTableDialog.title')"
+            @click="command('insert.table')"
+          >
+            {{
+              t('formatBar.tableCustom', {
+                cols: INSERT_TABLE_DEFAULT_COLS,
+                rows: INSERT_TABLE_DEFAULT_ROWS,
+              })
+            }}
+          </button>
+          <button
+            class="fbar__panel-action"
+            :title="t('cmd.editor.tableEditor')"
+            @click="command('editor.tableEditor')"
+          >
             {{ t('formatBar.tableVisual') }}
           </button>
         </div>

@@ -2037,6 +2037,10 @@ export const ja: I18n = {
     discardBody: '表にまだ適用していない変更があります。閉じる前に適用しますか？',
     discard: '破棄',
     selectColumn: '列を選択 · Shift+クリックで範囲選択',
+    alignDefault: '既定の配置（マーカーなし）',
+    alignLeft: '左揃え',
+    alignCenter: '中央揃え',
+    alignRight: '右揃え',
   },
   docx: {
     contents: '目次',
@@ -2298,6 +2302,7 @@ export const ja: I18n = {
     redo: "やり直す",
     hideKeyboard: "キーボードを閉じる",
     tableTip: "表 — ドラッグしてサイズを選択、またはビジュアル編集を開く",
+    tableCustom: "カスタム表…（{cols} × {rows}）",
     tableVisual: "ビジュアル編集…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

@@ -2037,6 +2037,10 @@ export const ko: I18n = {
     discardBody: '표에 아직 적용하지 않은 변경 사항이 있습니다. 닫기 전에 적용할까요?',
     discard: '버리기',
     selectColumn: '열 선택 · Shift+클릭으로 범위 선택',
+    alignDefault: '기본 정렬(표시 없음)',
+    alignLeft: '왼쪽 정렬',
+    alignCenter: '가운데 정렬',
+    alignRight: '오른쪽 정렬',
   },
   docx: {
     contents: '목차',
@@ -2298,6 +2302,7 @@ export const ko: I18n = {
     redo: "다시 실행",
     hideKeyboard: "키보드 숨기기",
     tableTip: "표 — 끌어서 크기 선택, 또는 시각적 편집 열기",
+    tableCustom: "사용자 지정 표… ({cols} × {rows})",
     tableVisual: "시각적 편집…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

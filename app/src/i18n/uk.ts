@@ -2054,6 +2054,10 @@ export const uk: I18n = {
     discardBody: 'У таблиці є незастосовані зміни. Застосувати їх перед закриттям?',
     discard: 'Відхилити',
     selectColumn: 'Вибрати стовпець · Shift+клік для діапазону',
+    alignDefault: 'Типове вирівнювання (без позначки)',
+    alignLeft: 'Вирівняти ліворуч',
+    alignCenter: 'Вирівняти по центру',
+    alignRight: 'Вирівняти праворуч',
   },
   docx: {
     contents: 'Зміст',
@@ -2315,6 +2319,7 @@ export const uk: I18n = {
     redo: "Повторити",
     hideKeyboard: "Сховати клавіатуру",
     tableTip: "Таблиця — перетягніть, щоб вибрати розмір, або відкрийте візуальний редактор",
+    tableCustom: "Настроювана таблиця… ({cols} × {rows})",
     tableVisual: "Візуальний редактор…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

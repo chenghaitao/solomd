@@ -2028,6 +2028,10 @@ export const ru: I18n = {
     discardBody: 'В таблице есть неприменённые изменения. Применить их перед закрытием?',
     discard: 'Отбросить',
     selectColumn: 'Выбрать столбец · Shift+щелчок для диапазона',
+    alignDefault: 'Выравнивание по умолчанию (без метки)',
+    alignLeft: 'Выровнять по левому краю',
+    alignCenter: 'Выровнять по центру',
+    alignRight: 'Выровнять по правому краю',
   },
   docx: {
     contents: 'Содержание',
@@ -2289,6 +2293,7 @@ export const ru: I18n = {
     redo: "Повторить",
     hideKeyboard: "Скрыть клавиатуру",
     tableTip: "Таблица — перетащите, чтобы выбрать размер, или откройте визуальный редактор",
+    tableCustom: "Настраиваемая таблица… ({cols} × {rows})",
     tableVisual: "Визуальный редактор…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

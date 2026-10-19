@@ -2042,6 +2042,10 @@ export const zh: I18n = {
     discardBody: '表格中有还没有应用的修改，关闭前要先应用吗？',
     discard: '丢弃',
     selectColumn: '选择此列 · Shift+点击可选中多列',
+    alignDefault: '默认对齐（不加标记）',
+    alignLeft: '左对齐',
+    alignCenter: '居中对齐',
+    alignRight: '右对齐',
   },
   docx: {
     contents: '目录',
@@ -2303,6 +2307,7 @@ export const zh: I18n = {
     redo: "重做",
     hideKeyboard: "收起键盘",
     tableTip: "表格 — 拖动选择行列数，或打开可视化编辑",
+    tableCustom: "自定义表格…（{cols} × {rows}）",
     tableVisual: "可视化编辑…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

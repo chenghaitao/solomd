@@ -2054,6 +2054,10 @@ export const nl: I18n = {
     discardBody: 'De tabel bevat wijzigingen die nog niet zijn toegepast. Toepassen voordat je sluit?',
     discard: 'Verwerpen',
     selectColumn: 'Kolom selecteren · Shift+klik voor een bereik',
+    alignDefault: 'Standaarduitlijning (geen markering)',
+    alignLeft: 'Links uitlijnen',
+    alignCenter: 'Centreren',
+    alignRight: 'Rechts uitlijnen',
   },
   docx: {
     contents: 'Inhoud',
@@ -2315,6 +2319,7 @@ export const nl: I18n = {
     redo: "Opnieuw",
     hideKeyboard: "Toetsenbord verbergen",
     tableTip: "Tabel — sleep om een grootte te kiezen of open de visuele editor",
+    tableCustom: "Aangepaste tabel… ({cols} × {rows})",
     tableVisual: "Visuele editor…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

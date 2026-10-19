@@ -2037,6 +2037,10 @@ export const it: I18n = {
     discardBody: 'La tabella contiene modifiche non applicate. Applicarle prima di chiudere?',
     discard: 'Ignora',
     selectColumn: 'Seleziona una colonna · Maiusc+clic per un intervallo',
+    alignDefault: 'Allineamento predefinito (senza contrassegno)',
+    alignLeft: 'Allinea a sinistra',
+    alignCenter: 'Centra',
+    alignRight: 'Allinea a destra',
   },
   docx: {
     contents: 'Sommario',
@@ -2298,6 +2302,7 @@ export const it: I18n = {
     redo: "Ripeti",
     hideKeyboard: "Nascondi tastiera",
     tableTip: "Tabella — trascina per scegliere la dimensione o apri l’editor visuale",
+    tableCustom: "Tabella personalizzata… ({cols} × {rows})",
     tableVisual: "Editor visuale…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

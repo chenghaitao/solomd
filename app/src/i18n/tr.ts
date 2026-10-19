@@ -2054,6 +2054,10 @@ export const tr: I18n = {
     discardBody: 'Tabloda henüz uygulanmamış değişiklikler var. Kapatmadan önce uygulansın mı?',
     discard: 'Vazgeç',
     selectColumn: 'Sütun seç · Aralık için Shift+tıkla',
+    alignDefault: 'Varsayılan hizalama (işaretsiz)',
+    alignLeft: 'Sola hizala',
+    alignCenter: 'Ortala',
+    alignRight: 'Sağa hizala',
   },
   docx: {
     contents: 'İçindekiler',
@@ -2315,6 +2319,7 @@ export const tr: I18n = {
     redo: "Yinele",
     hideKeyboard: "Klavyeyi gizle",
     tableTip: "Tablo — boyut seçmek için sürükleyin veya görsel düzenleyiciyi açın",
+    tableCustom: "Özel tablo… ({cols} × {rows})",
     tableVisual: "Görsel düzenleyici…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

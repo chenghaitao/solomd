@@ -2054,6 +2054,10 @@ export const sv: I18n = {
     discardBody: 'Tabellen har ändringar som inte har tillämpats. Tillämpa dem innan du stänger?',
     discard: 'Förkasta',
     selectColumn: 'Markera kolumn · Skift+klick för ett intervall',
+    alignDefault: 'Standardjustering (utan markering)',
+    alignLeft: 'Vänsterjustera',
+    alignCenter: 'Centrera',
+    alignRight: 'Högerjustera',
   },
   docx: {
     contents: 'Innehåll',
@@ -2315,6 +2319,7 @@ export const sv: I18n = {
     redo: "Gör om",
     hideKeyboard: "Dölj tangentbord",
     tableTip: "Tabell — dra för att välja storlek eller öppna den visuella redigeraren",
+    tableCustom: "Anpassad tabell… ({cols} × {rows})",
     tableVisual: "Visuell redigerare…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

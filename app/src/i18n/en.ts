@@ -2066,6 +2066,10 @@ export const en = {
     discardBody: 'The table has edits you have not applied. Apply them before closing?',
     discard: 'Discard',
     selectColumn: 'Select a column · Shift-click for a range',
+    alignDefault: 'Default alignment (no marker)',
+    alignLeft: 'Align left',
+    alignCenter: 'Align center',
+    alignRight: 'Align right',
   },
   docx: {
     contents: 'Contents',
@@ -2327,6 +2331,7 @@ export const en = {
     redo: "Redo",
     hideKeyboard: "Hide keyboard",
     tableTip: "Table — drag to choose a size, or open the visual editor",
+    tableCustom: "Custom table… ({cols} × {rows})",
     tableVisual: "Visual editor…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

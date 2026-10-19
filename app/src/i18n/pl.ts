@@ -2054,6 +2054,10 @@ export const pl: I18n = {
     discardBody: 'Tabela zawiera niezaplikowane zmiany. Zastosować je przed zamknięciem?',
     discard: 'Odrzuć',
     selectColumn: 'Wybierz kolumnę · Shift+klik, aby wybrać zakres',
+    alignDefault: 'Wyrównanie domyślne (bez znacznika)',
+    alignLeft: 'Wyrównaj do lewej',
+    alignCenter: 'Wyśrodkuj',
+    alignRight: 'Wyrównaj do prawej',
   },
   docx: {
     contents: 'Spis treści',
@@ -2315,6 +2319,7 @@ export const pl: I18n = {
     redo: "Ponów",
     hideKeyboard: "Ukryj klawiaturę",
     tableTip: "Tabela — przeciągnij, aby wybrać rozmiar, albo otwórz edytor wizualny",
+    tableCustom: "Tabela niestandardowa… ({cols} × {rows})",
     tableVisual: "Edytor wizualny…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)

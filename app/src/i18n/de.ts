@@ -2037,6 +2037,10 @@ export const de: I18n = {
     discardBody: 'Die Tabelle enthält Änderungen, die noch nicht übernommen wurden. Vor dem Schließen übernehmen?',
     discard: 'Verwerfen',
     selectColumn: 'Spalte auswählen · Umschalt+Klick für einen Bereich',
+    alignDefault: 'Standardausrichtung (ohne Markierung)',
+    alignLeft: 'Linksbündig',
+    alignCenter: 'Zentriert',
+    alignRight: 'Rechtsbündig',
   },
   docx: {
     contents: 'Inhalt',
@@ -2298,6 +2302,7 @@ export const de: I18n = {
     redo: "Wiederholen",
     hideKeyboard: "Tastatur ausblenden",
     tableTip: "Tabelle — ziehen, um die Größe zu wählen, oder den visuellen Editor öffnen",
+    tableCustom: "Eigene Tabelle… ({cols} × {rows})",
     tableVisual: "Visueller Editor…",
   },
   // 5.0 sidebar (Sidebar.vue, docs/v5-ui-spec.md §4)
