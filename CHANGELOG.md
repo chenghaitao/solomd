@@ -19,10 +19,11 @@
 
 ---
 
-## [5.0.4] — 2026-10-19
+## [5.0.4] — 2026-10-20
 
 一条线：**把格式栏的表格入口补齐** —— 尺寸对话框与网格编辑器各归各位，表格编辑器的对齐组补上说明；
-**同步上游 14 个提交**（LanguageTool 语法检查、1013 反馈批次、Word 导出与平台修复、CodeMirror 源码模式回归）。
+**同步上游 17 个提交**（LanguageTool 语法检查、1013 反馈批次、Word 导出与平台修复、CodeMirror 源码模式回归，
+以及打印 / 导出 / 字体 / Mermaid / 输入法修复）。
 
 ### 1. 格式栏的表格入口
 
@@ -50,7 +51,10 @@
 留空的那一项读作**「默认对齐」而不是「左对齐」** —— 它的实际含义是分隔行不加冒号、由阅读器决定对齐方式，
 写成「左对齐」会与实际行为不符。
 
-### 3. 同步上游 14 个提交
+### 3. 同步上游 17 个提交
+
+分两轮落地：前 14 个提交（LanguageTool、1013 反馈批次、Word 导出与平台修复、CodeMirror 源码模式）先合入并
+单独验证过一轮；随后上游又推了 3 个提交（打印与导出批次、字体 / Mermaid / 输入法、导出 CSS 单测），一并进这一版。
 
 | 上游提交 | 内容 | 处置 |
 |---|---|---|
@@ -61,6 +65,9 @@
 | `8b4384ab` | 撤销上一版「下载链接回退到 5.0.0」 | 取用（官网） |
 | `68b5d1fd` `d89a1081` `7d9ee76b` `fbdfae77` | 上游把版本号 bump 到 5.0.2，并同步官网、`Cargo.lock`、mcpb manifest | **以本仓库为准**，app 保持 5.0.4 |
 | `f7f90a53` `78576de7` `1751eef2` `66dddd9c` | 上游 bump 到 5.0.3，官网文案同步，`release.sh` 里补 `Cargo.lock` / mcpb manifest 同步与 iOS `AccentColor`，MAS 版本默认取 `package.json` | 版本号同样以本仓库为准；脚本与官网文案取用 |
+| `43d54e8c` | **打印与导出批次**：独立的「打印…」（`file.print`，菜单栏 / 命令面板 / 快捷键三处入口，默认不占键位）、实时预览里裸链接按链接样式渲染（#431）、复制为 Word 的列表排版（#432）、LaTeX `\[…\]` 与 `\(…\)` 定界符（#433）、Windows 最大化时关闭按钮的圆角（#434）、编辑器与预览的顶部留白（#435 #440）、自定义 CSS 进 HTML / PDF 导出（#439） | 取用 |
+| `4284d196` | **字体 / Mermaid / 输入法**：Android 端读取 `/storage/emulated/0/Fonts` 下的自定义字体（#438）、Mermaid 标签里 `@` 与括号的引号处理、Windows 输入法组合期恢复（#276） | 取用 |
+| `d553f67d` | 自定义主题导出 CSS 的单测；修 E2EE 集成测试的 import 路径 | 取用 |
 
 上游对官网（`web/`）这轮只有文档与文案更新，没有带回遥测或推广相关内容 —— 合并后 `promote` 页面、
 `api/track`、`ANALYTICS.md` 依旧不存在，隐私页也没有「匿名统计」表述。`app-store/` 本轮零改动。
@@ -73,15 +80,20 @@
 | `app/src/stores/settings.ts` | 两边都留：本地对 `telemetryEnabled` / `telemetryNoticeAck` 的清理迁移 + 上游新增的 `v503SourceModeMigrated`（把旧的 `livePreview=false` 迁到 `viewMode`） |
 | `app/src/components/SettingsPanel.vue` | 设置搜索框焦点环的裁切，两边都动过：保留本地的 sticky 搜索行（`padding: 6px 24px 12px`、背景 `var(--bg)`），同时接受上游收紧的表头内边距，两者叠加后总间距 12px |
 | `app/src/components/Slideshow.vue` | 保留本地已多语言化的模板，把上游新增的控件移植进来：主题切换、字号缩放（− / % / +）、两行帮助与改写的提示语，新增 7 个 `slideshowHelp` 键（15 个语言）；`readInitialThemeAndLang` 的返回值收敛为 `{theme}`，随之删掉已无用的 `isZh` |
+| `app/package.json`、`src-tauri/Cargo.toml`、`Cargo.lock`、`tauri.conf.json` | 版本号取本仓库侧（5.0.4），上游的 5.0.2 / 5.0.3 不落地 |
+| `app/src/composables/useExport.ts` | 取上游新增的 `forcePrintDialog` 参数（「打印…」需要强制弹系统打印框），只去掉夹在参数行后面的 `track('file_exported')` 调用 |
+| `app/src/lib/cm-live-render.ts` | 取上游按**位置**判定链接目标的实现（`URL` 紧跟 `(` 才算目标），它同时覆盖本地 #395 的两种例外并新增裸链接样式；本地 `isLinkDestinationUrl()` 因此失效，`lib/link-destination.ts` 与其单测一并删除 |
+| `app/src/lib/word-clipboard.ts`、`word-clipboard.test.ts` | 取上游版本：`#432` 把 `ol` / `ul` 整段转成挂缩进段落，取代本地只给 `<ol>` 补 `start="1"` 的做法 |
 
 ### 验证
 
 | 项 | 结果 |
 |---|---|
 | `vue-tsc --noEmit` | 退出 0 |
-| `node --test` | **510 / 510 通过**（含上游 LanguageTool 新增用例） |
-| `vite build` | 成功，入口 `index-*.js` **897.10 kB**（gzip 286.26 kB） |
+| `node --test` | **514 / 514 通过**（含上游 LanguageTool、Mermaid 引号、导出 CSS 新增用例） |
+| `vite build` | 成功，入口 `index-*.js` **907.01 kB**（gzip 289.71 kB） |
 | vendor 分包 | **1,738.17 kB / gzip 530.02 kB**，与上一版逐字节一致 |
+| `astro build`（`web/`） | 成功，**111 个 HTML 页**；无 `/promote` 路由，产物里没有 `api/track` / `ref_download` 载荷（仅历史博客文章正文提到过 `api/track`） |
 
 ### 说明
 
@@ -90,6 +102,9 @@
   这个仓库只保留自己需要的那部分改动。
 - 上游的 `#378`（PDF 导出遮罩挡住窗口拖动）与本仓库记录的 `#378`（Windows 窗口阴影）是同一个 issue 编号下的
   两件事，互不覆盖，都在。
+- 上游 `#431` 的裸链接样式与本地 `#395` 的两种情况是同一处代码：本版统一到上游按位置判定的写法，
+  「自动链接」与「URL 当链接文本」两种例外仍然可见，本地那份 `link-destination.ts` 就此退场。
+- `web/` 这一轮上游只改文案，`app-store/` 零改动；官网下载链接仍指向上游仓库的 release，沿用上游页面未作改动。
 
 ---
 
