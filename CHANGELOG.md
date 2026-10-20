@@ -80,7 +80,7 @@
 | `app/src/stores/settings.ts` | 两边都留：本地对 `telemetryEnabled` / `telemetryNoticeAck` 的清理迁移 + 上游新增的 `v503SourceModeMigrated`（把旧的 `livePreview=false` 迁到 `viewMode`） |
 | `app/src/components/SettingsPanel.vue` | 设置搜索框焦点环的裁切，两边都动过：保留本地的 sticky 搜索行（`padding: 6px 24px 12px`、背景 `var(--bg)`），同时接受上游收紧的表头内边距，两者叠加后总间距 12px |
 | `app/src/components/Slideshow.vue` | 保留本地已多语言化的模板，把上游新增的控件移植进来：主题切换、字号缩放（− / % / +）、两行帮助与改写的提示语，新增 7 个 `slideshowHelp` 键（15 个语言）；`readInitialThemeAndLang` 的返回值收敛为 `{theme}`，随之删掉已无用的 `isZh` |
-| `app/package.json`、`src-tauri/Cargo.toml`、`Cargo.lock`、`tauri.conf.json` | 版本号取本仓库侧（5.0.4），上游的 5.0.2 / 5.0.3 不落地 |
+| `app/package.json`、`src-tauri/Cargo.toml`、`Cargo.lock`、`tauri.conf.json` | 版本号取本仓库侧（5.0.4），不跟随上游的 5.0.2 / 5.0.3 |
 | `app/src/composables/useExport.ts` | 取上游新增的 `forcePrintDialog` 参数（「打印…」需要强制弹系统打印框），只去掉夹在参数行后面的 `track('file_exported')` 调用 |
 | `app/src/lib/cm-live-render.ts` | 取上游按**位置**判定链接目标的实现（`URL` 紧跟 `(` 才算目标），它同时覆盖本地 #395 的两种例外并新增裸链接样式；本地 `isLinkDestinationUrl()` 因此失效，`lib/link-destination.ts` 与其单测一并删除 |
 | `app/src/lib/word-clipboard.ts`、`word-clipboard.test.ts` | 取上游版本：`#432` 把 `ol` / `ul` 整段转成挂缩进段落，取代本地只给 `<ol>` 补 `start="1"` 的做法 |
