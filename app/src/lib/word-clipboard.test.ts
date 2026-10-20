@@ -32,9 +32,12 @@ test('strips code block toolbar headers and joins .cb-line spans with <br> (#427
   assert.ok(out.includes('const a = 1;<br>const b = 2;'), 'lines should be joined with <br>');
 });
 
-test('adds start="1" to every <ol> and styles tables and task checkboxes for Word (#427)', () => {
+test('converts <ol> and <ul> into explicit hanging-indent paragraphs and preserves (1)(2) sub-items (#427, #432)', () => {
   const rawHtml = `
-    <ol><li>第一项</li><li>第二项</li></ol>
+    <ol>
+      <li>第一项<br>（1）子项一<br>（2）子项二</li>
+      <li><p>第二项</p><p>（1）段落子项A</p><p>（2）段落子项B</p></li>
+    </ol>
     <p>中间段落</p>
     <ol><li>新列表第一项</li></ol>
     <ul><li class="task-list-item"><input type="checkbox" checked>已完成</li><li class="task-list-item"><input type="checkbox">未完成</li></ul>
@@ -42,11 +45,20 @@ test('adds start="1" to every <ol> and styles tables and task checkboxes for Wor
   `;
 
   const out = buildWordClipboardHtml(rawHtml);
-  const startAttrCount = (out.match(/<ol[^>]*start="1"/g) || []).length;
-  assert.equal(startAttrCount, 2);
-  assert.ok(out.includes('☑ '));
-  assert.ok(out.includes('☐ '));
+  // Both <ol> blocks start at 1. with 24pt left margin and -18pt hanging indent (6pt inside left border)
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;text-indent:-18pt;">1. 第一项</p>'));
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;">（1）子项一</p>'));
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;">（2）子项二</p>'));
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;text-indent:-18pt;">2. 第二项</p>'));
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;">（1）段落子项A</p>'));
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;">（2）段落子项B</p>'));
+  assert.ok(out.includes('margin:3pt 0 3pt 24pt;text-indent:-18pt;">1. 新列表第一项</p>'));
+  assert.ok(!/<ol\b/i.test(out), 'raw <ol> should be converted to explicit paragraphs');
+  assert.ok(out.includes('☑ 已完成'));
+  assert.ok(out.includes('☐ 未完成'));
   assert.ok(!out.includes('<input'));
   assert.ok(out.includes('border-collapse: collapse'));
+  assert.ok(out.includes('background: #ffe7cc'));
   assert.ok(out.includes('xmlns:w="urn:schemas-microsoft-com:office:word"'));
 });
+

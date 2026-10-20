@@ -12,8 +12,9 @@ import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls, type BinaryReader
 import { inlineDiagramsInHtml } from './diagram-export';
 import { hasKatex, standaloneKatexCss } from './katex-standalone';
 import { loadRenderDeps } from './render-deps';
+import { buildExportCustomCss, getActiveCustomCss } from './custom-theme';
 
-export const HTML_TEMPLATE = (title: string, body: string, headCss = '') => `<!doctype html>
+export const HTML_TEMPLATE = (title: string, body: string, headCss = '', customCss = '') => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -27,15 +28,15 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
      gray and links a sober blue. Deliberately no dark-mode variant: the file
      is a document, and mermaid diagrams are rendered for a light page. */
   :root {
-    --accent-rule: #3d444d;
-    --link: #0b5cad;
+    --accent-rule: var(--md-h1, var(--accent, #3d444d));
+    --link: var(--accent-text, var(--md-link, #0b5cad));
     --link-soft: #c9dcf0;
-    --ink: #1f2328;
-    --ink-muted: #59636e;
-    --rule: #e4e6e9;
-    --paper: #ffffff;
-    --code-bg: #f6f8fa;
-    --code-key: #cf222e;
+    --ink: var(--text, #1f2328);
+    --ink-muted: var(--text-muted, #59636e);
+    --rule: var(--border, #e4e6e9);
+    --paper: var(--bg, #ffffff);
+    --code-bg: var(--fill-1, var(--md-code-bg, #f6f8fa));
+    --code-key: var(--syn-keyword, #cf222e);
     --row-alt: #f9fafb;
     --thead-bg: #f3f4f6;
     --quote-bg: #f9fafb;
@@ -67,18 +68,20 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   h1:first-child, h2:first-child, h3:first-child { margin-top: 0; }
   h1 {
     font-size: 2.15em;
+    color: var(--md-h1, var(--ink));
     border-bottom: 2px solid var(--accent-rule);
     padding-bottom: .35em;
     letter-spacing: -0.01em;
   }
   h2 {
     font-size: 1.55em;
+    color: var(--md-h2, var(--ink));
     border-bottom: 1px solid var(--rule);
     padding-bottom: .25em;
   }
-  h3 { font-size: 1.25em; }
-  h4 { font-size: 1.05em; }
-  h5, h6 { font-size: 1em; color: var(--ink-muted); }
+  h3 { font-size: 1.25em; color: var(--md-h3, var(--ink)); }
+  h4 { font-size: 1.05em; color: var(--md-h4, var(--ink)); }
+  h5, h6 { font-size: 1em; color: var(--md-h5, var(--ink-muted)); }
   p { margin: .9em 0; }
   a {
     color: var(--link);
@@ -86,8 +89,8 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
     border-bottom: 1px solid var(--link-soft);
   }
   a:hover { border-bottom-color: var(--link); }
-  strong { color: var(--ink); }
-  em { color: var(--ink); }
+  strong { color: var(--md-strong, var(--ink)); }
+  em { color: var(--md-em, var(--ink)); }
   code {
     font-family: "JetBrains Mono", "SF Mono", "Menlo", "Consolas",
       "Liberation Mono", monospace;
@@ -95,7 +98,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
     background: var(--code-bg);
     padding: .15em .45em;
     border-radius: 4px;
-    color: var(--ink);
+    color: var(--md-code, var(--ink));
   }
   pre {
     background: var(--code-bg);
@@ -109,7 +112,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   pre code {
     background: transparent;
     padding: 0;
-    color: var(--ink);
+    color: var(--md-code, var(--ink));
     font-size: .88em;
   }
   pre code .hljs-keyword,
@@ -120,7 +123,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
     background: var(--quote-bg);
     margin: 1.4em 0;
     padding: .5em 1.2em;
-    color: var(--ink-muted);
+    color: var(--md-quote, var(--ink-muted));
     font-style: italic;
     border-radius: 0 4px 4px 0;
   }
@@ -154,7 +157,7 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   tbody tr:nth-child(even) { background: var(--row-alt); }
   hr {
     border: none;
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid var(--md-hr, var(--rule));
     margin: 2.4em 0;
   }
   img {
@@ -168,9 +171,9 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   .mermaid-block svg, .plantuml-block svg { max-width: 100%; height: auto; }
   .plantuml-block img { box-shadow: none; border-radius: 0; margin: 0; }
   pre.mermaid-error { color: #b42318; white-space: pre-wrap; }
-</style>
+</style>${customCss ? `\n<style id="solomd-custom-theme">\n${customCss}\n</style>` : ''}
 </head>
-<body>
+<body class="preview-content">
 ${body}
 </body>
 </html>`;
@@ -190,6 +193,8 @@ export interface StandaloneHtmlInput {
   plantumlServer?: string | null;
   /** Byte reader for local images (tests/harness); defaults to the Tauri one. */
   readBytes?: BinaryReader;
+  /** #439 — optional custom CSS override; defaults to active `<style id="solomd-custom-theme">`. */
+  customCss?: string;
 }
 
 export async function buildStandaloneHtml(input: StandaloneHtmlInput): Promise<string> {
@@ -221,5 +226,7 @@ export async function buildStandaloneHtml(input: StandaloneHtmlInput): Promise<s
   // #313 / #332 — KaTeX's stylesheet and fonts go into the file, and only
   // when there is math. This was a render-blocking jsDelivr <link>.
   const headCss = hasKatex(body) ? await standaloneKatexCss() : '';
-  return HTML_TEMPLATE(input.title, body, headCss);
+  const rawCustomCss = input.customCss !== undefined ? input.customCss : getActiveCustomCss();
+  const customCss = buildExportCustomCss(rawCustomCss, 'body.preview-content');
+  return HTML_TEMPLATE(input.title, body, headCss, customCss);
 }

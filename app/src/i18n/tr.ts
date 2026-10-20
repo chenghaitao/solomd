@@ -2198,6 +2198,7 @@ export const tr: I18n = {
       saveAs: 'Farklı Kaydet…',
       openFolder: 'Klasör Aç…',
       closeTab: 'Sekmeyi Kapat',
+      print: 'Yazdır…',
       openExternal: 'Harici Düzenleyicide Aç',
     },
     view: {

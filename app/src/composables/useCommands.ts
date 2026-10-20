@@ -613,6 +613,7 @@ export function useCommands(): Command[] {
     // Gitee IK8QJQ — the raster/text distinction decides whether the output
     // is searchable, so it belongs in the palette too, not just the toolbar.
     { id: 'export.pdfPrint', title: 'Export to PDF (text)…', hint: 'real selectable text, via system print', shortcut: kb('export.pdfPrint'), run: () => exporter.exportPdfPrint() },
+    { id: 'file.print', title: 'Print…', hint: 'Open the system print dialog', shortcut: kb('file.print'), run: () => exporter.printDocument() },
     { id: 'export.pdf', title: 'Export to PDF (image)…', hint: 'rasterised, text not selectable', run: () => exporter.exportPdf() },
     { id: 'export.image', title: 'Export to Image (PNG)…', run: () => exporter.exportImage() },
     { id: 'export.epub', title: 'Export to EPUB…', hint: 'via Pandoc', run: () => pandoc.exportTo('epub') },

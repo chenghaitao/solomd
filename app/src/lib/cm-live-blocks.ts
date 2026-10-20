@@ -402,7 +402,37 @@ function inlineMathSpans(text: string): Array<{ start: number; end: number; tex:
   }
   let i = 0;
   while (i < n) {
-    if (text[i] !== '$' || code[i]) { i++; continue; }
+    if (code[i]) { i++; continue; }
+    // #433 — LaTeX `\( ... \)` and inline `\[ ... \]` delimiters (DeepSeek / ChatGPT).
+    if (
+      text[i] === '\\' &&
+      (i === 0 || text[i - 1] !== '\\') &&
+      (text[i + 1] === '(' || text[i + 1] === '[')
+    ) {
+      const closeChar = text[i + 1] === '[' ? ']' : ')';
+      let j = i + 2;
+      let close = -1;
+      while (j < n - 1) {
+        if (!code[j] && text[j] === '\\' && text[j + 1] === closeChar) {
+          let bs = 0;
+          let k = j;
+          while (k >= i + 2 && text[k] === '\\') { bs++; k--; }
+          if (bs % 2 === 1) { close = j; break; }
+        }
+        j++;
+      }
+      if (close >= 0) {
+        const content = text.slice(i + 2, close).trim();
+        if (content) {
+          spans.push({ start: i, end: close + 2, tex: content });
+          i = close + 2;
+          continue;
+        }
+      }
+      i += 2;
+      continue;
+    }
+    if (text[i] !== '$') { i++; continue; }
     if (i > 0 && text[i - 1] === '\\') { i++; continue; }          // escaped \$
     if (text[i + 1] === '$') { i += 2; continue; }                  // $$ block delimiter
     if (i + 1 >= n || /\s/.test(text[i + 1])) { i++; continue; }    // opening must hug content
@@ -830,14 +860,16 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             continue;
           }
 
-          // v4.3.0 issue #57a — block math (`$$…$$`).
-          // Recognise either inline `$$E=mc^2$$` on a single line OR a
-          // multi-line block opened with a `$$` line and closed with a `$$`
-          // line. We only collapse if the cursor is outside.
+          // v4.3.0 issue #57a / #433 — block math (`$$…$$` or `\[…\]`).
+          // Recognise either inline `$$E=mc^2$$` / `\[E=mc^2\]` on a single
+          // line OR a multi-line block opened with `$$` / `\[` and closed with
+          // `$$` / `\]`. We only collapse if the cursor is outside.
           const trimmedLine = line.text.trim();
-          if (trimmedLine.startsWith('$$')) {
-            // Single-line `$$ ... $$`?
-            if (trimmedLine.endsWith('$$') && trimmedLine.length > 4) {
+          if (trimmedLine.startsWith('$$') || trimmedLine.startsWith('\\[')) {
+            const isBracket = trimmedLine.startsWith('\\[');
+            const closeDelim = isBracket ? '\\]' : '$$';
+            // Single-line `$$ ... $$` or `\[ ... \]`?
+            if (trimmedLine.endsWith(closeDelim) && trimmedLine.length > 4) {
               const cursorInside = keepSource || cursorLine === i || cursorLineEnd === i;
               if (!cursorInside) {
                 builder.add(
@@ -852,11 +884,17 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
               i += 1;
               continue;
             }
-            // Multi-line block — scan forward for the closing `$$` line.
+            // Multi-line block — scan forward for the closing `$$` or `\]` line.
             let endI = i + 1;
             while (endI <= lastLine) {
-              const next = doc.line(endI);
-              if (next.text.trim().startsWith('$$')) break;
+              const nextTrimmed = doc.line(endI).text.trim();
+              if (
+                isBracket
+                  ? nextTrimmed.startsWith('\\]') || nextTrimmed.endsWith('\\]')
+                  : nextTrimmed.startsWith('$$') || nextTrimmed.endsWith('$$')
+              ) {
+                break;
+              }
               endI += 1;
             }
             if (endI <= lastLine) {
@@ -1047,7 +1085,12 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
           // — the overwhelming majority in a large doc — short-circuit here, so
           // this whole-doc pass doesn't get measurably slower (#5 perf).
           const inlineCursorHere = keepSource || (i >= cursorLine && i <= cursorLineEnd);
-          if (!inlineCursorHere && line.text.indexOf('$') !== -1) {
+          if (
+            !inlineCursorHere &&
+            (line.text.indexOf('$') !== -1 ||
+              line.text.indexOf('\\(') !== -1 ||
+              line.text.indexOf('\\[') !== -1)
+          ) {
             for (const span of inlineMathSpans(line.text)) {
               builder.add(
                 line.from + span.start,

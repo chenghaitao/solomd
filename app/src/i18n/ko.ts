@@ -2181,6 +2181,7 @@ export const ko: I18n = {
       saveAs: '다른 이름으로 저장…',
       openFolder: '폴더 열기…',
       closeTab: '탭 닫기',
+      print: '인쇄…',
       openExternal: '외부 편집기에서 열기',
     },
     view: {

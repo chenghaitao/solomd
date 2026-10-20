@@ -709,7 +709,7 @@ defineExpose({ scrollToLine, openSearch });
   margin: 0 auto;
   /* 5.0 §5 — same column and top margin as the editor (content-box: the max
      width is the text measure). */
-  padding: 56px 32px 30vh;
+  padding: 20px 32px 30vh;
   color: var(--text);
   /* #133 — honor the editor `fontFamily` setting (set as `--content-font-family`
      in App.vue) so the rendered pane matches the editor in split view. Falls
@@ -732,7 +732,7 @@ defineExpose({ scrollToLine, openSearch });
 }
 .preview-content--fit {
   max-width: none;
-  padding: 56px 32px 30vh;
+  padding: 20px 32px 30vh;
 }
 /* 5.0 §2 type scale — H1 30/650/1.25 −0.015em, H2 20/620, H3 17/600 at the
    16px default; in em so the font-size setting scales them. Same values as

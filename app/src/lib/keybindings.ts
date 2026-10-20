@@ -148,6 +148,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'export.copyHtml', label: 'Copy as HTML', category: 'file', defaults: ['Mod+Shift+C'] },
   { id: 'export.copyWord', label: 'Copy as Word', category: 'file', defaults: [] },
   { id: 'export.copyMd', label: 'Copy as Markdown', category: 'file', defaults: ['Mod+Alt+C'] },
+  { id: 'file.print', label: 'Print…', category: 'file', defaults: [] },
   { id: 'inbox.open', label: 'Open Inbox', category: 'file', defaults: [] },
   { id: 'inbox.toggle', label: 'Toggle Inbox Flag / Organize', category: 'file', defaults: ['Mod+E'] },
   { id: 'file.openExternal', label: 'Open in External Editor', category: 'file', defaults: ['Mod+Shift+E'] },

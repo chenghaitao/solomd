@@ -68,7 +68,6 @@ import {
 import { copyPlainText, dedentFenced, dedentIndented } from './code-copy';
 // #395 — URL nodes that are a link *destination* (and so should be hidden)
 // versus URL nodes that are the visible label. Leaf module so it is testable.
-import { isLinkDestinationUrl } from './link-destination';
 
 // ---------------------------------------------------------------------------
 // Marker nodes that we hide off-line. Brackets/parens for links and
@@ -376,23 +375,25 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
           return;
         }
 
-        // ---- URL: hide only the DESTINATION of a `[label](url)` link.
-        //      Two shapes must stay visible:
-        //        • an Autolink (`<https://x.com>`), where the URL IS the text;
-        //        • a URL-shaped *label* (`[https://x.com](https://x.com)`),
-        //          which GFM's Autolink extension tags as a second URL node
-        //          inside the same Link. Hiding that erased the whole visible
-        //          text and left only the text before the link (#395).
-        //      Both cases are told apart by position, not by the parent — see
-        //      isLinkDestinationUrl() below.
+        // ---- URL: hide only when it's the destination part of a real
+        //      `[label](url)` link. Bare GFM URLs (`https://x.com`) and
+        //      autolinks (`<https://x.com>`) make the URL the visible link
+        //      text, so they get `linkMark` (#431). ----
         if (name === 'URL') {
-          if (
-            !showMarkers
-            && !caretTouches
-            && nTo > nFrom
-            && isLinkDestinationUrl(node.node, (a, b) => view.state.doc.sliceString(a, b))
-          ) {
-            ranges.push(hideDeco.range(nFrom, nTo));
+          const parent = node.node.parent;
+          // GFM also emits a URL node for a URL-valued label (#395).
+          // Only the URL immediately following `(` is the destination.
+          const previous = node.node.prevSibling;
+          const inLabeledLink = parent?.name === 'Link' && previous?.name === 'LinkMark' &&
+            view.state.doc.sliceString(previous.from, previous.to) === '(';
+          if (inLabeledLink) {
+            if (!showMarkers && !caretTouches && nTo > nFrom) {
+              ranges.push(hideDeco.range(nFrom, nTo));
+            } else if (nTo > nFrom) {
+              ranges.push(markerMark.range(nFrom, nTo));
+            }
+          } else if (nTo > nFrom) {
+            ranges.push(linkMark.range(nFrom, nTo));
           }
           return;
         }
@@ -630,7 +631,7 @@ const liveEditHighlightStyle = HighlightStyle.define([
   { tag: t.emphasis, fontStyle: 'italic', color: 'var(--md-em)' },
   { tag: t.strikethrough, textDecoration: 'line-through', color: 'var(--text-muted)' },
   { tag: t.link, color: 'var(--accent-text)' },
-  { tag: t.url, color: 'var(--text-3)' },
+  { tag: t.url, color: 'var(--accent-text)' },
   { tag: t.monospace, fontFamily: 'var(--font-mono)', color: 'var(--text)' },
   { tag: t.quote, color: 'var(--text-2)' },
   { tag: t.contentSeparator, color: 'var(--text-3)' },

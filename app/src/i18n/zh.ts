@@ -2187,6 +2187,7 @@ export const zh: I18n = {
       openFolder: '打开文件夹…',
       closeTab: '关闭标签页',
       openExternal: '用外部编辑器打开',
+      print: '打印…',
     },
     view: {
       editor: '视图:仅编辑',

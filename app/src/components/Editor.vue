@@ -834,7 +834,12 @@ function splitPlainMarkdownBlocks(
     // (routine inside `aligned`) became its own indented-code block, so the
     // formula rendered as three pieces with a grey slab in the middle.
     // `$$E=mc^2$$` closes on its own line and is not an opener.
-    if (/^\$\$/.test(trimmed) && !/^\$\$.*\$\$$/.test(trimmed)) return 'mathfence';
+    if (
+      (/^\$\$/.test(trimmed) && !/^\$\$.*\$\$$/.test(trimmed)) ||
+      (/^\\\[/.test(trimmed) && !/^\\\[.*\\\]$/.test(trimmed))
+    ) {
+      return 'mathfence';
+    }
     if (/^#{1,6}\s+/.test(trimmed)) return 'heading';
     if (/^(---|\*\*\*|___)\s*$/.test(trimmed)) return 'thematic';
     if (/^\s{0,3}>\s?/.test(text)) return 'quote';
@@ -856,13 +861,14 @@ function splitPlainMarkdownBlocks(
     }
 
     if (kind === 'mathfence') {
-      // Consume through the closing `$$`; an unclosed block runs to the end
-      // of the document, matching the code-fence branch below.
+      // Consume through the closing `$$` or `\]`; an unclosed block runs to the
+      // end of the document, matching the code-fence branch below.
+      const closeMarker = line.text.trim().startsWith('\\[') ? '\\]' : '$$';
       let j = i + 1;
       while (j < lines.length) {
         const t = lines[j].text.trim();
         j++;
-        if (t.endsWith('$$')) break;
+        if (t.endsWith(closeMarker)) break;
       }
       pushRange(line.start, lines[j - 1]?.end ?? line.end);
       i = j;
@@ -1404,6 +1410,9 @@ function syncPlainEditorAfterModeSwitch() {
 function handlePlainInput(event: Event) {
   if (plainLiveEnabled.value) return;
   const el = event.target as HTMLTextAreaElement;
+  if (plainComposing.value && (event as InputEvent).isComposing === false) {
+    plainComposing.value = false;
+  }
   if (!plainComposing.value) {
     recordPlainHistory();
     // Ordered-list numbers follow a line added or removed (lib/list-renumber).
@@ -2310,7 +2319,10 @@ function plainFirstRowEnd(el: HTMLTextAreaElement, text: string): number {
 
 function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
   if (plainComposing.value) {
-    if ((event.ctrlKey || event.metaKey) && !event.isComposing) {
+    if (
+      (!event.isComposing && event.key !== 'Process' && event.keyCode !== 229) ||
+      ((event.ctrlKey || event.metaKey) && !event.isComposing)
+    ) {
       plainComposing.value = false;
     } else {
       return;
@@ -2455,7 +2467,10 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
 
 function handlePlainEditorKeydown(event: KeyboardEvent) {
   if (plainComposing.value) {
-    if ((event.ctrlKey || event.metaKey) && !event.isComposing) {
+    if (
+      (!event.isComposing && event.key !== 'Process' && event.keyCode !== 229) ||
+      ((event.ctrlKey || event.metaKey) && !event.isComposing)
+    ) {
       plainComposing.value = false;
     } else {
       return;
@@ -2887,6 +2902,9 @@ function handlePlainBlockInput(index: number, event: Event) {
   const el = event.target as HTMLTextAreaElement;
   autoSizePlainBlock(el);
   schedulePlainOverlays();
+  if (plainComposing.value && (event as InputEvent).isComposing === false) {
+    plainComposing.value = false;
+  }
   if (plainComposing.value) return;
   // Before updatePlainBlock: a re-split can swap this textarea for another.
   noteTypedInTextarea(el, event);
@@ -2908,6 +2926,17 @@ function handlePlainBlockCompositionEnd(index: number, event: CompositionEvent) 
   const el = event.target as HTMLTextAreaElement;
   autoSizePlainBlock(el);
   updatePlainBlock(index, el.value, el.selectionStart ?? el.value.length);
+}
+
+function handlePlainEditorCompositionEnd(event: CompositionEvent) {
+  plainComposing.value = false;
+  schedulePlainOverlays();
+  handlePlainInput(event);
+}
+
+function handlePlainBlur() {
+  plainComposing.value = false;
+  schedulePlainOverlays();
 }
 
 /**
@@ -3780,9 +3809,9 @@ const fontSizeTheme = (px: number, family: string) =>
   EditorView.theme({
     '&': { fontSize: `${px}px`, height: '100%' },
     // 5.0 §5 — body 16/1.8 (the size is the user's; 1.8 is CJK-comfortable),
-    // 56px above the first line, room to scroll the last line up to the eye.
+    // 20px above the first line (#435, #440), room to scroll the last line up to the eye.
     '.cm-scroller': { fontFamily: buildEditorFontStack(family), lineHeight: '1.8' },
-    '.cm-content': { padding: '56px 32px 30vh', caretColor: 'var(--accent)' },
+    '.cm-content': { padding: '20px 32px 30vh', caretColor: 'var(--accent)' },
     '.cm-gutters': {
       backgroundColor: 'transparent',
       border: 'none',
@@ -5392,7 +5421,7 @@ const cls = computed(() => ({
           @compositionstart="handlePlainBlockCompositionStart"
           @compositionend="(event) => handlePlainBlockCompositionEnd(index, event)"
           @click.stop
-          @blur="schedulePlainOverlays"
+          @blur="handlePlainBlur"
           @keyup="emitPlainCursorAndSelection"
           @mouseup="emitPlainCursorAndSelection"
           @select="emitPlainCursorAndSelection"
@@ -5458,9 +5487,11 @@ const cls = computed(() => ({
         @keydown="handlePlainEditorKeydown"
         @paste="handlePlainPaste"
         @input="handlePlainInput"
+        @compositionstart="handlePlainBlockCompositionStart"
+        @compositionend="handlePlainEditorCompositionEnd"
         @scroll="onPlainScroll"
         @mousedown="$event.button === 0 && clearStrayDocumentSelection($event.currentTarget as HTMLElement)"
-        @blur="schedulePlainOverlays"
+        @blur="handlePlainBlur"
         @keyup="emitPlainCursorAndSelection"
         @mouseup="emitPlainCursorAndSelection"
         @select="emitPlainCursorAndSelection"
@@ -5751,8 +5782,8 @@ const cls = computed(() => ({
   border: 0;
   outline: none;
   box-sizing: border-box;
-  /* 5.0 §5 — same surface as CodeMirror: 56px top, 32px sides, 30vh tail. */
-  padding: 56px 32px 30vh;
+  /* 5.0 §5 — same surface as CodeMirror: 20px top, 32px sides, 30vh tail (#435, #440). */
+  padding: 20px 32px 30vh;
   background: var(--bg);
   color: var(--text);
   caret-color: var(--accent);
@@ -5813,8 +5844,8 @@ const cls = computed(() => ({
   flex: none;
   overflow: hidden;
   box-sizing: border-box;
-  /* Top padding must match .plain-editor's 56px or numbers drift off rows. */
-  padding: 56px 8px 12px 0;
+  /* Top padding must match .plain-editor's 20px or numbers drift off rows. */
+  padding: 20px 8px 12px 0;
   border-right: 1px solid var(--border, rgba(127, 127, 127, 0.25));
   background: var(--bg);
   color: var(--text-faint, #999);
@@ -5831,7 +5862,7 @@ const cls = computed(() => ({
   overflow: auto;
   /* Anchors the drawn caret (#316). */
   position: relative;
-  padding: 56px 32px 30vh;
+  padding: 20px 32px 30vh;
   box-sizing: border-box;
   font-family: var(--plain-editor-font-family, var(--font-editor, var(--font-ui)));
   font-size: var(--plain-editor-font-size, 16px);

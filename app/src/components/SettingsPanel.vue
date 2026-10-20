@@ -879,7 +879,7 @@ function openThemeMarketplace() {
   themeMarketplaceOpen.value = true;
 }
 
-const fontFamilies = [
+const baseFontFamilies = [
   // Monospace — for code-heavy editing
   { label: 'JetBrains Mono', value: 'JetBrains Mono' },
   { label: 'SF Mono', value: 'SF Mono' },
@@ -900,13 +900,34 @@ const fontFamilies = [
   { label: 'LXGW Bright 霞鹜新晨宋', value: 'LXGW Bright' },
   { label: 'TsangerJinKai 仓耳今楷', value: 'TsangerJinKai03 W04' },
 ];
-const fontFamilyPresetValues = new Set(fontFamilies.map((f) => f.value));
+const localDiscoveredFonts = ref<Array<{ label: string; value: string }>>([]);
+const fontFamilies = computed(() => {
+  const existing = new Set(baseFontFamilies.map((f) => f.value.toLowerCase()));
+  const extras = localDiscoveredFonts.value.filter((f) => !existing.has(f.value.toLowerCase()));
+  return [...baseFontFamilies, ...extras];
+});
+const fontFamilyPresetValues = computed(() => new Set(fontFamilies.value.map((f) => f.value)));
 // Track custom-mode independently of settings.fontFamily so selecting
 // "自定义…" reveals the input even before user types anything.
-const inCustomMode = ref(!fontFamilyPresetValues.has(settings.fontFamily));
+const inCustomMode = ref(!fontFamilyPresetValues.value.has(settings.fontFamily));
 const customFontFamily = ref(
   inCustomMode.value ? settings.fontFamily : ''
 );
+void import('../lib/custom-font').then(async ({ discoverLocalFontFiles }) => {
+  const files = await discoverLocalFontFiles();
+  const seen = new Set<string>();
+  const list: Array<{ label: string; value: string }> = [];
+  for (const f of files) {
+    const key = f.family.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push({ label: `${f.family} (${f.name})`, value: f.family });
+  }
+  localDiscoveredFonts.value = list;
+  if (fontFamilyPresetValues.value.has(settings.fontFamily)) {
+    inCustomMode.value = false;
+  }
+});
 function onSelectFontFamily(v: string) {
   if (v === '__custom__') {
     inCustomMode.value = true;
@@ -957,7 +978,7 @@ function onCustomMmChange(
 // PDF font select: the dropdown uses the same `fontFamilies` list as the
 // editor; the empty value means "inherit / use stylesheet default."
 const pdfFontSelectValue = computed(() =>
-  fontFamilyPresetValues.has(settings.pdfDefaults.fontFamily)
+  fontFamilyPresetValues.value.has(settings.pdfDefaults.fontFamily)
     ? settings.pdfDefaults.fontFamily
     : settings.pdfDefaults.fontFamily
       ? '__custom_pdf__'

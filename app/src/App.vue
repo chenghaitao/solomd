@@ -65,6 +65,7 @@ import { useFiles } from './composables/useFiles';
 import { useShortcuts } from './composables/useShortcuts';
 import { useFileWatcher } from './composables/useFileWatcher';
 import { loadCustomTheme } from './lib/custom-theme';
+import { ensureCustomFontLoaded } from './lib/custom-font';
 import { isIOS, isMacOS, isAndroid, isMobile, isWindowsDesktop } from './lib/platform';
 import { useViewport, useTabletOverlay } from './composables/useViewport';
 import { toNativeSpec } from './lib/app-menu';
@@ -664,7 +665,8 @@ watchEffect(() => {
 watchEffect(() => {
   const f = (settings.codeFontFamily || '').trim();
   if (f) {
-    const quoted = /\s/.test(f) && !/^["']/.test(f) && !f.includes(',') ? `"${f}"` : f;
+    void ensureCustomFontLoaded(f);
+    const quoted = /[\s/.\\]/.test(f) && !/^["']/.test(f) && !f.includes(',') ? `"${f}"` : f;
     document.documentElement.style.setProperty(
       '--font-mono',
       `${quoted}, "JetBrains Mono", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace`,
@@ -706,6 +708,9 @@ watchEffect(() => {
 // fallback stack the editor uses — so Preview.vue / ReadingView render in it.
 watchEffect(() => {
   const root = document.documentElement;
+  if (settings.fontFamily.trim()) {
+    void ensureCustomFontLoaded(settings.fontFamily);
+  }
   root.style.setProperty('--content-font-family', buildEditorFontStack(settings.fontFamily));
   // Gitee IK9BBG — reading mode has its own serif stack, so it swallowed the
   // font setting whole. `--content-font-family` can't be used as the override

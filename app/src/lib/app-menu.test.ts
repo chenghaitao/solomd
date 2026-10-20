@@ -121,7 +121,7 @@ test('C1 section 四 / 六 / Part-1 commands all have a menu entry', () => {
     'file.new', 'file.newText', 'file.newInFolder', 'window.new', 'file.open', 'file.openFolder',
     'daily.openToday', 'file.save', 'file.saveAs', 'file.autoSave', 'file.import', 'export.html',
     'export.docx', 'export.pdfPrint', 'export.pdf', 'export.image', 'export.copyHtml', 'export.copyMd',
-    'inbox.toggle', 'file.openExternal', 'settings.open', 'file.closeTab', 'tab.reopenClosed', 'file.exit',
+    'file.print', 'inbox.toggle', 'file.openExternal', 'settings.open', 'file.closeTab', 'tab.reopenClosed', 'file.exit',
     // Edit
     'edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.selectAll', 'editor.caseCycle',
     'editor.selectWord', 'editor.deleteWord', 'editor.selectLine', 'editor.jumpToSelection',

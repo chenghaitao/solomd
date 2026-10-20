@@ -430,15 +430,17 @@ export function useExport() {
    * native print (NSPrintOperation on macOS, WebView2 PrintAsync on Windows,
    * WebKitGTK print on Linux).
    */
-  async function exportPdfPrint() {
+  async function exportPdfPrint(options?: { forcePrintDialog?: boolean }) {
     const ctx = activeOr();
     if (!ctx) return;
 
     // macOS: save the print layout straight to a file (print_webview_to_pdf)
     // instead of opening the print sheet, which on a Mac without a printer
-    // asks the user to add one first. Ask where to save BEFORE mounting the
-    // print overlay, so cancelling leaves nothing behind.
-    const directPdf = isMacOS() && !isIOS();
+    // asks the user to add one first — unless the user explicitly invoked
+    // `file.print` ("Print…") to open the native system print dialog.
+    // Ask where to save BEFORE mounting the print overlay, so cancelling
+    // leaves nothing behind.
+    const directPdf = !options?.forcePrintDialog && isMacOS() && !isIOS();
     let directPath: string | null = null;
     if (directPdf) {
       directPath = await pickWritePath(`${ctx.baseName}.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
@@ -785,11 +787,16 @@ export function useExport() {
     }
   }
 
+  async function printDocument() {
+    await exportPdfPrint({ forcePrintDialog: true });
+  }
+
   return {
     exportHtml,
     exportDocx,
     exportPdf,
     exportPdfPrint,
+    printDocument,
     exportImage,
     copyAsHtml,
     copyAsWord,

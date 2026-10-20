@@ -212,6 +212,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
         item('export.copyImage', t('cmd.export.copyImage')),
       ],
     },
+    item('file.print', t('menubar.print')),
     sep,
     {
       type: 'submenu',

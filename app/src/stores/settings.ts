@@ -22,7 +22,7 @@ export function buildEditorFontStack(face: string): string {
   // If user pasted a full stack already (contains comma), use as-is but still
   // append CJK fallback for safety.
   if (trimmed.includes(',')) return `${trimmed}, ${CJK_FALLBACK}`;
-  const needsQuote = /\s/.test(trimmed) && !/^["']/.test(trimmed);
+  const needsQuote = /[\s/.\\]/.test(trimmed) && !/^["']/.test(trimmed);
   const quoted = needsQuote ? `"${trimmed}"` : trimmed;
   return `${quoted}, ${CJK_FALLBACK}, "JetBrains Mono", Menlo, Consolas, monospace`;
 }

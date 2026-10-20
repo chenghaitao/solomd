@@ -23,7 +23,7 @@ import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { isIOS, isWindowsDesktop, usesCommandKey } from '../lib/platform';
+import { isIOS, isMobile, isWindowsDesktop, usesCommandKey } from '../lib/platform';
 import { macTitleBar, winTitleBar, customTitleBar } from '../lib/chrome';
 
 const hasTauriShell = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -1065,6 +1065,13 @@ onBeforeUnmount(() => {
             <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.copyAsImage())">
               <span class="dropdown__name">{{ t('toolbar.copyImage') }}</span>
             </button>
+            <template v-if="!isMobile()">
+              <div class="dropdown__sep"></div>
+              <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.printDocument())">
+                <span class="dropdown__name">{{ t('menubar.print') }}</span>
+                <span v-if="chord('file.print')" class="dropdown__shortcut">{{ chord('file.print') }}</span>
+              </button>
+            </template>
             <template v-if="isIOS()">
               <div class="dropdown__sep"></div>
               <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(onOpenExternal)">
@@ -1689,6 +1696,9 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
   background: transparent;
   color: var(--text-2);
   cursor: default;

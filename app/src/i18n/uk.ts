@@ -2198,6 +2198,7 @@ export const uk: I18n = {
       saveAs: 'Зберегти як…',
       openFolder: 'Відкрити папку…',
       closeTab: 'Закрити вкладку',
+      print: 'Друк…',
       openExternal: 'Відкрити у зовнішньому редакторі',
     },
     view: {

@@ -2181,6 +2181,7 @@ export const de: I18n = {
       saveAs: 'Speichern unter…',
       openFolder: 'Ordner öffnen…',
       closeTab: 'Tab schließen',
+      print: 'Drucken…',
       openExternal: 'In externem Editor öffnen',
     },
     view: {
