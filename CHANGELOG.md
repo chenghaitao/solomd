@@ -19,6 +19,79 @@
 
 ---
 
+## [5.0.5] — 2026-10-22
+
+一条线：**同步上游 10 个提交** —— 应用内三档打赏与 ✨Supporter 徽章、Play Billing 8.0.0、
+`#442`–`#454` 一批修复（含 Android R8 / EdgeToEdge、iPhone Duo 适配、图片尺寸语法），以及官网的 5.0.4 文案。
+
+### 1. 应用内打赏与 Supporter 徽章
+
+上游在这一版把「支持开发者」从一个链接做成了完整流程：
+
+| 项 | 内容 |
+|---|---|
+| 入口 | 关于对话框 →「支持开发者」→ `SupportDialog.vue`；设置页同一条路径 |
+| 档位 | 三档**一次性**打赏（非订阅、不自动续费），买任意一档即永久解锁 ✨Supporter 徽章 |
+| 徽章 | 跨设备可恢复（`iap.rs`，macOS App Store / iOS / Android 三个商店通道） |
+| 非商店构建 | 走 GitHub / 支付宝 / 微信，`iapUseStoreFlow` 决定显示哪一套 |
+| 依赖 | Android Play Billing 升到 8.0.0（Google Play 合规要求） |
+
+本仓库不做商店分发，这块跟随上游同步：代码与文案照收，应用内原有的赞助者 / 测试者致谢不变。
+
+### 2. `#442`–`#454` 修复批次
+
+| 区域 | 内容 |
+|---|---|
+| 图片尺寸 | 新增 `![alt\|50%](url)`、`![\|300](url)`、`![alt\|400x300](url)` 的管道尺寸语法；实时预览、HTML / PDF / 图片导出统一走 `parseImageAltSize()`（#446） |
+| 代码块 | 独立 HTML 导出与打印补上软换行（`cb-wrap-on`）与行号（`cb-numbered-on`）的 CSS（#454） |
+| 打印 | 打印遮罩按同一套代码块规则生成，行号列不再撑出页边 |
+| 编辑 / 标签页 | `cm-live-blocks.ts`、`tabs.ts`、`welcome-tour.ts` 的若干小修 |
+| 平台 | Android R8 混淆规则与 EdgeToEdge 边缘到边缘布局；iPhone Duo 的屏幕尺寸适配 |
+
+### 3. 合并处置
+
+冲突 10 处：
+
+| 文件 | 处置 |
+|---|---|
+| `README.md` / `README.zh.md` / `web/public/sponsors.json` | 取本仓库侧 |
+| `scripts/asc-upload-screenshots.py` | 本仓库早已删除，保持删除 |
+| `app/src-tauri/src/lib.rs` / `runner.rs` | 取上游的 `iap` 注册 |
+| `app/src/components/AboutDialog.vue` | 取本仓库侧：不留 promoters 名单与「帮忙推广」按钮 |
+| `app/src/components/TableEditor.vue` | 两侧都要：上游的 `syncDomCellsToModel()` + 本地的提示复位 |
+| `app/src/lib/markdown.ts` | 保留本仓库的 `.ts` 后缀导入，加上游的 `parseImageAltSize` |
+| `app/src/lib/md-format.ts` | `FORMAT_KINDS` 取本仓库（含下标 / 上标）；函数段留本仓库 `toggleTag` + 上游 `toggleTagLines`（多行下划线），丢掉上游 `toggleTagWrap` 与重复的 `case 'underline'` |
+
+三个不在冲突里、但会被 `vue-tsc` / `cargo` 当场拦下的问题：
+
+| 问题 | 现象 | 处置 |
+|---|---|---|
+| `store_review` 被上游整文件带回 | 该模块的文件本仓库已删，`cargo check` 报模块不存在 | 删掉 `lib.rs` / `runner.rs` 里的 `mod` 与命令注册 |
+| i18n `cmd.fmt.underline` 重复键 | 自动合并两边各留一份，15 个语言全报 TS1117 | 每个语言删一份 |
+| `md-format.ts` 少一个 `}` | 拼接「本仓库函数 + 上游函数」时闭合括号落在上游那侧 | 补回 |
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `vue-tsc --noEmit` | 退出 0 |
+| `node --test` | **522 / 522 通过** |
+| `vite build` | 成功，入口 `index-*.js` **919.27 kB**（gzip 293.24 kB） |
+| vendor 分包 | **1,738.17 kB / gzip 530.02 kB**，与上一版逐字节一致 |
+| `cargo check` | 成功（3m37s），1 warning：`TIP_PRODUCT_IDS` 未使用（上游自带） |
+| `astro build`（`web/`） | 成功，**111 个 HTML 页**；无 `/promote` 路由，无 `api/track` / `ref_download` 载荷（历史博客正文除外） |
+
+### 说明
+
+- **版本号取 5.0.5**：上游在这轮里也 bump 到了 5.0.4，与本仓库已经发布的 5.0.4 撞号。
+- 官网上游新增的「In-App Tip Jar & Supporter Badge」板块、以及 What's New 里「致谢推广者」的条目，**都保留** —— 
+  它们只存在于 `web/`。`tauri.conf.json` 的 `frontendDist` 指向 `app/dist`、`bundle.resources` 只有拼写词典，
+  官网整棵目录不进安装包；`AboutDialog` 的赞助者 / 测试者名单也是运行时从 `solomd.app/sponsors.json` 拉取。
+  实测构建产物里 `promoters` / `推广者` / `Tip Jar` / `打赏` 均为 0 命中。
+- 应用内那个打赏弹窗（`SupportDialog`）会出现在包里 —— 它是功能入口，不是官网文案。
+
+---
+
 ## [5.0.4] — 2026-10-20
 
 一条线：**把格式栏的表格入口补齐** —— 尺寸对话框与网格编辑器各归各位，表格编辑器的对齐组补上说明；
