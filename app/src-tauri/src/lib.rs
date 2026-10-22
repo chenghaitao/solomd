@@ -1,4 +1,6 @@
 pub mod app_build;
+// App Store builds ask for a rating with Apple's own sheet (iOS starts here).
+pub mod iap;
 pub mod ios_folder;
 pub mod commands;
 // Image-bed (图床) upload: PicGo / shell command / sm.ms / S3-compatible / GitHub.
@@ -193,6 +195,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_build::app_build_info,
+            iap::iap_get_state,
+            iap::iap_fetch_products,
+            iap::iap_purchase,
+            iap::iap_restore,
             ios_folder::ios_pick_folder,
             ios_folder::macos_bookmark_folder,
             ios_folder::ios_restore_folder,

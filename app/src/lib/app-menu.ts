@@ -335,7 +335,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
 
   // ---- 格式 Format ----
   const format: MenuNode[] = [
-    fmt('bold'), fmt('italic'), fmt('strike'),
+    fmt('bold'), fmt('italic'), fmt('underline'), fmt('strike'),
     sep,
     fmt('code'),
     item('insert.mathInline', t('toolbar.insertMathInline')),

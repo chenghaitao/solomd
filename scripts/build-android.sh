@@ -108,8 +108,11 @@ echo "    Keystore:   ${ANDROID_KEYSTORE_PATH:-<debug, no signing>}"
 if [ "$DEBUG" -eq 1 ]; then
   pnpm tauri android build --apk --debug
 else
-  # Build both signed APKs (per-ABI + universal) and the AAB for Play.
-  pnpm tauri android build --apk --aab
+  # Build APKs and AAB in separate invocations so `splits.abi` is enabled
+  # for APK splits and disabled for the AAB (allowing `isShrinkResources = true`
+  # without hitting AGP issue #402800800).
+  pnpm tauri android build --apk
+  pnpm tauri android build --aab
 fi
 
 OUT_DIR="src-tauri/gen/android/app/build/outputs"

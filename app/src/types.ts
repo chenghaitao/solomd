@@ -34,6 +34,9 @@ export interface Tab {
   // without edits because content drifts from savedContent).
   lineEnding?: 'lf' | 'crlf';
   showOutline?: boolean;
+  /** #449 — Built-in welcome tour tabs live only in memory and can be closed
+   *  at any time without an "unsaved changes" prompt (unless saved to disk). */
+  ephemeral?: boolean;
   /** Last caret position (1-based line and column) reported by the editor.
    *  Persisted with the tab so a relaunch puts the caret back. */
   cursor?: { line: number; col: number };

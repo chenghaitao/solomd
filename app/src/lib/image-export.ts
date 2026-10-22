@@ -20,6 +20,10 @@ export interface ImageExportOptions {
    *  Default true (mirroring the settings store default); pass false
    *  to opt out per-call. */
   branding?: boolean;
+  /** #454 — render code block line numbers when enabled. */
+  codeBlockLineNumbers?: boolean;
+  /** #454 — soft-wrap long lines inside fenced code blocks when enabled. */
+  codeBlockWrap?: boolean;
 }
 
 const IMAGE_CSS = `
@@ -70,6 +74,44 @@ const IMAGE_CSS = `
     border: 1px solid #e6e2d8;
   }
   .img-page pre code { background: transparent; padding: 0; color: #1f1d1a; }
+  .img-page.cb-wrap-on pre {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    overflow-x: visible;
+  }
+  .img-page.cb-numbered-on pre.cb-numbered {
+    counter-reset: cb-line;
+    padding-left: 0;
+  }
+  .img-page.cb-numbered-on pre.cb-numbered code {
+    display: block;
+    white-space: normal;
+  }
+  .img-page.cb-numbered-on pre.cb-numbered code .cb-line {
+    counter-increment: cb-line;
+    display: block;
+    padding-left: 3.4em;
+    position: relative;
+    white-space: pre;
+  }
+  .img-page.cb-wrap-on.cb-numbered-on pre.cb-numbered code .cb-line {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .img-page.cb-numbered-on pre.cb-numbered code .cb-line::before {
+    content: counter(cb-line);
+    position: absolute;
+    left: 0;
+    width: 2.6em;
+    padding-right: 0.6em;
+    text-align: right;
+    color: #8a857c;
+    border-right: 1px solid #e6e2d8;
+    user-select: none;
+    -webkit-user-select: none;
+  }
   .img-page blockquote {
     border-left: 4px solid #ff9f40; margin: 1.3em 0; padding: .5em 1.1em;
     color: #6a6560; font-style: italic; background: #fff7ec;
@@ -155,7 +197,14 @@ export async function markdownToImageBlob(
   root.style.zIndex = '-1';
 
   const page = document.createElement('article');
-  page.className = opts.branding ? 'img-page img-page--branded' : 'img-page';
+  page.className = [
+    'img-page',
+    opts.branding ? 'img-page--branded' : '',
+    opts.codeBlockLineNumbers ? 'cb-numbered-on' : '',
+    opts.codeBlockWrap ? 'cb-wrap-on' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   page.innerHTML = html;
 
   // Branded footer default ON — settings.imageExportBranding controls

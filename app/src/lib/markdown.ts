@@ -11,6 +11,7 @@ import mark from 'markdown-it-mark';
 import cjkFriendly from 'markdown-it-cjk-friendly';
 import yaml from 'js-yaml';
 import { numberEquations } from './equations.ts';
+import { parseImageAltSize } from './md-image-url.ts';
 import { sanitizeRenderedHtml } from './sanitize-html.ts';
 import { getHljs, getKatex } from './render-deps.ts';
 
@@ -223,6 +224,34 @@ md.inline.ruler.before('image', 'image_spaced_path', (state, silent) => {
   state.pos += m[0].length;
   return true;
 });
+
+// ---- Image size syntax (`![alt|50%](url)` / `![alt|300](url)`) (#446) -------
+const defaultImageRenderer = md.renderer.rules.image;
+md.renderer.rules.image = function (tokens, idx, options, env, self) {
+  const token = tokens[idx];
+  const rawAlt = token.children
+    ? self.renderInlineAsText(token.children, options, env)
+    : (token.content || token.attrGet('alt') || '');
+  const parsed = parseImageAltSize(rawAlt);
+  if (parsed.width) {
+    const existingStyle = token.attrGet('style');
+    const sizeStyle = `width: ${parsed.width};${parsed.height ? ` height: ${parsed.height};` : ''}`;
+    token.attrSet('style', existingStyle ? `${existingStyle}; ${sizeStyle}` : sizeStyle);
+    if (parsed.width.endsWith('px')) {
+      token.attrSet('width', parsed.width.slice(0, -2));
+    }
+    if (parsed.height?.endsWith('px')) {
+      token.attrSet('height', parsed.height.slice(0, -2));
+    }
+  }
+  const html = defaultImageRenderer
+    ? defaultImageRenderer(tokens, idx, options, env, self)
+    : self.renderToken(tokens, idx, options);
+  if (parsed.width) {
+    return html.replace(/\balt="[^"]*"/, `alt="${escapeHtml(parsed.alt)}"`);
+  }
+  return html;
+};
 
 // ---- Source line mapping for split-pane scroll sync ----
 // Annotate every block-level opening token with `data-source-line` set to

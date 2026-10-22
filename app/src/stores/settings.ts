@@ -1,4 +1,5 @@
 import { isTreeSortMode, type TreeSortMode } from '../lib/tree-sort';
+import { cleanFontFamilyFromFilename } from '../lib/custom-font';
 import { defineStore } from 'pinia';
 import type { Theme, ViewMode } from '../types';
 import type { WindowsEditorEngine } from '../lib/platform';
@@ -22,6 +23,16 @@ export function buildEditorFontStack(face: string): string {
   // If user pasted a full stack already (contains comma), use as-is but still
   // append CJK fallback for safety.
   if (trimmed.includes(',')) return `${trimmed}, ${CJK_FALLBACK}`;
+  const isFileOrPath = /\.(ttf|otf|woff2|woff|ttc)$/i.test(trimmed) || /[\\/]/.test(trimmed);
+  if (isFileOrPath) {
+    const { stem, family } = cleanFontFamilyFromFilename(trimmed);
+    const names = Array.from(new Set([family, stem].filter(Boolean))).map((n) =>
+      /\s/.test(n) && !/^["']/.test(n) ? `"${n}"` : n,
+    );
+    if (names.length > 0) {
+      return `${names.join(', ')}, ${CJK_FALLBACK}, "JetBrains Mono", Menlo, Consolas, monospace`;
+    }
+  }
   const needsQuote = /[\s/.\\]/.test(trimmed) && !/^["']/.test(trimmed);
   const quoted = needsQuote ? `"${trimmed}"` : trimmed;
   return `${quoted}, ${CJK_FALLBACK}, "JetBrains Mono", Menlo, Consolas, monospace`;

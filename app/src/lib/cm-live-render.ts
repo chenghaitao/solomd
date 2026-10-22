@@ -464,11 +464,27 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
           const endLine = view.state.doc.lineAt(
             Math.min(nTo, view.state.doc.length),
           ).number;
+          const isFenced = name === 'FencedCode';
+          const bodyStart = isFenced ? startLine + 1 : startLine;
+          const hasClosingFence =
+            isFenced &&
+            endLine > startLine &&
+            /^\s*(`{3,}|~{3,})\s*$/.test(view.state.doc.line(endLine).text);
+          const bodyEnd = hasClosingFence ? endLine - 1 : endLine;
           for (let ln = startLine; ln <= endLine; ln++) {
             const lineObj = view.state.doc.line(ln);
             if (!seenFencedLines.has(lineObj.from)) {
               seenFencedLines.add(lineObj.from);
-              ranges.push(fencedLine.range(lineObj.from));
+              if (ln >= bodyStart && ln <= bodyEnd) {
+                ranges.push(
+                  Decoration.line({
+                    class: 'cm-md-fenced-line cm-md-fenced-body-line',
+                    attributes: { 'data-cb-line': String(ln - bodyStart + 1) },
+                  }).range(lineObj.from),
+                );
+              } else {
+                ranges.push(fencedLine.range(lineObj.from));
+              }
               if (ln === startLine) ranges.push(blockFirstLine.range(lineObj.from));
               if (ln === endLine) ranges.push(blockLastLine.range(lineObj.from));
             }
@@ -793,6 +809,22 @@ const liveEditTheme = EditorView.theme({
   // already a line of air each — the card needs no extra inset there.
   '.cm-md-fenced-line.cm-md-block-first': { paddingTop: '2px' },
   '.cm-md-fenced-line.cm-md-block-last': { paddingBottom: '2px' },
+  // #454 — code block line numbers in CodeMirror Live-Edit mode when enabled.
+  '.cb-numbered-on & .cm-md-fenced-line.cm-md-fenced-body-line': {
+    paddingLeft: '3.6em',
+  },
+  '.cb-numbered-on & .cm-md-fenced-line.cm-md-fenced-body-line::before': {
+    content: 'attr(data-cb-line)',
+    position: 'absolute',
+    left: '0',
+    width: '2.6em',
+    paddingRight: '0.6em',
+    textAlign: 'right',
+    color: 'var(--text-faint)',
+    borderRight: '1px solid var(--border)',
+    userSelect: 'none',
+    pointerEvents: 'none',
+  },
 
   // v4.11.18 — code-block copy button. Same visual language as the preview
   // pane's `.code-copy-button` (styles/main.css), sized down a notch so it

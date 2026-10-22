@@ -234,3 +234,12 @@ test('Tab defers to the editor where there is nothing to nest under', async () =
 test('Tab on a selection of items moves them together', async () => {
   assert.equal(await tab('1. a\n|2. b\n3. c|'), '1. a\n   |1. b\n   2. c|');
 });
+
+test('#442: underline wraps and unwraps with <u>...</u>', () => {
+  assert.equal(run('a |word| b', 'underline'), 'a <u>|word|</u> b');
+  assert.equal(run('a <u>|word|</u> b', 'underline'), 'a |word| b');
+  assert.equal(run('a |<u>word</u>| b', 'underline'), 'a |word| b');
+  assert.equal(run('|line 1\nline 2|', 'underline'), '|<u>line 1</u>\n<u>line 2</u>|');
+  assert.equal(run('|<u>line 1</u>\n<u>line 2</u>|', 'underline'), '|line 1\nline 2|');
+});
+

@@ -1859,9 +1859,42 @@ if (import.meta.env.DEV && location.search.includes('layoutdebug')) {
   }, 500);
 }
 function phoneShowEditor() {
-  if (isNarrow.value) phone.show('editor');
+  phone.show('editor');
   if (isTabletOverlay.value && settings.showFileTree) settings.toggleFileTree();
 }
+// Foldable posture continuity (iPhone Duo outer 466×678 ↔ inner 669×951, and
+// Android foldables): keep the user's active view consistent across fold/unfold
+// transitions instead of dumping an active editor back onto the home list or
+// covering it with a stale drawer scrim.
+watch(isNarrow, (narrow, wasNarrow) => {
+  if (wasNarrow === undefined || narrow === wasNarrow) return;
+  if (wasNarrow && !narrow) {
+    // Unfolded (outer → inner display):
+    if (phone.view === 'editor') {
+      if (isTabletOverlay.value && settings.showFileTree) {
+        settings.toggleFileTree();
+      }
+    } else if (phone.view === 'home') {
+      if (!settings.showFileTree) {
+        settings.toggleFileTree();
+      }
+    } else if (phone.view === 'search') {
+      openGlobalSearchPane();
+    }
+  } else if (!wasNarrow && narrow) {
+    // Folded (inner → outer display):
+    const t = tabs.activeTab;
+    const hasActiveNote = Boolean(t && (t.filePath || t.content !== ''));
+    if (isTabletOverlay.value && settings.showFileTree) {
+      phone.show('home');
+    } else if (hasActiveNote) {
+      phone.show('editor');
+    }
+    if (showRightSidebar.value) {
+      settings.toggleRightSidebar();
+    }
+  }
+});
 // Opening or switching to a note is what moves a phone to the editor — but
 // not the session restore at launch: a cold start lands on 笔记, the way
 // Notes does. (Opening a file from another app still goes straight to it,

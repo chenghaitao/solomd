@@ -17,6 +17,7 @@ export type FormatKind =
   | 'bold'
   | 'underline'
   | 'italic'
+  | 'underline'
   | 'strike'
   | 'code'
   | 'link'
@@ -200,6 +201,35 @@ function toggleTag(doc: string, from: number, to: number, tag: 'u' | 'sub' | 'su
     };
   }
   return { from: s, to: e, insert: open + inner + close, selFrom: s + open.length, selTo: e + open.length };
+}
+
+
+function toggleTagLines(doc: string, from: number, to: number, openTag: string, closeTag: string): FormatEdit {
+  const ow = openTag.length;
+  const cw = closeTag.length;
+  const segs = doc.slice(from, to).split('\n');
+  const atLineStart = from === 0 || doc[from - 1] === '\n';
+  const parts = segs.map((seg, i) => {
+    const lineStart = i > 0 || atLineStart;
+    const pre = lineStart ? seg.match(LINE_PREFIX)?.[0] ?? '' : '';
+    const rest = seg.slice(pre.length);
+    const core = rest.replace(/\s+$/, '');
+    return { pre, core, post: rest.slice(core.length) };
+  });
+  const has = (c: string) =>
+    c.length >= ow + cw &&
+    c.slice(0, ow).toLowerCase() === openTag &&
+    c.slice(c.length - cw).toLowerCase() === closeTag;
+  const filled = parts.filter((p) => p.core);
+  const remove = filled.length > 0 && filled.every((p) => has(p.core));
+  const insert = parts
+    .map(({ pre, core, post }) => {
+      if (!core) return pre + post;
+      if (remove) return pre + core.slice(ow, core.length - cw) + post;
+      return pre + (has(core) ? core : openTag + core + closeTag) + post;
+    })
+    .join('\n');
+  return { from, to, insert, selFrom: from, selTo: from + insert.length };
 }
 
 function makeLink(doc: string, from: number, to: number): FormatEdit {
@@ -389,6 +419,7 @@ export function applyFormat(doc: string, from: number, to: number, kind: FormatK
   const b = Math.max(0, Math.min(Math.max(from, to), doc.length));
   const inline = INLINE_MARKERS[kind];
   if (inline && doc.slice(a, b).includes('\n')) return toggleInlineLines(doc, a, b, inline);
+  if (kind === 'underline' && doc.slice(a, b).includes('\n')) return toggleTagLines(doc, a, b, '<u>', '</u>');
   switch (kind) {
     case 'bold': return toggleStars(doc, a, b, 2);
     case 'italic': return toggleStars(doc, a, b, 1);

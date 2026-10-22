@@ -108,7 +108,7 @@ class Client:
         # Writes are not: a dropped POST may still have been applied, and every
         # write in this flow is re-runnable by starting the script again, which
         # finds what already exists instead of duplicating it.
-        attempts = 4 if method == "GET" else 1
+        attempts = 4
         for attempt in range(1, attempts + 1):
             req = urllib.request.Request(url, data=data, method=method)
             req.add_header("Authorization", f"Bearer {self.token}")

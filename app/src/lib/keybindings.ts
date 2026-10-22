@@ -228,6 +228,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   // preset below swaps the two in one click instead.
   { id: 'fmt.bold', label: 'Bold', category: 'format', defaults: ['Mod+Shift+B'] },
   { id: 'fmt.italic', label: 'Italic', category: 'format', defaults: ['Mod+I'] },
+  { id: 'fmt.underline', label: 'Underline', category: 'format', defaults: ['Mod+U'] },
   { id: 'fmt.strike', label: 'Strikethrough', category: 'format', defaults: ['Mod+Shift+X'] },
   { id: 'fmt.code', label: 'Inline Code', category: 'format', defaults: ['Mod+Shift+M'] },
   { id: 'fmt.link', label: 'Link', category: 'format', defaults: ['Mod+K'] },

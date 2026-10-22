@@ -27,7 +27,7 @@ This tour is **four short notes**. Open any tab to keep reading.
 - **Front-matter `imageRoot`** lets every paste/drop write to a custom image folder per document.
 - **No telemetry, ever** — SoloMD collects no usage data and has no analytics endpoint to send it to.
 
-> Tip: press `Ctrl+K` (or `Cmd+K`) to open the **command palette** — it lists everything SoloMD can do.
+> Tip: press `Ctrl+Shift+K` (or `Cmd+Shift+K`) to open the **command palette** — it lists everything SoloMD can do.
 
 That's it. Close these tutorial tabs whenever you're done — they live only in memory and won't write to disk unless you `Save As`.
 

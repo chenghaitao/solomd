@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { writeText as writeClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { revealInFileManager } from '../lib/reveal-in-file-manager';
 import { useTabsStore } from '../stores/tabs';
 import { useToastsStore } from '../stores/toasts';
@@ -133,13 +134,43 @@ async function closeMany(ids: string[]) {
   }
 }
 
-async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'revealInFileTree') {
+async function copyTextSafe(text: string) {
+  try {
+    await writeClipboardText(text);
+  } catch {
+    await navigator.clipboard?.writeText?.(text);
+  }
+}
+
+async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'revealInFileTree' | 'copyFileName' | 'copyFilePath') {
   const m = ctxMenu.value;
   closeCtxMenu();
   if (!m) return;
   const list = tabs.tabs;
   const idx = list.findIndex((t) => t.id === m.tabId);
   if (idx < 0) return;
+  if (action === 'copyFileName') {
+    const name = list[idx]?.fileName;
+    if (!name) return;
+    try {
+      await copyTextSafe(name);
+      useToastsStore().success(t('tabMenu.copyFileNameDone'));
+    } catch (e) {
+      useToastsStore().error(`${e}`);
+    }
+    return;
+  }
+  if (action === 'copyFilePath') {
+    const path = list[idx]?.filePath;
+    if (!path) return;
+    try {
+      await copyTextSafe(path);
+      useToastsStore().success(t('tabMenu.copyFilePathDone'));
+    } catch (e) {
+      useToastsStore().error(`${e}`);
+    }
+    return;
+  }
   if (action === 'revealInFolder') {
     const path = list[idx]?.filePath;
     if (!path) return;
@@ -555,6 +586,9 @@ onBeforeUnmount(() => {
             {{ ctxFlags.showOutline ? t('tabMenu.hideOutline') : t('tabMenu.showOutline') }}
           </button>
         </template>
+        <div class="ctx-sep" />
+        <button class="ctx-item" data-tab-copy-name @click="onTabAction('copyFileName')">{{ t('tabMenu.copyFileName') }}</button>
+        <button class="ctx-item" data-tab-copy-path :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('copyFilePath')">{{ t('tabMenu.copyFilePath') }}</button>
         <div class="ctx-sep" />
         <button class="ctx-item" :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('revealInFolder')">{{ t(revealLabelKey('tabMenu.revealInFolder')) }}</button>
         <button class="ctx-item" :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('revealInFileTree')">{{ t('tabMenu.revealInFileTree') }}</button>

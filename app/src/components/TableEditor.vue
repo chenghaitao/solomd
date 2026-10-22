@@ -257,7 +257,30 @@ function chooseAlign(a: TableAlign) {
   model.value = setAlignMany(model.value, alignTargets(), a);
 }
 
+function syncDomCellsToModel() {
+  const root = gridEl.value;
+  if (!root) return;
+  const cells = root.querySelectorAll<HTMLElement>('[data-cell]');
+  cells.forEach((el) => {
+    const key = el.getAttribute('data-cell');
+    if (!key) return;
+    const [rStr, cStr] = key.split(':');
+    const r = Number(rStr);
+    const c = Number(cStr);
+    if (!Number.isFinite(r) || !Number.isFinite(c)) return;
+    const text = cellText(el);
+    if (r === -1) {
+      if (model.value.header[c] !== undefined && model.value.header[c] !== text) {
+        model.value = setCell(model.value, -1, c, text);
+      }
+    } else if (model.value.rows[r]?.[c] !== undefined && model.value.rows[r][c] !== text) {
+      model.value = setCell(model.value, r, c, text);
+    }
+  });
+}
+
 function apply() {
+  syncDomCellsToModel();
   showDiscardPrompt.value = false;
   emit('apply', serializeTable(model.value));
   emit('close');

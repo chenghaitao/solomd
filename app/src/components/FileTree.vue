@@ -2488,7 +2488,7 @@ export const FileTreeNode = defineComponent({
   flex-direction: column;
   user-select: none;
   position: relative;
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   color: var(--text);
 }
 /* Inside Sidebar.vue: the sidebar owns width, background, border and the

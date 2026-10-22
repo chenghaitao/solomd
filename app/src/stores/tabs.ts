@@ -109,6 +109,7 @@ function bucketKey(folder: string | null): string {
 }
 
 function isDirty(t: Tab): boolean {
+  if (t.ephemeral && !t.filePath) return false;
   return t.content !== t.savedContent;
 }
 
@@ -130,7 +131,17 @@ function readBucket(key: string): PersistedState | null {
     const raw = localStorage.getItem(key);
     if (raw) {
       const data = JSON.parse(raw) as PersistedState;
-      if (Array.isArray(data.tabs)) return { tabs: data.tabs, activeId: data.activeId || '' };
+      if (Array.isArray(data.tabs)) {
+        for (const t of data.tabs) {
+          if (typeof t.content === 'string' && t.content.includes('\r\n')) {
+            t.content = t.content.replace(/\r\n/g, '\n');
+          }
+          if (typeof t.savedContent === 'string' && t.savedContent.includes('\r\n')) {
+            t.savedContent = t.savedContent.replace(/\r\n/g, '\n');
+          }
+        }
+        return { tabs: data.tabs, activeId: data.activeId || '' };
+      }
     }
   } catch {}
   return null;
@@ -209,7 +220,9 @@ export const useTabsStore = defineStore('tabs', {
     isDirty(): (id: string) => boolean {
       return (id: string) => {
         const t = this.tabs.find((x) => x.id === id);
-        return !!t && t.content !== t.savedContent;
+        if (!t) return false;
+        if (t.ephemeral && !t.filePath) return false;
+        return t.content !== t.savedContent;
       };
     },
   },

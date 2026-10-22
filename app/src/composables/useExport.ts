@@ -312,6 +312,8 @@ export function useExport() {
         title: ctx.baseName,
         filePath: ctx.filePath,
         plantumlServer: plantumlServer(),
+        codeBlockLineNumbers: settings.codeBlockLineNumbers,
+        codeBlockWrap: settings.codeBlockWrap,
       });
       toasts.dismiss(tid);
       await invoke('write_file', { path, content: html, encoding: 'UTF-8' });
@@ -361,7 +363,14 @@ export function useExport() {
         ctx.content,
         userTouchedPdfDefaults(settings.pdfDefaults),
       );
-      const blob = await markdownToPdfBlob(ctx.content, ctx.baseName, pdfOpts, ctx.filePath, plantumlServer());
+      const blob = await markdownToPdfBlob(
+        ctx.content,
+        ctx.baseName,
+        pdfOpts,
+        ctx.filePath,
+        plantumlServer(),
+        settings.codeBlockLineNumbers,
+      );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path, data: Array.from(buffer) });
       toasts.dismiss(tid);
@@ -486,6 +495,11 @@ export function useExport() {
       body,
       printTheme,
       printCss,
+      undefined,
+      {
+        codeBlockLineNumbers: settings.codeBlockLineNumbers,
+        codeBlockWrap: settings.codeBlockWrap,
+      },
     );
 
     // #301 — swap mermaid fences for SVGs and WAIT for them. This has to
@@ -703,6 +717,8 @@ export function useExport() {
     try {
       const blob = await markdownToImageBlob(source, ctx.baseName, ctx.filePath, {
         branding: settings.imageExportBranding,
+        codeBlockLineNumbers: settings.codeBlockLineNumbers,
+        codeBlockWrap: settings.codeBlockWrap,
       });
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path, data: Array.from(buffer) });

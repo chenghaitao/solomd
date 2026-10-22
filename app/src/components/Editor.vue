@@ -61,7 +61,7 @@ import { liveBlocksExtension, liveBlocksTheme, extractImageRoot } from '../lib/c
 import { findTldrawFences, replaceBoardSnapshot } from '../lib/tldraw-board';
 import { dragAwareExtension } from '../lib/cm-drag-aware';
 import { imagePasteExtension, insertImageFromPath as cmInsertImageFromPath, imageTextFromPath, handleTextareaImagePaste, type ImagePasteOptions } from '../lib/cm-image-paste';
-import { markdownImage, encodeImageDestination } from '../lib/md-image-url';
+import { markdownImage, encodeImageDestination, resizeMarkdownImageLine } from '../lib/md-image-url';
 import { resolveUploader, uploadImage, type ImageUploadSettings } from '../lib/image-upload';
 import { focusModeExtension, typewriterModeExtension } from '../lib/cm-focus-mode';
 import { wikilinkExtension, wikilinkComplete } from '../lib/cm-wikilink';
@@ -303,6 +303,72 @@ if (!(globalThis as { __solomdVimEx?: boolean }).__solomdVimEx) {
   Vim.defineEx('xit', 'x', saveThenClose);
   // `:q` / `:quit` — close the tab (unsaved changes trigger the confirm dialog).
   Vim.defineEx('quit', 'q', () => menu('file.closeTab'));
+
+  // #447 — Sync Vim unnamed / clipboard registers (`"`, `+`, `*`) with the OS
+  // pasteboard so yanking/deleting in Vim mode can be pasted outside SoloMD,
+  // and copying outside SoloMD can be pasted with `p` / `P` in Vim mode.
+  try {
+    const regCtrl = (
+      Vim as unknown as {
+        getRegisterController?: () => {
+          pushText?: (
+            registerName: string | undefined,
+            operator: string,
+            text: string,
+            linewise?: boolean,
+            blockwise?: boolean,
+          ) => void;
+          getRegister?: (name?: string) => {
+            setText?: (text: string, linewise?: boolean, blockwise?: boolean) => void;
+          };
+          unnamedRegister?: {
+            setText?: (text: string, linewise?: boolean, blockwise?: boolean) => void;
+          };
+        };
+      }
+    ).getRegisterController?.();
+    if (regCtrl && typeof regCtrl.pushText === 'function') {
+      const origPushText = regCtrl.pushText.bind(regCtrl);
+      regCtrl.pushText = (registerName, operator, text, linewise, blockwise) => {
+        origPushText(registerName, operator, text, linewise, blockwise);
+        if (
+          text &&
+          (!registerName || registerName === '"' || registerName === '+' || registerName === '*')
+        ) {
+          (globalThis as { __solomdLastVimClip?: string }).__solomdLastVimClip = text;
+          void writeClipboard(text);
+        }
+      };
+    }
+  } catch {}
+}
+
+async function syncSystemClipboardToVimRegister() {
+  if (!settings.vimMode) return;
+  try {
+    const clip = await readClipboard();
+    if (!clip) return;
+    const g = globalThis as { __solomdLastVimClip?: string };
+    if (g.__solomdLastVimClip === clip) return;
+    g.__solomdLastVimClip = clip;
+    const regCtrl = (
+      Vim as unknown as {
+        getRegisterController?: () => {
+          getRegister?: (name?: string) => {
+            setText?: (text: string, linewise?: boolean, blockwise?: boolean) => void;
+          };
+          unnamedRegister?: {
+            setText?: (text: string, linewise?: boolean, blockwise?: boolean) => void;
+          };
+        };
+      }
+    ).getRegisterController?.();
+    if (!regCtrl) return;
+    const linewise = clip.endsWith('\n');
+    regCtrl.unnamedRegister?.setText?.(clip, linewise, false);
+    regCtrl.getRegister?.('+')?.setText?.(clip, linewise, false);
+    regCtrl.getRegister?.('*')?.setText?.(clip, linewise, false);
+  } catch {}
 }
 
 // #373 — Vim must see keys before every other keymap. The markdown keymap
@@ -360,10 +426,15 @@ function noteTypedInTextarea(el: HTMLTextAreaElement, event: Event) {
 // composition is in flight the timer is left armed instead (same reasoning as
 // #186: never commit a half-composed doc).
 function flushContentSync() {
-  if (!contentSyncTimer || !view || view.composing) return;
-  clearTimeout(contentSyncTimer);
-  contentSyncTimer = null;
-  tabs.setContent(props.tab.id, view.state.doc.toString());
+  if (contentSyncTimer) {
+    clearTimeout(contentSyncTimer);
+    contentSyncTimer = null;
+  }
+  if (!view || view.composing) return;
+  const doc = view.state.doc.toString();
+  if (doc !== props.tab.content) {
+    tabs.setContent(props.tab.id, doc);
+  }
 }
 
 function syncEditorContentSoon(text: string) {
@@ -3275,10 +3346,13 @@ function onEditorMouseDownCapture(event: MouseEvent) {
 async function onEditorContextMenu(event: MouseEvent) {
   const pointer = (event as PointerEvent).pointerType;
   if (pointer === 'touch' || pointer === 'pen' || isAndroid() || isIOS()) return;
-  // Windows only. There the WebView2 menu lost the selection (#210). The
-  // macOS and Linux menus handle selections fine, and they carry things ours
-  // can't: spelling suggestions, Look Up, Services, writing tools.
-  if (!isWindowsEditorRuntime()) return;
+  const target = event.target instanceof Element ? event.target : null;
+  const img = target?.closest('img');
+  const clickedImage = img instanceof HTMLImageElement && img.src ? img : null;
+  // Windows always uses our menu (#210). On macOS/Linux we keep the native
+  // menu for text (spelling, Look Up, Services) but open our menu when
+  // right-clicking a rendered image (#446) so image copy & resize work everywhere.
+  if (!isWindowsEditorRuntime() && !clickedImage) return;
   event.preventDefault();
   let hasSelection = false;
   // #376 — where to look for a misspelled word: the line under the pointer,
@@ -3327,9 +3401,7 @@ async function onEditorContextMenu(event: MouseEvent) {
     }
   }
   ctxSavedRange = null;
-  const target = event.target instanceof Element ? event.target : null;
-  const img = target?.closest('img');
-  ctxImage = img instanceof HTMLImageElement && img.src ? img : null;
+  ctxImage = clickedImage;
   const seq = ++ctxSeq;
   ctxSpell = null;
   ctxLt = null;
@@ -3454,6 +3526,58 @@ async function readClipboard(): Promise<string> {
     } catch {
       return '';
     }
+  }
+}
+
+function onEditorMenuResizeImage(size: string) {
+  editorCtx.value = null;
+  ctxSpell = null;
+  ctxLt = null;
+  const img = ctxImage;
+  ctxImage = null;
+  ctxTextarea = null;
+  if (!img) return;
+  if (!usePlainWindowsEditor) {
+    const v = view;
+    if (!v) return;
+    let lineNum = Number.parseInt(img.dataset.solomdLine || '', 10);
+    if (!Number.isFinite(lineNum) || lineNum < 1 || lineNum > v.state.doc.lines) {
+      try {
+        const pos = v.posAtDOM(img);
+        lineNum = v.state.doc.lineAt(pos).number;
+      } catch {
+        return;
+      }
+    }
+    const line = v.state.doc.line(lineNum);
+    const resized = resizeMarkdownImageLine(line.text, size);
+    if (resized !== null && resized !== line.text) {
+      v.dispatch({
+        changes: { from: line.from, to: line.to, insert: resized },
+        userEvent: 'input.format',
+      });
+    }
+    v.focus();
+    return;
+  }
+  const blockEl = img.closest('.plain-block') as HTMLElement | null;
+  const blockIdx = Number.parseInt(blockEl?.dataset.plainBlockIndex ?? '', 10);
+  if (!Number.isFinite(blockIdx)) return;
+  const block = plainBlocks.value[blockIdx];
+  if (!block) return;
+  const lines = block.text.split('\n');
+  let changed = false;
+  const nextLines = lines.map((l) => {
+    if (changed) return l;
+    const r = resizeMarkdownImageLine(l, size);
+    if (r !== null) {
+      changed = true;
+      return r;
+    }
+    return l;
+  });
+  if (changed) {
+    updatePlainBlock(blockIdx, nextLines.join('\n'));
   }
 }
 
@@ -3958,7 +4082,12 @@ function buildExtensions() {
     EditorView.updateListener.of((u) => {
       if (u.docChanged) {
         const text = u.state.doc.toString();
-        if (!u.view.composing) syncEditorContentSoon(text);
+        // #450 — Always arm the debounced sync even if `u.view.composing` is
+        // true during an IME candidate commit (e.g. 清风/五笔/拼音 on Windows):
+        // `syncEditorContentSoon` checks `view.composing` when the timer fires
+        // and re-arms until composition ends, so no IME-committed edit is ever
+        // stranded without syncing to `tabs.setContent`.
+        syncEditorContentSoon(text);
       }
       if (u.docChanged && !u.view.composing && props.tab.language === 'markdown') {
         for (const tr of u.transactions) {
@@ -4018,7 +4147,10 @@ onMounted(() => {
   window.addEventListener('solomd:editor-command', onEditorCommand as EventListener);
   window.addEventListener('solomd:editor-history', onEditorHistory as EventListener);
   window.addEventListener('keydown', onPlainWindowKeydown);
+  window.addEventListener('focus', syncSystemClipboardToVimRegister);
+  void syncSystemClipboardToVimRegister();
   cleanupTransformCase = () => {
+    window.removeEventListener('focus', syncSystemClipboardToVimRegister);
     window.removeEventListener('keydown', onPlainWindowKeydown);
     window.removeEventListener('solomd:editor-history', onEditorHistory as EventListener);
     window.removeEventListener('solomd:transform-case', onTransformCase as EventListener);
@@ -4667,12 +4799,17 @@ onBeforeUnmount(() => {
     plainOverlayRaf = 0;
   }
   if (contentSyncTimer) {
-    // A Vim-mode toggle remounts the Windows editor. Flush the current
-    // CodeMirror document before cancelling the debounce so the last keystroke
-    // cannot disappear during that hand-off.
-    if (view && !view.composing) tabs.setContent(props.tab.id, view.state.doc.toString());
     clearTimeout(contentSyncTimer);
     contentSyncTimer = null;
+  }
+  // #450 — Always flush the current CodeMirror document on unmount (e.g. when
+  // switching to Reading mode via Ctrl+R or toggling Vim mode), even if no
+  // debounce timer was pending.
+  if (view && !view.composing) {
+    const doc = view.state.doc.toString();
+    if (doc !== props.tab.content) {
+      tabs.setContent(props.tab.id, doc);
+    }
   }
   if (import.meta.env.DEV) {
     const w = window as unknown as { __solomdActiveView?: EditorView };
@@ -4752,6 +4889,19 @@ function restorePlainScroll(saved?: { caret: number; scrollTop: number }) {
 watch(
   () => props.tab.id,
   (newId, oldId) => {
+    // #450 — Flush any pending or uncommitted CodeMirror edits to the outgoing
+    // tab BEFORE cancelling the timer or swapping `view`'s state to `newId`.
+    if (contentSyncTimer) {
+      clearTimeout(contentSyncTimer);
+      contentSyncTimer = null;
+    }
+    if (oldId && !usePlainWindowsEditor && view && !view.composing) {
+      const oldTab = tabs.tabs.find((x) => x.id === oldId);
+      const doc = view.state.doc.toString();
+      if (oldTab && doc !== oldTab.content) {
+        tabs.setContent(oldId, doc);
+      }
+    }
     // Snapshot the OUTGOING tab first — at this point the editor DOM/state
     // still holds the old document (re-sync happens below).
     if (oldId) {
@@ -5350,6 +5500,7 @@ const cls = computed(() => ({
   // plain block editor both render through this host). Same class name +
   // CSS as the preview so behaviour matches across modes.
   'cb-wrap-on': settings.codeBlockWrap,
+  'cb-numbered-on': settings.codeBlockLineNumbers,
 }));
 </script>
 
@@ -5385,6 +5536,7 @@ const cls = computed(() => ({
         v-for="(block, index) in plainBlocks"
         v-show="!plainBlockHidden(block, index)"
         :key="block.id"
+        :data-plain-block-index="index"
         class="plain-block"
         :class="{
           'plain-block--active': index === plainActiveBlock,
@@ -5615,6 +5767,7 @@ const cls = computed(() => ({
       :has-image="editorCtx.hasImage"
       :spell="editorCtx.spell"
       @action="onEditorMenuAction"
+      @resize-image="onEditorMenuResizeImage"
       @replace="onEditorMenuReplace"
       @add-word="onEditorMenuAddWord"
       @lt-ignore="onEditorMenuLtIgnore(false)"

@@ -50,6 +50,8 @@ import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
 import LanguageToolSettings from './LanguageToolSettings.vue';
 import ThemeMarketplace from './ThemeMarketplace.vue';
+import SupportDialog from './SupportDialog.vue';
+import { supporterRecord, badgeInfo, initSupporterState } from '../lib/supporter';
 import { isIOS, isMobile, hasGitBackend, isWindowsEditorRuntime, resolveWindowsEditorEngine } from '../lib/platform';
 import type { WindowsEditorEngine } from '../lib/platform';
 import { loadCustomTheme } from '../lib/custom-theme';
@@ -79,7 +81,11 @@ const autoEngineName = computed(() =>
     : t('settings.windowsEditorEngineNameNative'),
 );
 
-const { t } = useI18n();
+const { t, lang } = useI18n();
+const supportModalOpen = ref(false);
+const isZhLocale = computed(() => String(lang.value || '').startsWith('zh'));
+const activeSupporterBadge = computed(() => badgeInfo(supporterRecord.value.active, isZhLocale.value));
+void initSupporterState();
 // #180 — the chord in this sentence comes from the user's bindings, not from
 // a literal baked into the translation.
 const macChord = usesCommandKey();
@@ -913,8 +919,9 @@ const inCustomMode = ref(!fontFamilyPresetValues.value.has(settings.fontFamily))
 const customFontFamily = ref(
   inCustomMode.value ? settings.fontFamily : ''
 );
-void import('../lib/custom-font').then(async ({ discoverLocalFontFiles }) => {
-  const files = await discoverLocalFontFiles();
+async function refreshLocalFonts(force = false) {
+  const { discoverLocalFontFiles } = await import('../lib/custom-font');
+  const files = await discoverLocalFontFiles(undefined, force);
   const seen = new Set<string>();
   const list: Array<{ label: string; value: string }> = [];
   for (const f of files) {
@@ -927,7 +934,14 @@ void import('../lib/custom-font').then(async ({ discoverLocalFontFiles }) => {
   if (fontFamilyPresetValues.value.has(settings.fontFamily)) {
     inCustomMode.value = false;
   }
-});
+}
+void refreshLocalFonts(false);
+watch(
+  () => props.open,
+  (open) => {
+    if (open) void refreshLocalFonts(true);
+  },
+);
 function onSelectFontFamily(v: string) {
   if (v === '__custom__') {
     inCustomMode.value = true;
@@ -1060,6 +1074,21 @@ function onSelectPdfFont(v: string) {
           >
             <Icons class="settings__nav-icon" :name="c.icon" :size="16" />
             <span class="settings__nav-label">{{ t(c.labelKey) }}</span>
+          </button>
+          <button
+            type="button"
+            class="settings__nav-item settings__nav-supporter"
+            :class="{ 'settings__nav-supporter--active': Boolean(activeSupporterBadge) }"
+            @click="supportModalOpen = true"
+          >
+            <Icons class="settings__nav-icon" name="heart" :size="16" />
+            <span class="settings__nav-label">
+              {{
+                activeSupporterBadge
+                  ? `${activeSupporterBadge.icon} ${activeSupporterBadge.label}`
+                  : t('about.sponsor')
+              }}
+            </span>
           </button>
         </nav>
       <div
@@ -2524,6 +2553,10 @@ function onSelectPdfFont(v: string) {
       :open="themeMarketplaceOpen"
       @close="themeMarketplaceOpen = false"
     />
+    <SupportDialog
+      :open="supportModalOpen"
+      @close="supportModalOpen = false"
+    />
   </DsModal>
 </template>
 
@@ -2719,7 +2752,7 @@ function onSelectPdfFont(v: string) {
   min-height: 30px;
   padding: 0 10px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   font-weight: 450;
   color: var(--text);
   background: transparent;
@@ -2997,7 +3030,7 @@ function onSelectPdfFont(v: string) {
   min-width: 0;
 }
 .settings__body > section > label {
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   line-height: 1.4;
   color: var(--text);
   display: flex;
@@ -3134,7 +3167,7 @@ select {
   height: 28px;
   padding: 0 8px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   color: var(--text);
   background: var(--fill-1);
   border: 0;

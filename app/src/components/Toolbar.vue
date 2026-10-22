@@ -1546,7 +1546,7 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
-  font-size: 15px;
+  font-size: calc(var(--ui-font-size, 13px) + 2px);
   font-weight: 600;
   color: var(--text);
 }
@@ -1744,7 +1744,7 @@ onBeforeUnmount(() => {
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   text-align: left;
   color: var(--text);
   border-radius: var(--r-sm);

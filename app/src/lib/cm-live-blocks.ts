@@ -45,6 +45,7 @@ import {
 } from './image-resolve';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import { findHtmlBlockEnd } from './html-live-render';
+import { parseImageAltSize } from './md-image-url';
 import { plantumlSvgUrl } from './plantuml';
 import { initMermaid } from './mermaid-lazy';
 import { getKatex, onRenderDepsChange, renderDepsVersion } from './render-deps';
@@ -162,7 +163,13 @@ function scheduleImageRelayout(): void {
 function trackImageHeights(root: HTMLElement): void {
   for (const img of Array.from(root.querySelectorAll('img'))) {
     const cached = imageNaturalSizes.get(img.src);
-    if (cached && !img.hasAttribute('width') && !img.hasAttribute('height')) {
+    if (
+      cached &&
+      !img.hasAttribute('width') &&
+      !img.hasAttribute('height') &&
+      !img.style.width &&
+      !img.style.height
+    ) {
       img.width = cached.w;
       img.height = cached.h;
     }
@@ -185,16 +192,30 @@ function trackImageHeights(root: HTMLElement): void {
 }
 
 class ImageWidget extends WidgetType {
+  private readonly cleanAlt: string;
+  private readonly width: string | null;
+  private readonly height: string | null;
+
   constructor(
     private readonly src: string,
     private readonly alt: string,
     private readonly localPath: string | null = null,
+    private readonly lineNumber: number = 0,
   ) {
     super();
+    const parsed = parseImageAltSize(alt);
+    this.cleanAlt = parsed.alt;
+    this.width = parsed.width;
+    this.height = parsed.height;
   }
 
   eq(other: ImageWidget): boolean {
-    return other.src === this.src && other.alt === this.alt && other.localPath === this.localPath;
+    return (
+      other.src === this.src &&
+      other.alt === this.alt &&
+      other.localPath === this.localPath &&
+      other.lineNumber === this.lineNumber
+    );
   }
 
   toDOM(): HTMLElement {
@@ -202,9 +223,12 @@ class ImageWidget extends WidgetType {
     wrap.className = 'cm-live-block cm-live-block--image';
     const img = document.createElement('img');
     img.src = this.src;
-    img.alt = this.alt;
+    img.alt = this.cleanAlt;
     img.loading = 'lazy';
     img.draggable = false;
+    if (this.width) img.style.width = this.width;
+    if (this.height) img.style.height = this.height;
+    if (this.lineNumber > 0) img.dataset.solomdLine = String(this.lineNumber);
     if (this.localPath) img.dataset.solomdLocalSrc = this.localPath;
     img.onerror = () => {
       // Image failed to load — fall back to a small "broken image" caption
@@ -212,7 +236,7 @@ class ImageWidget extends WidgetType {
       // away regardless.
       if (this.localPath) return;
       wrap.classList.add('cm-live-block--broken');
-      wrap.textContent = `🖼 ${this.alt || this.src}`;
+      wrap.textContent = `🖼 ${this.cleanAlt || this.src}`;
     };
     wrap.appendChild(img);
     installSvgImageFallbacks(wrap);
@@ -220,7 +244,9 @@ class ImageWidget extends WidgetType {
     return wrap;
   }
 
-  ignoreEvent(): boolean {
+  ignoreEvent(event: Event): boolean {
+    if (event.type === 'contextmenu') return true;
+    if (event instanceof MouseEvent && event.button === 2) return true;
     return false;
   }
 }
@@ -263,6 +289,7 @@ class HtmlBlockWidget extends WidgetType {
     private readonly source: string,
     private readonly imageRoot: string | null,
     private readonly filePath?: string,
+    private readonly lineNumber: number = 0,
   ) {
     super();
   }
@@ -272,6 +299,7 @@ class HtmlBlockWidget extends WidgetType {
       other.source === this.source &&
       other.imageRoot === this.imageRoot &&
       other.filePath === this.filePath &&
+      other.lineNumber === this.lineNumber &&
       other.deps === this.deps
     );
   }
@@ -284,12 +312,19 @@ class HtmlBlockWidget extends WidgetType {
       this.imageRoot,
       this.filePath,
     );
+    if (this.lineNumber > 0) {
+      for (const img of Array.from(wrap.querySelectorAll('img'))) {
+        img.dataset.solomdLine = String(this.lineNumber);
+      }
+    }
     installSvgImageFallbacks(wrap);
     trackImageHeights(wrap);
     return wrap;
   }
 
-  ignoreEvent(): boolean {
+  ignoreEvent(event: Event): boolean {
+    if (event.type === 'contextmenu') return true;
+    if (event instanceof MouseEvent && event.button === 2) return true;
     return false;
   }
 }
@@ -808,12 +843,53 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                     source,
                     opts.getImageRoot?.() ?? null,
                     opts.getFilePath?.(),
+                    i,
                   ),
                   block: true,
                 }),
               );
             }
             i = endI + 1;
+            continue;
+          }
+
+          // Standalone HTML `<img ...>` line (#446).
+          if (/^\s*<img\b[^>]*>\s*$/i.test(line.text)) {
+            if (keepSource) {
+              builder.add(
+                line.to,
+                line.to,
+                Decoration.widget({
+                  widget: new HtmlBlockWidget(
+                    line.text,
+                    opts.getImageRoot?.() ?? null,
+                    opts.getFilePath?.(),
+                    i,
+                  ),
+                  block: true,
+                  side: 1,
+                }),
+              );
+              i += 1;
+              continue;
+            }
+            const cursorInside = i >= cursorLine && i <= cursorLineEnd;
+            if (!cursorInside) {
+              builder.add(
+                line.from,
+                line.to,
+                Decoration.replace({
+                  widget: new HtmlBlockWidget(
+                    line.text,
+                    opts.getImageRoot?.() ?? null,
+                    opts.getFilePath?.(),
+                    i,
+                  ),
+                  block: true,
+                }),
+              );
+            }
+            i += 1;
             continue;
           }
 
@@ -831,7 +907,7 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                 line.to,
                 line.to,
                 Decoration.widget({
-                  widget: new ImageWidget(src, imgMatch[1], isLocalSvgPath(localPath) ? localPath : null),
+                  widget: new ImageWidget(src, imgMatch[1], isLocalSvgPath(localPath) ? localPath : null, i),
                   block: true,
                   side: 1,
                 }),
@@ -851,7 +927,7 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                 line.from,
                 line.to,
                 Decoration.replace({
-                  widget: new ImageWidget(src, alt, isLocalSvgPath(localPath) ? localPath : null),
+                  widget: new ImageWidget(src, alt, isLocalSvgPath(localPath) ? localPath : null, i),
                   block: true,
                 }),
               );
