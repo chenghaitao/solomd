@@ -1252,8 +1252,13 @@ onMounted(async () => {
   scheduleStarPrompt();
   // Launch: put the keyboard in the editor once it has mounted (the
   // CodeMirror path never focused itself, so typing went nowhere until a
-  // click). Skipped while a dialog is up or something else has focus.
-  focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 5000 });
+  // click). Skipped on mobile/iPad (#461): programmatic focus without a user
+  // gesture on iPadOS 18 activates the bottom UITextInputAssistantItem bar
+  // reservation without raising the software keyboard, leaving a bottom black
+  // bar and slowing cold launch.
+  if (!isMobile()) {
+    focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 5000 });
+  }
   void reconcileIosFolder();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar

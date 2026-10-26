@@ -50,6 +50,8 @@ function onFocusOut(e: FocusEvent) {
   // is not a blur.
   if (isEditorTarget(e.relatedTarget)) return;
   editorFocused.value = false;
+  measure();
+  window.setTimeout(measure, 60);
 }
 
 /** App switch and back: the editor never lost focus inside the page, so no

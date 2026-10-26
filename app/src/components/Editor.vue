@@ -8,7 +8,7 @@ import { createFindPanel, type FindPanelLabels } from '../lib/cm-find-panel';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { cjkFriendlyEmphasis } from '../lib/cm-cjk-emphasis';
-import { initMermaid } from '../lib/mermaid-lazy';
+import { bindMermaidInteractions, initMermaid } from '../lib/mermaid-lazy';
 import { parseInsertSnippet } from '../lib/insert-snippet';
 // The grammar imports and the `codeLanguages` list they feed now live in
 // `lib/code-languages.ts`: the ``` fence-language picker (#297) derives its
@@ -756,11 +756,12 @@ async function processPlainLiveRenderedBlocks() {
     const code = (block.textContent || '').trim();
     const id = `plain-mmd-${++plainMermaidIdSeq}`;
     try {
-      const { svg } = await mermaid.render(id, code);
+      const { svg, bindFunctions } = await mermaid.render(id, code);
       const wrap = document.createElement('div');
       wrap.className = 'plain-mermaid-block';
       wrap.innerHTML = svg;
       pre.replaceWith(wrap);
+      bindMermaidInteractions(wrap, bindFunctions);
     } catch (e) {
       pre.classList.add('plain-block__broken');
       pre.textContent = `Mermaid error: ${(e as Error).message}`;
@@ -2510,10 +2511,17 @@ function handlePlainEditorKeydown(event: KeyboardEvent) {
     if (!smart) return;
     event.preventDefault();
     recordPlainHistory();
-    el.value = smart.value;
-    el.setSelectionRange(smart.caret, smart.caret);
-    plainText.value = smart.value;
-    tabs.setContent(props.tab.id, smart.value);
+    let nextVal = smart.value;
+    let nextCaret = smart.caret;
+    const renum = props.tab.language === 'markdown' ? renumberAfterEdit(plainText.value, nextVal) : null;
+    if (renum) {
+      nextVal = renum.value;
+      nextCaret = mapPos(nextCaret, renum.changes);
+    }
+    el.value = nextVal;
+    el.setSelectionRange(nextCaret, nextCaret);
+    plainText.value = nextVal;
+    tabs.setContent(props.tab.id, nextVal);
     emitPlainCursorAndSelection();
   }
 }
@@ -2646,8 +2654,8 @@ function activatePlainBlockFromClick(index: number, event: MouseEvent) {
   // in Typora; Ctrl+click (⌘ on macOS) opens it the way the preview does. The
   // webview must never follow it itself — that replaced the whole UI with the
   // page, with no way back but right-click → Back.
-  const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
-  if (anchor) {
+  const anchor = target?.closest('a') as Element | null;
+  if (anchor && (anchor.hasAttribute('href') || anchor.hasAttribute('xlink:href'))) {
     event.preventDefault();
     if (event.ctrlKey || event.metaKey) {
       openRenderedLink(anchor, event, props.tab.filePath);
@@ -4137,7 +4145,9 @@ onMounted(() => {
     parent: host.value,
   });
   maybeRestoreSession();
-  focusFreshCodeMirror();
+  if (!isMobile()) {
+    focusFreshCodeMirror();
+  }
   // Expose the focused EditorView on `window` for dev-bridge / self-test
   // harnesses. Vite injects `import.meta.env.DEV === true` only in dev
   // builds; production bundles dead-code-eliminate this entire block.

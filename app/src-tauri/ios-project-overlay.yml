@@ -52,6 +52,7 @@ merge:
           # window/posture resizing between outer (466×678 pt, compact) and
           # inner (669×951 pt, regular) displays in all four orientations.
           UIRequiresFullScreen: false
+          UILaunchScreen: {}
           UISupportedInterfaceOrientations:
             - UIInterfaceOrientationPortrait
             - UIInterfaceOrientationPortraitUpsideDown

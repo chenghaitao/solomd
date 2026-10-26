@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { initMermaid } from '../lib/mermaid-lazy';
+import { bindMermaidInteractions, initMermaid } from '../lib/mermaid-lazy';
 import { mermaidThemeFor } from '../lib/themes';
 import { openRenderedLink } from '../lib/link-open';
 import { renderMarkdown, extractImageRoot } from '../lib/markdown';
@@ -239,13 +239,14 @@ async function processMermaid() {
     const code = (block.textContent || '').trim();
     const id = `mmd-${++mermaidIdSeq}`;
     try {
-      const { svg } = await mermaid.render(id, code);
+      const { svg, bindFunctions } = await mermaid.render(id, code);
       const wrap = document.createElement('div');
       wrap.className = 'mermaid-block';
       // Keep the source so a theme switch can re-render this diagram.
       wrap.dataset.mermaidSource = code;
       wrap.innerHTML = svg;
       pre.replaceWith(wrap);
+      bindMermaidInteractions(wrap, bindFunctions);
     } catch (e) {
       const err = document.createElement('pre');
       err.className = 'mermaid-error';
@@ -380,6 +381,9 @@ function attachImageOverlayHandlers() {
     if ((block as HTMLElement).dataset.overlayBound === '1') continue;
     (block as HTMLElement).dataset.overlayBound = '1';
     block.addEventListener('click', ((e: MouseEvent) => {
+      // #462 — Let clicks on embedded links inside a Mermaid diagram pass
+      // through to `handleLinkClick` instead of opening the zoom overlay.
+      if ((e.target as Element | null)?.closest?.('a')) return;
       e.stopPropagation();
       e.preventDefault();
       const svg = block.querySelector('svg');
@@ -446,10 +450,41 @@ async function copyDiagramPng(svg: SVGElement) {
   }
 }
 
+// #456 — Remember per-tab reading scroll offset in Preview / Reading mode so
+// switching tabs in the same pane restores each document's reading position
+// instead of inheriting the previous tab's scrollTop.
+const previewScrollMemory = new Map<string, number>();
+let restoringTabScroll = false;
+
+function restoreTabScroll(tabId?: string) {
+  const container = host.value?.parentElement as HTMLElement | null;
+  if (!container) return;
+  const saved = tabId ? (previewScrollMemory.get(tabId) ?? 0) : 0;
+  restoringTabScroll = true;
+  container.scrollTop = saved;
+  requestAnimationFrame(() => {
+    restoringTabScroll = false;
+    onHostScroll();
+  });
+}
+
+watch(
+  () => props.tabId,
+  async (newId, oldId) => {
+    if (newId === oldId) return;
+    await nextTick();
+    restoreTabScroll(newId);
+  },
+);
+
 watch(html, async () => {
   // A re-render (incl. our own math write-back) invalidates popup geometry.
   mathEdit.value = null;
+  const activeTabId = props.tabId;
   await nextTick();
+  if (activeTabId && restoringTabScroll) {
+    restoreTabScroll(activeTabId);
+  }
   processPlantuml();
   await processMermaid();
   await processWhiteboards();
@@ -491,12 +526,18 @@ function handleLinkClick(e: MouseEvent) {
 
 onMounted(async () => {
   await nextTick();
+  if (props.tabId && previewScrollMemory.has(props.tabId)) {
+    restoreTabScroll(props.tabId);
+  }
   processPlantuml();
   await processMermaid();
   await processWhiteboards();
   attachImageOverlayHandlers();
   attachCodeCopyButtons();
   enableTaskCheckboxes();
+  if (props.tabId && previewScrollMemory.has(props.tabId)) {
+    restoreTabScroll(props.tabId);
+  }
   host.value?.addEventListener('click', handleLinkClick);
   host.value?.addEventListener('click', onTaskCheckboxClick);
   host.value?.addEventListener('dblclick', onPreviewDblClick);
@@ -573,6 +614,12 @@ function flashTarget(el: HTMLElement) {
 // (plus the jump gap), at most once per frame.
 let toplineRaf = 0;
 function onHostScroll() {
+  if (props.tabId && !restoringTabScroll) {
+    const container = host.value?.parentElement as HTMLElement | null;
+    if (container) {
+      previewScrollMemory.set(props.tabId, container.scrollTop);
+    }
+  }
   if (toplineRaf) return;
   toplineRaf = requestAnimationFrame(() => {
     toplineRaf = 0;

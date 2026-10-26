@@ -241,6 +241,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   // Markdown Help here, so the default is Mod+Alt+/; rebind it to Mod+/ in
   // Settings -> Shortcuts to get Typora's muscle memory back.
   { id: 'view.toggleLiveEdit', label: 'Toggle Source / Live Edit', category: 'view', defaults: ['Mod+Alt+Slash'] },
+  { id: 'view.togglePreview', label: 'Toggle Preview Mode', category: 'view', defaults: ['Mod+Alt+V'] },
   { id: 'view.cycleView', label: 'Cycle Edit / Split / Preview', category: 'view', defaults: ['Mod+Shift+P'] },
   { id: 'view.toggleReading', label: 'Toggle Reading Mode', category: 'view', defaults: ['Mod+Shift+R'] },
   { id: 'view.slideshow', label: 'Slideshow', category: 'view', defaults: ['Mod+Alt+P'] },

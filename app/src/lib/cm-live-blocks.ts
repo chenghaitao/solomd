@@ -45,9 +45,10 @@ import {
 } from './image-resolve';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import { findHtmlBlockEnd } from './html-live-render';
+import { openRenderedLink } from './link-open';
 import { parseImageAltSize } from './md-image-url';
 import { plantumlSvgUrl } from './plantuml';
-import { initMermaid } from './mermaid-lazy';
+import { bindMermaidInteractions, initMermaid } from './mermaid-lazy';
 import { getKatex, onRenderDepsChange, renderDepsVersion } from './render-deps';
 import {
   parseTldrawFence,
@@ -67,7 +68,10 @@ import {
 // preview), and it's part of the key, so switching theme renders fresh SVG
 // instead of reusing the light one.
 type MermaidTheme = 'dark' | 'default';
-const mermaidSvgCache = new Map<string, { svg: string | null; error: string | null }>();
+const mermaidSvgCache = new Map<
+  string,
+  { svg: string | null; bindFunctions?: ((el: Element) => void) | null; error: string | null }
+>();
 let mermaidIdSeq = 0;
 const mermaidKey = (source: string, theme: MermaidTheme) => `${theme}\u0000${source}`;
 // In-flight renders. A second caller has to wait for the same render, not
@@ -91,8 +95,8 @@ function ensureMermaidRendered(source: string, theme: MermaidTheme): Promise<voi
         securityLevel: 'strict',
         theme,
       });
-      const { svg } = await mermaid.render(id, source);
-      mermaidSvgCache.set(key, { svg, error: null });
+      const { svg, bindFunctions } = await mermaid.render(id, source);
+      mermaidSvgCache.set(key, { svg, bindFunctions, error: null });
     } catch (e) {
       mermaidSvgCache.set(key, { svg: null, error: (e as Error).message });
     } finally {
@@ -499,6 +503,7 @@ class MermaidWidget extends WidgetType {
   constructor(
     private readonly source: string,
     private readonly theme: MermaidTheme,
+    private readonly filePath?: string,
   ) {
     super();
     const cached = mermaidSvgCache.get(mermaidKey(source, theme));
@@ -512,6 +517,7 @@ class MermaidWidget extends WidgetType {
     return (
       other.source === this.source &&
       other.theme === this.theme &&
+      other.filePath === this.filePath &&
       other.settled === this.settled
     );
   }
@@ -522,6 +528,13 @@ class MermaidWidget extends WidgetType {
     const cached = mermaidSvgCache.get(mermaidKey(this.source, this.theme));
     if (cached?.svg) {
       wrap.innerHTML = cached.svg;
+      bindMermaidInteractions(wrap, cached.bindFunctions);
+      wrap.addEventListener('click', (ev) => {
+        const anchor = (ev.target as Element | null)?.closest?.('a');
+        if (anchor) {
+          openRenderedLink(anchor, ev, this.filePath);
+        }
+      });
     } else if (cached?.error) {
       wrap.classList.add('cm-live-block--broken');
       wrap.textContent = `Mermaid: ${cached.error}`;
@@ -820,6 +833,34 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
         while (i <= lastLine) {
           const line = doc.line(i);
 
+          // #457 — Skip normal fenced code blocks (` ```vue `, ` ```html `,
+          // ` ```md `, etc.) before checking for raw HTML blocks, images, math,
+          // or tables! Only `tldraw`, `mermaid`, and `plantuml`/`puml` fences
+          // are collapsed into block widgets below; all other fenced code
+          // blocks are styled line-by-line by `cm-live-render.ts` and must
+          // never have their interior `<template>`, `<div>`, `<img>`, `$$`, or
+          // `|...|` lines mistaken for top-level Markdown blocks.
+          const fenceOpen = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(line.text);
+          if (fenceOpen && !(fenceOpen[1][0] === '`' && fenceOpen[2].includes('`'))) {
+            const fenceLang = fenceOpen[2].trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+            if (
+              fenceLang !== 'tldraw' &&
+              fenceLang !== 'mermaid' &&
+              fenceLang !== 'plantuml' &&
+              fenceLang !== 'puml'
+            ) {
+              const fenceChar = fenceOpen[1][0];
+              const fenceLen = fenceOpen[1].length;
+              const closeRe = new RegExp(`^[ \\t]*\\${fenceChar}{${fenceLen},}[ \\t]*$`);
+              let endI = i + 1;
+              while (endI <= lastLine && !closeRe.test(doc.line(endI).text)) {
+                endI += 1;
+              }
+              i = endI + 1;
+              continue;
+            }
+          }
+
           // Raw block HTML (`<div>…</div>`, `<details>`, HTML tables, etc.).
           // Preview.vue has always rendered this through markdown-it, but live
           // edit previously left the tags visible. Collapse the complete block
@@ -1069,7 +1110,7 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                   blockFrom,
                   blockTo,
                   Decoration.replace({
-                    widget: new MermaidWidget(body, mermaidTheme),
+                    widget: new MermaidWidget(body, mermaidTheme, opts.getFilePath?.()),
                     block: true,
                   }),
                 );

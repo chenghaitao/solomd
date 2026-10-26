@@ -154,6 +154,7 @@ export function useShortcuts(hooks: Hooks = {}) {
 
     'view.cycleView': () => settings.cycleViewMode(),
     'view.toggleLiveEdit': () => settings.toggleLiveEditSource(),
+    'view.togglePreview': () => settings.togglePreviewMode(),
     // Pressing the same combo while already in reading mode restores the
     // previous mode.
     'view.toggleReading': () => settings.toggleReadingMode(),
