@@ -123,12 +123,20 @@ rm -f "$DMG"
 hdiutil create -volname SoloMD -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 
 echo "==> Signing dmg"
-codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
+codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
+
+echo "==> Notarizing + stapling dmg"
+xcrun notarytool submit "$DMG" \
+  "${ASC_NOTARY_AUTH[@]}" \
+  --wait
+xcrun stapler staple "$DMG"
 
 echo ""
 echo "==> Verifying"
-spctl -a -vvv "$APP" || echo "(spctl: check above)"
+spctl -a -vvv "$APP" || echo "(spctl app: check above)"
+spctl -a -t open --context context:primary-signature -vvv "$DMG" || echo "(spctl dmg: check above)"
 xcrun stapler validate "$APP"
+xcrun stapler validate "$DMG"
 
 echo ""
 echo "==> Done: $DMG"
