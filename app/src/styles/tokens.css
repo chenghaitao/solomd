@@ -69,6 +69,16 @@
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --select-inactive: color-mix(in srgb, var(--text) 9%, transparent);
 
+  /* Tabs. The active tab has to read as the front-most card in the strip, so
+     it takes a solid fill one step off the strip's own surface, its name at
+     full contrast, and an accent rule along the top edge — the same cue VS
+     Code uses for the current editor. `--fill-1` (used before) was one hair
+     away from the strip itself and the current tab was hard to pick out. */
+  --tab-active-bg: color-mix(in srgb, var(--text) 10%, transparent);
+  --tab-active-bg-hover: color-mix(in srgb, var(--text) 14%, transparent);
+  --tab-active-fg: var(--text);
+  --tab-active-indicator: var(--accent);
+
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.06);
   --sh-2: 0 4px 12px rgba(0, 0, 0, 0.08);
   --sh-pop: 0 12px 32px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -122,6 +132,10 @@
   --accent-strong-fg: #ffffff;
   --accent-soft: rgba(224, 123, 57, 0.13);
   --select-inactive: rgba(31, 30, 28, 0.08);
+  --tab-active-bg: rgba(31, 30, 28, 0.1);
+  --tab-active-bg-hover: rgba(31, 30, 28, 0.14);
+  --tab-active-fg: #12110f;
+  --tab-active-indicator: #b4561b;
 }
 
 /* ── 3b. exact 5.0 palette — default dark ──────────────────────────────── */
@@ -138,6 +152,10 @@
   --accent-strong-fg: #ffffff;
   --accent-soft: rgba(240, 150, 90, 0.18);
   --select-inactive: rgba(255, 255, 255, 0.1);
+  --tab-active-bg: rgba(255, 255, 255, 0.13);
+  --tab-active-bg-hover: rgba(255, 255, 255, 0.17);
+  --tab-active-fg: #fbfaf7;
+  --tab-active-indicator: #f4a26b;
 
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.3);
   --sh-2: 0 4px 12px rgba(0, 0, 0, 0.3);

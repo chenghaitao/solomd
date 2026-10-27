@@ -747,13 +747,29 @@ onBeforeUnmount(() => {
   color: var(--text-2);
 }
 .tab--active {
-  background: var(--fill-1);
-  color: var(--text);
-  font-weight: 540;
+  /* Solid fill one step off the strip (5.0's `--fill-1` was too close to it,
+     which left the current tab reading as just another idle one), the name at
+     full contrast, and an accent rule on the top edge — the active-tab
+     language VS Code uses in both light and dark. The weight only moves 450 →
+     500: anything heavier changes the label's width, and the whole strip
+     shuffles sideways every time the current tab changes. */
+  background: var(--tab-active-bg);
+  color: var(--tab-active-fg);
+  font-weight: 500;
+}
+/* The top-edge rule. Inset to the tab's own rounded corners so it reads as a
+   border on the pill, not a bar floating over it. */
+.tab--active::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: var(--tab-active-indicator);
 }
 .tab--active:hover {
-  background: var(--fill-2);
-  color: var(--text);
+  background: var(--tab-active-bg-hover);
+  color: var(--tab-active-fg);
 }
 .tab--dragging {
   opacity: 0.5;

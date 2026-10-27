@@ -36,7 +36,11 @@ built-in themes and marketplace themes keep working: they only set the existing 
 | `--bg-elev` | `#F7F6F3` | `#2C2C2F` | quotes, code blocks, inputs, cards |
 | `--bg-pop` | `#FFFFFF` | `#2C2C2F` | menus, popovers, dialogs |
 | `--fill-1` | `rgba(31,30,28,.05)` | `rgba(255,255,255,.07)` | hover, search field, segmented track |
-| `--fill-2` | `rgba(31,30,28,.08)` | `rgba(255,255,255,.11)` | pressed, active tab |
+| `--fill-2` | `rgba(31,30,28,.08)` | `rgba(255,255,255,.11)` | pressed, hover on filled controls |
+| `--tab-active-bg` | `rgba(31,30,28,.10)` | `rgba(255,255,255,.13)` | current tab fill |
+| `--tab-active-bg-hover` | `rgba(31,30,28,.14)` | `rgba(255,255,255,.17)` | current tab, hovered |
+| `--tab-active-fg` | `#12110F` | `#FBFAF7` | current tab name |
+| `--tab-active-indicator` | `#B4561B` | `#F4A26B` | 2 px rule on the current tab's top edge |
 | `--hairline` | `rgba(31,30,28,.08)` | `rgba(255,255,255,.08)` | every separator |
 | `--text` | `#1F1E1C` | `#ECEAE6` | body |
 | `--text-2` | `#5E5B55` | `#A9A6A0` | secondary (icons, inactive tabs) |
