@@ -19,6 +19,59 @@
 
 ---
 
+## [5.0.10] — 2026-10-27
+
+修 5.0.9 里的一个 P0：分栏模式下右侧预览正常、左边编辑区整块空白。根因是上游 5.0.7 批次带进来的
+一个 CodeMirror 选择器，本仓库在 5.0.9 首次合入；同一提交里的 Android SAF 图片路径修复一并带上。
+
+### 1. 编辑区空白（#477）
+
+分栏模式下右侧预览渲染正常，左侧连行号都没有；实时与源码模式同样空白，多开几个标签也一样。
+
+| 环节 | 事实 |
+|---|---|
+| 出错代码 | `Editor.vue` 的 `activeLineExtension()` 写了 `'&dark .cm-content .cm-line.cm-activeLine'` |
+| 为什么炸 | `&dark` 只在 `EditorView.baseTheme` 里合法；放进 `EditorView.theme()` 会在建 view 时抛 `RangeError: Unsupported selector: &dark` |
+| 为什么必现 | `settings.highlightCurrentLine` 默认 `true`，`buildExtensions()` 无条件调用 `activeLineExtension(true)`，`EditorView` 构造中断 |
+| 为什么右半边正常 | 预览是独立组件，不经过 CodeMirror |
+| 何时进来 | 上游 `b6ab0768`（5.0.7 批次，#467 的暗色活动行着色）；5.0.5 没有这一行，5.0.9 首次合入 |
+
+修复与上游 `84888e29` 一致：
+
+- `activeLineExtension` 从 `Editor.vue` 移到 `lib/themes.ts`，选择器改 `&.cm-dark` —— `mkTheme()` 的
+  `{ dark: isDark(bg) }` 会给出 `cm-dark` class，暗色主题落到暗色分支，其余仍是浅色分支。
+- 新增 `lib/themes.test.ts`：8 个内置主题 × 自定义两态各建一次 `EditorState`。原来的 540 个测试
+  没有一例会实例化 CodeMirror 的 theme，所以全绿也没拦住这类问题。
+
+### 2. Android SAF 相对路径图片（#476）
+
+| 区域 | 内容 |
+|---|---|
+| `lib/image-resolve.ts` | `saf:` 路径参与 `.` / `..` / 连续斜杠归一；`/storage/emulated/0/…` 与 `/sdcard/…` 映射成 `saf:primary:…`；按当前工作区 tree 解析成 data URL 并做内存缓存 |
+| `lib/cm-live-blocks.ts` | 实时模式的图片块走同一条解析链 |
+| `app/src-tauri/src/saf_android.rs` | 新增 `saf_read_base64` 命令，返回 SAF 文件字节 |
+| `MainActivity.kt` | 对应的 Java 侧实现 |
+
+桌面端无感，只在 Android（SAF 工作区）生效。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `node --test` | **543 / 543**（5.0.9 = 540） |
+| `vue-tsc --noEmit` | 退出 0 |
+| `vite build` | 入口 **945.38 kB**（gzip 301.45 kB），vendor **1,738.17 kB** 不变 |
+| `cargo check` | 通过，仍只有 `TIP_PRODUCT_IDS` 一条上游自带 warning |
+| 选择器对照 | `EditorView.theme({'&dark …'})` → `RangeError: Unsupported selector: &dark`；改成 `{'&.cm-dark …'}` → 正常 |
+
+### 说明
+
+- **不重打 5.0.9**：它已经发布并有下载，重打 tag 会让已下载的包与 tag 对不上，这版单独发 5.0.10。
+- 关掉 `highlightCurrentLine` 理论上能躲开，但 `settings.ts` 的 `v507HighlightLineMigrated` 迁移会把
+  它强制置回 `true`，所以这是默认必现，不是某些配置才踩。
+
+---
+
 ## [5.0.9] — 2026-10-27
 
 两条线：**多标签活动态重做**（本仓库），以及**同步上游 18 个提交** —— WebDAV 同步、Excel / WPS 表格粘贴、
