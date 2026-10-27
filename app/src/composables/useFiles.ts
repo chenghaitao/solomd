@@ -15,6 +15,7 @@ import { useToastsStore } from '../stores/toasts';
 import { useRecentEditsStore } from '../stores/recentEdits';
 import { useWindowsStore } from '../stores/windows';
 import { openImageOverlay, type OverlayStrings } from '../lib/image-overlay';
+import { loadSafImageDataUrl } from '../lib/image-resolve';
 import { openPath as openWithSystemDefault } from '@tauri-apps/plugin-opener';
 import { useI18n } from '../i18n';
 import type { FileReadResult, Tab } from '../types';
@@ -178,12 +179,20 @@ export function useFiles() {
     const fileName = path.split(/[\\/]/).pop() ?? path;
     try {
       const img = new Image();
-      img.src = convertFileSrc(path);
+      const safDataUrl = isSafPath(path) ? await loadSafImageDataUrl(path) : null;
+      img.src = safDataUrl || convertFileSrc(path);
       img.alt = fileName;
       await new Promise<void>((resolve, reject) => {
         if (img.complete && img.naturalWidth > 0) return resolve();
         img.onload = () => resolve();
-        img.onerror = () => reject(new Error('image failed to load'));
+        img.onerror = async () => {
+          const fallbackUrl = await loadSafImageDataUrl(path);
+          if (fallbackUrl && img.src !== fallbackUrl) {
+            img.src = fallbackUrl;
+            return;
+          }
+          reject(new Error('image failed to load'));
+        };
       });
       openImageOverlay({ source: img, title: fileName, strings: overlayStrings() });
       workspace.pushRecent(path);

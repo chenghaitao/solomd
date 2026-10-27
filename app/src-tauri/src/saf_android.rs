@@ -122,6 +122,21 @@ pub fn saf_read(tree_uri: String, doc_id: String) -> Result<String, String> {
     }
 }
 
+/// #476 — Read a document as Base64-encoded bytes (used for images and binary
+/// assets inside SAF folders on Android).
+#[tauri::command]
+pub fn saf_read_base64(tree_uri: String, doc_id: String) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        imp::read_base64(&tree_uri, &doc_id)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (tree_uri, doc_id);
+        Err("SAF is Android-only".into())
+    }
+}
+
 /// Overwrite a document with UTF-8 text.
 #[tauri::command]
 pub fn saf_write(tree_uri: String, doc_id: String, content: String) -> Result<(), String> {
@@ -311,6 +326,22 @@ mod imp {
                 .as_str()
                 .map(str::to_owned)
                 .ok_or_else(|| "readText: not a string".into())
+        })
+    }
+
+    pub fn read_base64(tree: &str, doc: &str) -> Result<String, String> {
+        with_env(|env| {
+            let a = jstr(env, tree)?;
+            let b = jstr(env, doc)?;
+            let json = call_str(
+                "readBase64",
+                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&a), JValue::Object(&b)],
+            )?;
+            unwrap_env(&json)?
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "readBase64: not a string".into())
         })
     }
 

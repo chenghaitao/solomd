@@ -57,6 +57,11 @@ export async function safRead(treeUri: string, docId: string): Promise<FileReadR
   return { content, encoding: 'UTF-8', language: langFor(name), had_bom: false };
 }
 
+/** #476 — Read a binary file (e.g. image) from SAF as a base64 string. */
+export async function safReadBase64(treeUri: string, docId: string): Promise<string> {
+  return await invoke<string>('saf_read_base64', { treeUri, docId });
+}
+
 export async function safWrite(treeUri: string, docId: string, content: string): Promise<void> {
   await invoke('saf_write', { treeUri, docId, content });
 }

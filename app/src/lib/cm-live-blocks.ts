@@ -267,14 +267,23 @@ class TableWidget extends WidgetType {
   // arrived must not count as equal to the one built after (render-deps.ts).
   private readonly deps = renderDepsVersion();
   private readonly source: string;
+  private readonly imageRoot: string | null;
+  private readonly filePath?: string;
 
-  constructor(source: string) {
+  constructor(source: string, imageRoot: string | null = null, filePath?: string) {
     super();
     this.source = source;
+    this.imageRoot = imageRoot;
+    this.filePath = filePath;
   }
 
   eq(other: TableWidget): boolean {
-    return other.source === this.source && other.deps === this.deps;
+    return (
+      other.source === this.source &&
+      other.imageRoot === this.imageRoot &&
+      other.filePath === this.filePath &&
+      other.deps === this.deps
+    );
   }
 
   toDOM(): HTMLElement {
@@ -283,8 +292,9 @@ class TableWidget extends WidgetType {
     // Render the table source through the same markdown pipeline used by the
     // preview pane so we get GFM alignment, inline formatting, etc. for free.
     // We strip everything except the table rows from the rendered output.
-    const html = renderMarkdown(this.source);
-    wrap.innerHTML = html;
+    const rawHtml = renderMarkdown(this.source);
+    wrap.innerHTML = rewriteImageUrls(rawHtml, this.imageRoot, this.filePath);
+    installSvgImageFallbacks(wrap);
     trackImageHeights(wrap);
     return wrap;
   }
@@ -981,11 +991,15 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
               const filePath = opts.getFilePath?.();
               const src = resolveImageSrc(imgMatch[2], root, filePath);
               const localPath = resolveImagePath(imgMatch[2], root, filePath);
+              const needsFallback =
+                isLocalSvgPath(localPath) ||
+                localPath.startsWith('saf:') ||
+                /^\/(?:storage\/emulated\/0|sdcard)\//i.test(localPath);
               builder.add(
                 line.to,
                 line.to,
                 Decoration.widget({
-                  widget: new ImageWidget(src, imgMatch[1], isLocalSvgPath(localPath) ? localPath : null, i),
+                  widget: new ImageWidget(src, imgMatch[1], needsFallback ? localPath : null, i),
                   block: true,
                   side: 1,
                 }),
@@ -1001,11 +1015,15 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
               const filePath = opts.getFilePath?.();
               const src = resolveImageSrc(rawSrc, root, filePath);
               const localPath = resolveImagePath(rawSrc, root, filePath);
+              const needsFallback =
+                isLocalSvgPath(localPath) ||
+                localPath.startsWith('saf:') ||
+                /^\/(?:storage\/emulated\/0|sdcard)\//i.test(localPath);
               builder.add(
                 line.from,
                 line.to,
                 Decoration.replace({
-                  widget: new ImageWidget(src, alt, isLocalSvgPath(localPath) ? localPath : null, i),
+                  widget: new ImageWidget(src, alt, needsFallback ? localPath : null, i),
                   block: true,
                 }),
               );
@@ -1220,7 +1238,7 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                     blockFrom,
                     blockTo,
                     Decoration.replace({
-                      widget: new TableWidget(source),
+                      widget: new TableWidget(source, opts.getImageRoot?.() ?? null, opts.getFilePath?.()),
                       block: true,
                     }),
                   );
