@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.util.Base64
 import androidx.activity.enableEdgeToEdge
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
@@ -388,6 +389,70 @@ class MainActivity : TauriActivity() {
       val text = r.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
         ?: return err2("openInputStream null")
       envelope { put("v", text) }
+    } catch (e: Exception) { err(e) } }
+
+    /** Resolve a child documentId by walking path segments from rootDocId when direct docId lookup fails. */
+    private fun resolveChildDocIdBySegments(tree: Uri, startDocId: String, segments: List<String>): String? {
+      val r = resolver() ?: return null
+      var curDocId = startDocId
+      for (seg in segments) {
+        if (seg.isEmpty() || seg == ".") continue
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, curDocId)
+        var found: String? = null
+        var ciFound: String? = null
+        r.query(
+          children,
+          arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME
+          ),
+          null, null, null
+        )?.use { c ->
+          while (c.moveToNext()) {
+            val cid = c.getString(0)
+            val name = if (c.isNull(1)) cid.substringAfterLast('/') else c.getString(1)
+            if (name == seg) {
+              found = cid
+              break
+            } else if (ciFound == null && name.equals(seg, ignoreCase = true)) {
+              ciFound = cid
+            }
+          }
+        }
+        curDocId = found ?: ciFound ?: return null
+      }
+      return curDocId
+    }
+
+    /** #476 — Read binary document bytes as Base64 for local images inside a SAF folder. */
+    @JvmStatic
+    fun readBase64(treeUri: String, docId: String): String { return try {
+      val tree = Uri.parse(treeUri)
+      val r = resolver() ?: return err2("no resolver")
+      var bytes: ByteArray? = try {
+        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, docId)
+        r.openInputStream(uri)?.use { it.readBytes() }
+      } catch (_: Exception) {
+        null
+      }
+      if (bytes == null) {
+        val rootDocId = DocumentsContract.getTreeDocumentId(tree)
+        val relPath = when {
+          docId.startsWith("$rootDocId/") -> docId.removePrefix("$rootDocId/")
+          docId.contains(':') && rootDocId.contains(':') &&
+            docId.substringAfter(':').startsWith(rootDocId.substringAfter(':') + "/") ->
+            docId.substringAfter(':').removePrefix(rootDocId.substringAfter(':') + "/")
+          else -> docId.substringAfter(':')
+        }
+        val segments = relPath.split('/').filter { it.isNotEmpty() && it != "." }
+        val resolvedDocId = resolveChildDocIdBySegments(tree, rootDocId, segments)
+        if (resolvedDocId != null) {
+          val uri = DocumentsContract.buildDocumentUriUsingTree(tree, resolvedDocId)
+          bytes = r.openInputStream(uri)?.use { it.readBytes() }
+        }
+      }
+      val data = bytes ?: return err2("openInputStream null")
+      envelope { put("v", Base64.encodeToString(data, Base64.NO_WRAP)) }
     } catch (e: Exception) { err(e) } }
 
     /** Overwrite a document with UTF-8 text ("wt" truncates). */

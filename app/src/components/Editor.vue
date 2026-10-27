@@ -18,7 +18,7 @@ import { codeLanguages } from '../lib/code-languages';
 import { fenceLanguageComplete, fenceLanguageExtension } from '../lib/cm-fence-completion';
 import { filterFenceLanguages, isInsideFenceBefore, matchFenceOpener } from '../lib/fence-languages';
 import { vim, Vim } from '@replit/codemirror-vim';
-import { cmThemeFor, mermaidThemeFor } from '../lib/themes';
+import { cmThemeFor, mermaidThemeFor, activeLineExtension } from '../lib/themes';
 import { registerPlainSelectionGetter } from '../lib/plain-selection';
 import {
   headingFoldExtension,
@@ -3955,25 +3955,6 @@ function richExtensionsFor(tab: Tab) {
     : richHighlightOnly();
 }
 
-// #344 / #467 — caret-line tint. Selector is one step more specific than the
-// base theme's transparent `.cm-activeLine` so it wins regardless of order.
-// In non-dark themes, uses the warm soft pink tint users expect on the active
-// editing line; in dark themes, uses a subtle accent tint.
-function activeLineExtension(on: boolean) {
-  if (!on) return [];
-  return EditorView.theme({
-    '.cm-content .cm-line.cm-activeLine': {
-      backgroundColor:
-        'color-mix(in srgb, #f48fb1 16%, color-mix(in srgb, var(--accent) 8%, transparent))',
-      borderRadius: '3px',
-    },
-    '&dark .cm-content .cm-line.cm-activeLine': {
-      backgroundColor: 'color-mix(in srgb, var(--accent) 11%, transparent)',
-      borderRadius: '3px',
-    },
-  });
-}
-
 const fontSizeTheme = (px: number, family: string) =>
   EditorView.theme({
     '&': { fontSize: `${px}px`, height: '100%' },
@@ -4253,7 +4234,7 @@ onMounted(() => {
     state: EditorState.create({
       doc: props.tab.content,
       extensions: buildExtensions(),
-      selection: { anchor: Math.min(savedInit?.caret ?? 0, props.tab.content.length) },
+      selection: { anchor: Math.max(0, Math.min(savedInit?.caret ?? 0, props.tab.content.length)) },
     }),
     parent: host.value,
   });
