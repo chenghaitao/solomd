@@ -329,6 +329,7 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
   const seenFencedLines = new Set<number>();
   const seenCopyBlocks = new Set<number>();
   const seenHeadingLines = new Set<number>();
+  const seenListLines = new Set<number>();
   const seenInlineHtmlLines = new Set<number>();
 
   for (const { from, to } of view.visibleRanges) {
@@ -519,14 +520,35 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
           return;
         }
 
-        // ---- List markers (v4.7.1) ----
+        // ---- List markers (v4.7.1) + hanging indent (#469) ----
         // Bullets (`-`/`*`/`+`) become a • glyph; ordered numbers stay; a
         // task item's dash is hidden so the checkbox widget leads. Revealed
         // (raw) on the caret line so the marker stays editable.
+        // #469: apply a matched `padding-left: X; text-indent: -X` line
+        // decoration so soft-wrapped continuation lines hang aligned with the
+        // list item body instead of wrapping back under the number/bullet.
         if (name === 'ListMark') {
-          if (showMarkers || caretTouches || nTo <= nFrom) return;
+          const lineObj = view.state.doc.lineAt(nFrom);
           const mark = view.state.doc.sliceString(nFrom, nTo);
           const isBullet = mark === '-' || mark === '*' || mark === '+';
+          if (!seenListLines.has(lineObj.from)) {
+            seenListLines.add(lineObj.from);
+            const leadSpaces = nFrom - lineObj.from;
+            const markCols = nTo - nFrom + 1;
+            const indentEm = isBullet
+              ? Math.min(6, Math.max(1.15, leadSpaces * 0.55 + 1.15))
+              : Math.min(8, Math.max(1.65, leadSpaces * 0.55 + markCols * 0.58));
+            const indentStr = `${indentEm.toFixed(2)}em`;
+            ranges.push(
+              Decoration.line({
+                class: 'cm-md-list-line',
+                attributes: {
+                  style: `padding-left: ${indentStr}; text-indent: -${indentStr};`,
+                },
+              }).range(lineObj.from),
+            );
+          }
+          if (showMarkers || caretTouches || nTo <= nFrom) return;
           if (!isBullet) return; // ordered list ("1.", "2)") keeps its number
           if (listItemHasTask(node.node as unknown as MdSyntaxNode)) {
             // Hide "- " (dash + trailing space) — the checkbox renders the item.

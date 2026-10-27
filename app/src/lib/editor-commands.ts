@@ -17,7 +17,8 @@ export type EditorCommand =
   | 'jumpToSelection'
   | 'headingPromote'
   | 'headingDemote'
-  | 'headingParagraph';
+  | 'headingParagraph'
+  | 'headingAutoNumber';
 
 export const EDITOR_COMMANDS: EditorCommand[] = [
   'selectWord',
@@ -27,6 +28,7 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
   'headingPromote',
   'headingDemote',
   'headingParagraph',
+  'headingAutoNumber',
 ];
 
 /** Commands that change the text (the rest only move the selection). */
@@ -35,6 +37,7 @@ export const EDITING_COMMANDS = new Set<EditorCommand>([
   'headingPromote',
   'headingDemote',
   'headingParagraph',
+  'headingAutoNumber',
 ]);
 
 /** Commands that only make sense in a Markdown document. */
@@ -42,6 +45,7 @@ export const MARKDOWN_ONLY_COMMANDS = new Set<EditorCommand>([
   'headingPromote',
   'headingDemote',
   'headingParagraph',
+  'headingAutoNumber',
 ]);
 
 export interface Range {
@@ -275,3 +279,101 @@ function contentStart(line: string): number {
   const m = HEADING.exec(line);
   return m ? m[0].length : line.length - line.trimStart().length;
 }
+
+const HEADING_NUM_PREFIX = /^(\d+(?:\.\d+)*\.?[ \t]+)/;
+
+/**
+ * #474 — Automatically number (or renumber / unnumber) multi-level ATX
+ * headings (`# 1. Title`, `## 1.1 Section`, `### 1.1.1 Subsection`).
+ *
+ * - Skips YAML front matter and fenced code blocks.
+ * - Normalizes the top-most heading level present in the document to depth 0
+ *   (so documents starting at `##` still begin at `1.`, `1.1`, etc.).
+ * - If every heading in the document already carries the exact up-to-date
+ *   hierarchical number prefix, running `toggle` strips the numbers cleanly;
+ *   otherwise it adds or updates all heading numbers.
+ */
+export function autoNumberHeadings(
+  doc: string,
+  from: number,
+  to: number,
+  mode: 'toggle' | 'add' | 'remove' = 'toggle',
+): TextEdit | null {
+  const lines = doc.split('\n');
+  const fenced = fencedLines(lines);
+
+  // Skip leading YAML front matter if present on line 0.
+  let bodyStartIdx = 0;
+  if (lines[0]?.trim() === '---') {
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---' || lines[i].trim() === '...') {
+        bodyStartIdx = i + 1;
+        break;
+      }
+    }
+  }
+
+  const headingIndices: Array<{ idx: number; indent: string; hashes: string; level: number; rest: string; cleanRest: string }> = [];
+  for (let i = bodyStartIdx; i < lines.length; i++) {
+    if (fenced[i]) continue;
+    const m = HEADING.exec(lines[i]);
+    if (!m) continue;
+    const rest = lines[i].slice(m[0].length);
+    if (!rest.trim()) continue;
+    const numMatch = HEADING_NUM_PREFIX.exec(rest);
+    const cleanRest = numMatch ? rest.slice(numMatch[0].length) : rest;
+    headingIndices.push({
+      idx: i,
+      indent: m[1],
+      hashes: m[2],
+      level: m[2].length,
+      rest,
+      cleanRest,
+    });
+  }
+
+  if (headingIndices.length === 0) return null;
+
+  const minLevel = Math.min(...headingIndices.map((h) => h.level));
+  const counters = [0, 0, 0, 0, 0, 0];
+  const numberedLines = [...lines];
+  const unnumberedLines = [...lines];
+  let allAlreadyMatchNumbered = true;
+
+  for (const h of headingIndices) {
+    const depth = Math.max(0, Math.min(5, h.level - minLevel));
+    for (let d = 0; d < depth; d++) {
+      if (counters[d] === 0) counters[d] = 1;
+    }
+    counters[depth] += 1;
+    for (let d = depth + 1; d < 6; d++) {
+      counters[d] = 0;
+    }
+    const prefix =
+      depth === 0
+        ? `${counters[0]}. `
+        : `${counters.slice(0, depth + 1).join('.')} `;
+    const numbered = `${h.indent}${h.hashes} ${prefix}${h.cleanRest}`;
+    const unnumbered = `${h.indent}${h.hashes} ${h.cleanRest}`;
+    numberedLines[h.idx] = numbered;
+    unnumberedLines[h.idx] = unnumbered;
+    if (lines[h.idx] !== numbered) {
+      allAlreadyMatchNumbered = false;
+    }
+  }
+
+  const targetLines =
+    mode === 'remove' || (mode === 'toggle' && allAlreadyMatchNumbered)
+      ? unnumberedLines
+      : numberedLines;
+
+  const nextDoc = targetLines.join('\n');
+  if (nextDoc === doc) return null;
+  return {
+    from: 0,
+    to: doc.length,
+    insert: nextDoc,
+    ...mapSelection(lines, targetLines, 0, from, to),
+  };
+}
+

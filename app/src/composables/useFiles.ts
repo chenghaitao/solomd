@@ -902,12 +902,22 @@ export function useFiles() {
       return true;
     } catch (e) {
       console.error('save failed', e);
-      toasts.error(t('toast.saveFailed', { error: String(e) }));
+      const errStr = String(e);
+      if (!opts.silent) {
+        toasts.warning(
+          settings.language === 'zh'
+            ? `无法直接保存「${tab.fileName}」（可能为只读文件），请选择另存为位置`
+            : `Cannot overwrite "${tab.fileName}" (read-only or permission denied) — choose where to Save As`,
+          6500,
+        );
+        return await saveTabAs(tab, { suggestCopyName: true });
+      }
+      toasts.error(t('toast.saveFailed', { error: errStr }), 6000);
       return false;
     }
   }
 
-  async function saveTabAs(tab: Tab): Promise<boolean> {
+  async function saveTabAs(tab: Tab, opts: { suggestCopyName?: boolean } = {}): Promise<boolean> {
     const defaultName =
       deriveNameFromHeading(tab) ||
       tab.fileName ||
@@ -927,8 +937,12 @@ export function useFiles() {
       const dir = tab.filePath
         ? null
         : await pickerStartDir(newFileDirFor(treeSelection(), tabs.activeTab?.filePath));
+      const suggestedExistingPath =
+        tab.filePath && opts.suggestCopyName
+          ? tab.filePath.replace(/(\.[^./\\]+)?$/, '-copy$1')
+          : tab.filePath;
       path = await saveDialog({
-        defaultPath: tab.filePath ?? (dir ? joinInFolder(dir, defaultName) : defaultName),
+        defaultPath: suggestedExistingPath ?? (dir ? joinInFolder(dir, defaultName) : defaultName),
         filters: SAVE_FILTERS,
       });
       if (!path) return false;

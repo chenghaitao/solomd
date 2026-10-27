@@ -20,11 +20,12 @@
 
 import { RangeSetBuilder, StateField, StateEffect, Prec, EditorSelection, Transaction, EditorState } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
+import type { DecorationSet } from '@codemirror/view';
+import { syntaxTree } from '@codemirror/language';
 import { isDragging, isDragEndTransaction } from './cm-drag-aware';
 import { frozenFieldDuringComposition, isImeSafeFlushTransaction } from './cm-ime-guard';
 import {
   Decoration,
-  DecorationSet,
   EditorView,
   ViewPlugin,
   WidgetType,
@@ -45,9 +46,10 @@ import {
 } from './image-resolve';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import { findHtmlBlockEnd } from './html-live-render';
+import { openRenderedLink } from './link-open';
 import { parseImageAltSize } from './md-image-url';
 import { plantumlSvgUrl } from './plantuml';
-import { initMermaid } from './mermaid-lazy';
+import { bindMermaidInteractions, initMermaid } from './mermaid-lazy';
 import { getKatex, onRenderDepsChange, renderDepsVersion } from './render-deps';
 import {
   parseTldrawFence,
@@ -67,7 +69,10 @@ import {
 // preview), and it's part of the key, so switching theme renders fresh SVG
 // instead of reusing the light one.
 type MermaidTheme = 'dark' | 'default';
-const mermaidSvgCache = new Map<string, { svg: string | null; error: string | null }>();
+const mermaidSvgCache = new Map<
+  string,
+  { svg: string | null; bindFunctions?: ((el: Element) => void) | null; error: string | null }
+>();
 let mermaidIdSeq = 0;
 const mermaidKey = (source: string, theme: MermaidTheme) => `${theme}\u0000${source}`;
 // In-flight renders. A second caller has to wait for the same render, not
@@ -91,8 +96,8 @@ function ensureMermaidRendered(source: string, theme: MermaidTheme): Promise<voi
         securityLevel: 'strict',
         theme,
       });
-      const { svg } = await mermaid.render(id, source);
-      mermaidSvgCache.set(key, { svg, error: null });
+      const { svg, bindFunctions } = await mermaid.render(id, source);
+      mermaidSvgCache.set(key, { svg, bindFunctions, error: null });
     } catch (e) {
       mermaidSvgCache.set(key, { svg: null, error: (e as Error).message });
     } finally {
@@ -192,17 +197,23 @@ function trackImageHeights(root: HTMLElement): void {
 }
 
 class ImageWidget extends WidgetType {
+  private readonly src: string;
+  private readonly alt: string;
+  private readonly localPath: string | null;
+  private readonly lineNumber: number;
   private readonly cleanAlt: string;
   private readonly width: string | null;
   private readonly height: string | null;
 
-  constructor(
-    private readonly src: string,
-    private readonly alt: string,
-    private readonly localPath: string | null = null,
-    private readonly lineNumber: number = 0,
-  ) {
+  // Plain field assignments, not TS parameter properties: node --test strips
+  // types only and rejects parameter-property syntax, and the regression
+  // tests below build real decorations through liveBlocksExtension().
+  constructor(src: string, alt: string, localPath: string | null = null, lineNumber: number = 0) {
     super();
+    this.src = src;
+    this.alt = alt;
+    this.localPath = localPath;
+    this.lineNumber = lineNumber;
     const parsed = parseImageAltSize(alt);
     this.cleanAlt = parsed.alt;
     this.width = parsed.width;
@@ -255,9 +266,11 @@ class TableWidget extends WidgetType {
   // Cells can hold math / code: a widget built before KaTeX or highlight.js
   // arrived must not count as equal to the one built after (render-deps.ts).
   private readonly deps = renderDepsVersion();
+  private readonly source: string;
 
-  constructor(private readonly source: string) {
+  constructor(source: string) {
     super();
+    this.source = source;
   }
 
   eq(other: TableWidget): boolean {
@@ -284,14 +297,22 @@ class TableWidget extends WidgetType {
 /** Raw block HTML rendered with the same markdown-it pipeline as Preview.vue. */
 class HtmlBlockWidget extends WidgetType {
   private readonly deps = renderDepsVersion();
+  private readonly source: string;
+  private readonly imageRoot: string | null;
+  private readonly filePath?: string;
+  private readonly lineNumber: number;
 
   constructor(
-    private readonly source: string,
-    private readonly imageRoot: string | null,
-    private readonly filePath?: string,
-    private readonly lineNumber: number = 0,
+    source: string,
+    imageRoot: string | null,
+    filePath?: string,
+    lineNumber: number = 0,
   ) {
     super();
+    this.source = source;
+    this.imageRoot = imageRoot;
+    this.filePath = filePath;
+    this.lineNumber = lineNumber;
   }
 
   eq(other: HtmlBlockWidget): boolean {
@@ -335,9 +356,11 @@ class HtmlBlockWidget extends WidgetType {
 // math and emits `<span class="katex-display">`.
 class MathWidget extends WidgetType {
   private readonly deps = renderDepsVersion();
+  private readonly source: string;
 
-  constructor(private readonly source: string) {
+  constructor(source: string) {
     super();
+    this.source = source;
   }
 
   eq(other: MathWidget): boolean {
@@ -367,9 +390,11 @@ class MathWidget extends WidgetType {
 // KaTeX render while the caret is off the line (click in → source returns).
 class InlineMathWidget extends WidgetType {
   private readonly deps = renderDepsVersion();
+  private readonly tex: string;
 
-  constructor(private readonly tex: string) {
+  constructor(tex: string) {
     super();
+    this.tex = tex;
   }
 
   eq(other: InlineMathWidget): boolean {
@@ -495,12 +520,15 @@ function inlineMathSpans(text: string): Array<{ start: number; end: number; tex:
 class MermaidWidget extends WidgetType {
   /** Whether the cache held a finished result when this widget was built. */
   private readonly settled: boolean;
+  private readonly source: string;
+  private readonly theme: MermaidTheme;
+  private readonly filePath?: string;
 
-  constructor(
-    private readonly source: string,
-    private readonly theme: MermaidTheme,
-  ) {
+  constructor(source: string, theme: MermaidTheme, filePath?: string) {
     super();
+    this.source = source;
+    this.theme = theme;
+    this.filePath = filePath;
     const cached = mermaidSvgCache.get(mermaidKey(source, theme));
     this.settled = !!(cached && (cached.svg || cached.error));
   }
@@ -512,6 +540,7 @@ class MermaidWidget extends WidgetType {
     return (
       other.source === this.source &&
       other.theme === this.theme &&
+      other.filePath === this.filePath &&
       other.settled === this.settled
     );
   }
@@ -522,6 +551,13 @@ class MermaidWidget extends WidgetType {
     const cached = mermaidSvgCache.get(mermaidKey(this.source, this.theme));
     if (cached?.svg) {
       wrap.innerHTML = cached.svg;
+      bindMermaidInteractions(wrap, cached.bindFunctions);
+      wrap.addEventListener('click', (ev) => {
+        const anchor = (ev.target as Element | null)?.closest?.('a');
+        if (anchor) {
+          openRenderedLink(anchor, ev, this.filePath);
+        }
+      });
     } else if (cached?.error) {
       wrap.classList.add('cm-live-block--broken');
       wrap.textContent = `Mermaid: ${cached.error}`;
@@ -551,13 +587,14 @@ class MermaidWidget extends WidgetType {
 // final size only after load, so onload nudges the relayout plugin to make
 // CM re-measure the block height.
 class PlantumlWidget extends WidgetType {
-  constructor(
-    readonly source: string,
-    readonly url: string,
-  ) {
-    super();
-  }
+  readonly source: string;
+  readonly url: string;
 
+  constructor(source: string, url: string) {
+    super();
+    this.source = source;
+    this.url = url;
+  }
   eq(other: PlantumlWidget): boolean {
     return other.source === this.source && other.url === this.url;
   }
@@ -597,14 +634,25 @@ class PlantumlWidget extends WidgetType {
 // the fence body back through the writeback callback (→ tabs.setContent),
 // exactly like Tolaria's onSnapshotChange → tldrawMarkdown round-trip.
 class TldrawWidget extends WidgetType {
+  private readonly boardId: string;
+  private readonly height: string;
+  private readonly width: string;
+  private readonly snapshot: string;
+  private readonly opts: BlockOptions;
+
   constructor(
-    private readonly boardId: string,
-    private readonly height: string,
-    private readonly width: string,
-    private readonly snapshot: string,
-    private readonly opts: BlockOptions,
+    boardId: string,
+    height: string,
+    width: string,
+    snapshot: string,
+    opts: BlockOptions,
   ) {
     super();
+    this.boardId = boardId;
+    this.height = height;
+    this.width = width;
+    this.snapshot = snapshot;
+    this.opts = opts;
   }
 
   // Re-mount only when the board IDENTITY or stored snapshot changes — NOT on
@@ -816,9 +864,39 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
           { length: lastLine },
           (_, index) => doc.line(index + 1).text,
         );
+        // #457 — every line scan below (raw HTML blocks, <img> lines, tables,
+        // math) must stay inert inside code blocks: a ```vue fence whose
+        // template holds <div>…</div> had its middle replaced by an
+        // HtmlBlockWidget and rendered as real HTML while the preview (which
+        // keeps fence content literal) looked fine. Take code-block ranges
+        // from the same lezer tree the fenced-line decorations use — it
+        // already owns the fence/list/indent rules, so the scans stay in
+        // step with what live mode actually renders, in every nesting shape.
+        // Includes indented CodeBlocks (same "literal code, never live
+        // markdown" contract in the preview). Block OPENING lines stay false
+        // here so the dedicated ```mermaid / ```plantuml / ```tldraw handlers
+        // below still match on them.
+        const fenceBody: boolean[] = new Array(lastLine).fill(false);
+        syntaxTree(state).iterate({
+          enter: (node) => {
+            if (node.name !== 'FencedCode' && node.name !== 'CodeBlock') return;
+            const startLine = state.doc.lineAt(node.from).number;
+            const endLine = state.doc.lineAt(Math.min(node.to, doc.length)).number;
+            for (let ln = startLine + 1; ln <= endLine; ln += 1) {
+              fenceBody[ln - 1] = true;
+            }
+          },
+        });
         let i = 1;
         while (i <= lastLine) {
           const line = doc.line(i);
+
+          // Fence body (or closing fence): the content is code, never
+          // live-renderable markdown — skip every scan below.
+          if (fenceBody[i - 1]) {
+            i += 1;
+            continue;
+          }
 
           // Raw block HTML (`<div>…</div>`, `<details>`, HTML tables, etc.).
           // Preview.vue has always rendered this through markdown-it, but live
@@ -1069,7 +1147,7 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                   blockFrom,
                   blockTo,
                   Decoration.replace({
-                    widget: new MermaidWidget(body, mermaidTheme),
+                    widget: new MermaidWidget(body, mermaidTheme, opts.getFilePath?.()),
                     block: true,
                   }),
                 );

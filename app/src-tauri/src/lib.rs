@@ -58,6 +58,8 @@ pub mod github_sync;
 // v2.6.1 cloud-folder detection (iCloud / Dropbox / OneDrive / Google Drive)
 // + cross-device session restore via per-device JSON.
 pub mod cloud_folder;
+// #458 — WebDAV workspace sync (Nutstore / Nextcloud / AList / Synology).
+pub mod webdav_sync;
 // v2.6.3 workspace-level E2EE: passphrase → Argon2id → key in keyring;
 // XChaCha20-Poly1305 over each .md before push, decrypt after pull.
 pub mod crypto;
@@ -379,6 +381,9 @@ pub fn run() {
             cloud_folder::session_save,
             cloud_folder::session_load,
             cloud_folder::session_list_others,
+            webdav_sync::webdav_test_connection,
+            webdav_sync::webdav_push_workspace,
+            webdav_sync::webdav_pull_workspace,
             crypto::crypto_status,
             crypto::crypto_set_passphrase,
             crypto::crypto_clear_passphrase,

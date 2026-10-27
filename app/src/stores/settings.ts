@@ -275,6 +275,15 @@ interface Settings {
   // Persisted so Esc / the close-button restores their previous workspace
   // even across reloads. Never set to 'reading' — sentinel only.
   lastNonReadingViewMode: ViewMode;
+  // #459: last view mode the user was in before entering preview mode, so
+  // `view.togglePreview` flips back to their editing mode (`liveEdit`/`edit`/`split`).
+  lastNonPreviewViewMode: ViewMode;
+  // #458: WebDAV workspace sync configuration (Nutstore / Nextcloud / AList / Synology).
+  webdavEnabled: boolean;
+  webdavUrl: string;
+  webdavUsername: string;
+  webdavPassword: string;
+  webdavRemotePath: string;
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
   // status bar. Off-by-default-ish: the pill stays inert unless the doc's
   // YAML front matter sets a `goal:` key, so this toggle is a hard kill
@@ -356,6 +365,9 @@ interface Settings {
   // like an IDE's "always select opened file". Default on. It never re-roots
   // the workspace: a file outside it is simply not followed.
   explorerFollowActive: boolean;
+  explorerDoubleClickFiles: boolean;
+  explorerShowFolderCount: boolean;
+  v507HighlightLineMigrated: boolean;
   // Show dot-files / dot-folders in the Explorer tree. Off by default: a
   // vault's `.git`, `.obsidian` and friends are noise for most people. On,
   // they're reachable from inside the app instead of only from Finder.
@@ -631,7 +643,8 @@ function defaults(): Settings {
     selectionBubble: true,
     formatBar: true,
     alwaysShowMarkers: false,
-    highlightCurrentLine: false,
+    highlightCurrentLine: true,
+    v507HighlightLineMigrated: true,
     codeFontFamily: '',
     showOutline: false,
     outlineSide: 'right',
@@ -738,6 +751,12 @@ function defaults(): Settings {
     // 笔记, the bottom bar). Saved settings keep the user's choice.
     readingByDefaultOnMobile: false,
     lastNonReadingViewMode: 'liveEdit',
+    lastNonPreviewViewMode: 'liveEdit',
+    webdavEnabled: false,
+    webdavUrl: '',
+    webdavUsername: '',
+    webdavPassword: '',
+    webdavRemotePath: '/SoloMD',
     showWritingStats: true,
     showWorkspaceDailyTotal: false,
     pdfDefaults: defaultPdfDefaults(),
@@ -758,6 +777,8 @@ function defaults(): Settings {
     codeBlockWrap: false,
     explorerFullNames: false,
     explorerDoubleClickFolders: false,
+    explorerDoubleClickFiles: false,
+    explorerShowFolderCount: true,
     explorerFollowActive: true,
     explorerShowHidden: false,
     explorerExtFilter: [] as string[],
@@ -974,6 +995,10 @@ function load(): Settings {
         merged.livePreview = false;
         merged.v503SourceModeMigrated = true;
       }
+      if (!parsed.v507HighlightLineMigrated) {
+        merged.highlightCurrentLine = true;
+        merged.v507HighlightLineMigrated = true;
+      }
       // D6 — a theme outside the built-in list (e.g. a hand-edited or
       // MCP-written 'system') rendered as a bare white page; reset it to the
       // default, and treat a literal 'system' as the follow-OS option.
@@ -1060,6 +1085,9 @@ export const useSettingsStore = defineStore('settings', {
       } else if (mode !== 'reading') {
         this.lastNonReadingViewMode = mode;
       }
+      if (mode !== 'preview' && mode !== 'reading') {
+        this.lastNonPreviewViewMode = mode;
+      }
       this.viewMode = mode;
       this.persist();
     },
@@ -1077,6 +1105,22 @@ export const useSettingsStore = defineStore('settings', {
      *  From any other view (split, preview, reading) it lands in live edit. */
     toggleLiveEditSource() {
       this.setViewMode(this.viewMode === 'liveEdit' ? 'edit' : 'liveEdit');
+    },
+    /** #459 - Toggle Preview mode on/off, restoring the previous editing mode. */
+    togglePreviewMode() {
+      if (this.viewMode === 'preview') {
+        const next =
+          this.lastNonPreviewViewMode === 'preview' || this.lastNonPreviewViewMode === 'reading'
+            ? 'liveEdit'
+            : this.lastNonPreviewViewMode;
+        this.setViewMode(next);
+      } else {
+        if (this.viewMode !== 'reading') {
+          this.lastNonPreviewViewMode = this.viewMode;
+        }
+        this.viewMode = 'preview';
+        this.persist();
+      }
     },
     /**
      * Toggle reading mode on/off. If the user is currently in reading mode
@@ -1646,6 +1690,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleExplorerDoubleClickFolders() {
       this.explorerDoubleClickFolders = !this.explorerDoubleClickFolders;
+      this.persist();
+    },
+    toggleExplorerDoubleClickFiles() {
+      this.explorerDoubleClickFiles = !this.explorerDoubleClickFiles;
+      this.persist();
+    },
+    toggleExplorerShowFolderCount() {
+      this.explorerShowFolderCount = !this.explorerShowFolderCount;
       this.persist();
     },
     toggleExplorerFollowActive() {

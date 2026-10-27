@@ -19,6 +19,8 @@ import { tempDir, sep, documentDir } from '@tauri-apps/api/path';
 import { uploadImage, type ResolvedUploader } from './image-upload';
 import { markdownImage } from './md-image-url';
 import { isContentUri, isSafPath, sniffImageExt } from './image-source';
+import { insideFence } from './list-continuation';
+import { clipboardTableToMarkdown } from './table-paste';
 
 export interface ImagePasteOptions {
   getFilePath: () => string | undefined;
@@ -461,6 +463,22 @@ export async function handleTextareaImagePaste(
     return true;
   }
   if (!cd || !cd.items) return false;
+  // #460 — Excel / WPS / spreadsheet cells put an image bitmap on the clipboard
+  // alongside `text/html` (`<table>`) and `text/plain` (TSV). Convert tabular
+  // clipboard content into a Markdown table before checking `image/*` items.
+  try {
+    const mdTable = clipboardTableToMarkdown(
+      cd.getData?.('text/html'),
+      cd.getData?.('text/plain'),
+    );
+    if (mdTable) {
+      event.preventDefault();
+      insert(mdTable);
+      return true;
+    }
+  } catch {
+    /* ignore clipboard read errors */
+  }
   const images: Array<{ blob: Blob; ext: string }> = [];
   for (let i = 0; i < cd.items.length; i++) {
     const item = cd.items[i];
@@ -705,6 +723,30 @@ export function imagePasteExtension(opts: ImagePasteOptions) {
         return true;
       }
       if (!cd || !cd.items) return false;
+      // #460 — Convert Excel / WPS / HTML / TSV table pastes to a GFM Markdown
+      // table (unless pasting inside a fenced code block) before the image-paste
+      // check consumes spreadsheet bitmap previews as PNGs.
+      try {
+        const sel = view.state.selection.main;
+        const lineStart = view.state.doc.lineAt(sel.from).from;
+        if (!insideFence(view.state.doc.toString(), lineStart)) {
+          const mdTable = clipboardTableToMarkdown(
+            cd.getData?.('text/html'),
+            cd.getData?.('text/plain'),
+          );
+          if (mdTable) {
+            event.preventDefault();
+            view.dispatch({
+              ...view.state.replaceSelection(mdTable),
+              userEvent: 'input.paste',
+              scrollIntoView: true,
+            });
+            return true;
+          }
+        }
+      } catch {
+        /* ignore clipboard read errors */
+      }
       let hasImage = false;
       for (let i = 0; i < cd.items.length; i++) {
         const it = cd.items[i];

@@ -141,6 +141,13 @@ md.validateLink = (url: string): boolean => {
   if (str.startsWith('file:')) return true;
   return stockValidateLink(url);
 };
+// #464 — Allow GFM tables to interrupt blockquotes and lists without requiring
+// a blank line, matching CodeMirror's GFM parser in Live mode (`> quote\n| a | b |`).
+const tableBlockRule = (md.block.ruler as any).__rules__?.find((r: any) => r.name === 'table');
+if (tableBlockRule) {
+  tableBlockRule.alt = ['paragraph', 'reference', 'blockquote', 'list'];
+}
+(md.block.ruler as any).__cache__ = null;
 
 // ---- Wikilink rule (`[[X]]`, `[[X|alias]]`, `[[X#heading]]`) ---------------
 // Used by F1 (v2.0). Renders into <a class="md-wikilink" data-wikilink-target="X">…</a>.

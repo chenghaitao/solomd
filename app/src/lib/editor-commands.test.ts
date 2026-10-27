@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { deleteWord, selectLine, selectWord, shiftHeading, type Range, type TextEdit } from './editor-commands.ts';
+import { autoNumberHeadings, deleteWord, selectLine, selectWord, shiftHeading, type Range, type TextEdit } from './editor-commands.ts';
 
 /** `|` marks the selection ends (one `|` = a bare caret). */
 function parse(marked: string): { doc: string; from: number; to: number } {
@@ -94,4 +94,18 @@ test('heading commands leave lists, quotes, fences and blank lines alone', () =>
   assert.equal(up('```\n# not a he|ading\n```'), null);
   // A selection over several lines shifts each heading line.
   assert.equal(up('|## A\n\ntext\n### B|'), '|# A\n\n###### text\n## B|');
+});
+
+test('autoNumberHeadings numbers hierarchically, skips fences, and toggles off when already numbered (#474)', () => {
+  const doc = '# Intro\n## Part A\n### Detail\n## Part B\n```\n# Not a heading\n```\n# Outro';
+  const e1 = autoNumberHeadings(doc, 0, 0);
+  assert.ok(e1);
+  assert.equal(
+    e1!.insert,
+    '# 1. Intro\n## 1.1 Part A\n### 1.1.1 Detail\n## 1.2 Part B\n```\n# Not a heading\n```\n# 2. Outro',
+  );
+  // Running again when already accurately numbered removes the numbers cleanly.
+  const e2 = autoNumberHeadings(e1!.insert, 0, 0);
+  assert.ok(e2);
+  assert.equal(e2!.insert, doc);
 });

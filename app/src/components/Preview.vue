@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { initMermaid } from '../lib/mermaid-lazy';
+import { bindMermaidInteractions, initMermaid } from '../lib/mermaid-lazy';
 import { mermaidThemeFor } from '../lib/themes';
 import { openRenderedLink } from '../lib/link-open';
 import { renderMarkdown, extractImageRoot } from '../lib/markdown';
@@ -19,6 +19,7 @@ import { useTabsStore } from '../stores/tabs';
 import PreviewSearch from './PreviewSearch.vue';
 import { attachCodeCopyButtons as attachSharedCodeCopyButtons } from '../lib/code-copy';
 import { writePngToClipboard } from '../lib/image-clipboard';
+import { previewScrollMemory, tabTopLineMemory } from '../lib/scroll-memory';
 
 const props = withDefaults(
   defineProps<{
@@ -239,13 +240,14 @@ async function processMermaid() {
     const code = (block.textContent || '').trim();
     const id = `mmd-${++mermaidIdSeq}`;
     try {
-      const { svg } = await mermaid.render(id, code);
+      const { svg, bindFunctions } = await mermaid.render(id, code);
       const wrap = document.createElement('div');
       wrap.className = 'mermaid-block';
       // Keep the source so a theme switch can re-render this diagram.
       wrap.dataset.mermaidSource = code;
       wrap.innerHTML = svg;
       pre.replaceWith(wrap);
+      bindMermaidInteractions(wrap, bindFunctions);
     } catch (e) {
       const err = document.createElement('pre');
       err.className = 'mermaid-error';
@@ -380,6 +382,9 @@ function attachImageOverlayHandlers() {
     if ((block as HTMLElement).dataset.overlayBound === '1') continue;
     (block as HTMLElement).dataset.overlayBound = '1';
     block.addEventListener('click', ((e: MouseEvent) => {
+      // #462 — Let clicks on embedded links inside a Mermaid diagram pass
+      // through to `handleLinkClick` instead of opening the zoom overlay.
+      if ((e.target as Element | null)?.closest?.('a')) return;
       e.stopPropagation();
       e.preventDefault();
       const svg = block.querySelector('svg');
@@ -446,10 +451,73 @@ async function copyDiagramPng(svg: SVGElement) {
   }
 }
 
+// #456 / #406 — Remember per-tab reading scroll offset in Preview / Reading
+// mode via shared `previewScrollMemory` & `tabTopLineMemory` so switching tabs
+// or view modes restores each document's reading position.
+let restoringTabScroll = false;
+let explicitLineJumped = false;
+
+function scrollToSourceLineQuiet(line: number): boolean {
+  const article = host.value;
+  const container = article?.parentElement as HTMLElement | null;
+  if (!article || !container || line <= 1) return false;
+  const nodes = Array.from(article.querySelectorAll<HTMLElement>('[data-source-line]'));
+  if (!nodes.length) return false;
+  let lo = 0;
+  let hi = nodes.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const n = Number(nodes[mid].getAttribute('data-source-line') || 0);
+    if (n <= line) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  const target = nodes[best];
+  const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  container.scrollTop = Math.max(0, container.scrollTop + delta - TOP_GAP);
+  previewScrollMemory.set(props.tabId || '', container.scrollTop);
+  return true;
+}
+
+function restoreTabScroll(tabId?: string) {
+  const container = host.value?.parentElement as HTMLElement | null;
+  if (!container) return;
+  restoringTabScroll = true;
+  const savedLine = tabId ? tabTopLineMemory.get(tabId) : undefined;
+  const hasSavedPx = tabId ? previewScrollMemory.has(tabId) : false;
+  if (savedLine && savedLine > 1 && (!hasSavedPx || props.skin === 'reading')) {
+    scrollToSourceLineQuiet(savedLine);
+  } else {
+    const saved = tabId ? (previewScrollMemory.get(tabId) ?? 0) : 0;
+    container.scrollTop = saved;
+  }
+  requestAnimationFrame(() => {
+    restoringTabScroll = false;
+    onHostScroll();
+  });
+}
+
+watch(
+  () => props.tabId,
+  async (newId, oldId) => {
+    if (newId === oldId) return;
+    await nextTick();
+    restoreTabScroll(newId);
+  },
+);
+
 watch(html, async () => {
   // A re-render (incl. our own math write-back) invalidates popup geometry.
   mathEdit.value = null;
+  const activeTabId = props.tabId;
   await nextTick();
+  if (activeTabId && restoringTabScroll) {
+    restoreTabScroll(activeTabId);
+  }
   processPlantuml();
   await processMermaid();
   await processWhiteboards();
@@ -491,12 +559,22 @@ function handleLinkClick(e: MouseEvent) {
 
 onMounted(async () => {
   await nextTick();
+  if (props.tabId && (previewScrollMemory.has(props.tabId) || tabTopLineMemory.has(props.tabId))) {
+    restoreTabScroll(props.tabId);
+  }
   processPlantuml();
   await processMermaid();
   await processWhiteboards();
   attachImageOverlayHandlers();
   attachCodeCopyButtons();
   enableTaskCheckboxes();
+  if (
+    props.tabId &&
+    !explicitLineJumped &&
+    (previewScrollMemory.has(props.tabId) || tabTopLineMemory.has(props.tabId))
+  ) {
+    restoreTabScroll(props.tabId);
+  }
   host.value?.addEventListener('click', handleLinkClick);
   host.value?.addEventListener('click', onTaskCheckboxClick);
   host.value?.addEventListener('dblclick', onPreviewDblClick);
@@ -526,6 +604,7 @@ function openSearch() {
  * so its gotoLine is unavailable).
  */
 function scrollToLine(line: number) {
+  explicitLineJumped = true;
   const article = host.value;
   if (!article) return;
   const container = article.parentElement as HTMLElement | null;
@@ -579,6 +658,12 @@ function flashTarget(el: HTMLElement) {
 // (plus the jump gap), at most once per frame.
 let toplineRaf = 0;
 function onHostScroll() {
+  if (props.tabId && !restoringTabScroll) {
+    const container = host.value?.parentElement as HTMLElement | null;
+    if (container) {
+      previewScrollMemory.set(props.tabId, container.scrollTop);
+    }
+  }
   if (toplineRaf) return;
   toplineRaf = requestAnimationFrame(() => {
     toplineRaf = 0;
@@ -591,7 +676,11 @@ function onHostScroll() {
       if (el.getBoundingClientRect().top > limit) break;
       line = Number(el.getAttribute('data-source-line') || 0) || line;
     }
-    emit('topline', line || 1);
+    const topLine = line || 1;
+    if (props.tabId && !restoringTabScroll) {
+      tabTopLineMemory.set(props.tabId, topLine);
+    }
+    emit('topline', topLine);
   });
 }
 
@@ -860,9 +949,15 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content) blockquote > :last-child { margin-bottom: 0; }
 :where(.preview-content) ul,
 :where(.preview-content) ol {
-  padding-left: 1.6em;
+  padding-left: 1.8em;
 }
-:where(.preview-content) li::marker { color: var(--text-3); }
+:where(.preview-content) ol > li {
+  padding-left: 0.2em;
+}
+:where(.preview-content) li::marker {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
 :where(.preview-content) table {
   border-collapse: collapse;
   margin: 1em 0;

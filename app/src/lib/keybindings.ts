@@ -205,6 +205,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'heading.promote', label: 'Increase Heading Level', category: 'paragraph', defaults: [] },
   { id: 'heading.demote', label: 'Decrease Heading Level', category: 'paragraph', defaults: [] },
   { id: 'heading.paragraph', label: 'Convert to Paragraph', category: 'paragraph', defaults: [] },
+  { id: 'heading.autoNumber', label: 'Auto-Number Headings', category: 'paragraph', defaults: [] },
   { id: 'fmt.ol', label: 'Numbered List', category: 'paragraph', defaults: ['Mod+Alt+7'] },
   { id: 'fmt.ul', label: 'Bulleted List', category: 'paragraph', defaults: ['Mod+Alt+8'] },
   { id: 'fmt.task', label: 'Task List', category: 'paragraph', defaults: ['Mod+Alt+9'] },
@@ -249,6 +250,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   // Markdown Help here, so the default is Mod+Alt+/; rebind it to Mod+/ in
   // Settings -> Shortcuts to get Typora's muscle memory back.
   { id: 'view.toggleLiveEdit', label: 'Toggle Source / Live Edit', category: 'view', defaults: ['Mod+Alt+Slash'] },
+  { id: 'view.togglePreview', label: 'Toggle Preview Mode', category: 'view', defaults: ['Mod+Alt+V'] },
   { id: 'view.cycleView', label: 'Cycle Edit / Split / Preview', category: 'view', defaults: ['Mod+Shift+P'] },
   { id: 'view.toggleReading', label: 'Toggle Reading Mode', category: 'view', defaults: ['Mod+Shift+R'] },
   { id: 'view.slideshow', label: 'Slideshow', category: 'view', defaults: ['Mod+Alt+P'] },
