@@ -487,6 +487,7 @@ export function useCommands(): Command[] {
         ['heading.promote', 'Increase Heading Level', 'headingPromote'],
         ['heading.demote', 'Decrease Heading Level', 'headingDemote'],
         ['heading.paragraph', 'Convert to Paragraph', 'headingParagraph'],
+        ['heading.autoNumber', 'Auto-Number Headings (1 / 1.1 / 1.1.1)', 'headingAutoNumber'],
       ] as const
     ).map(([id, title, cmd]) => ({
       id,

@@ -364,11 +364,12 @@ function flushPendingEdits() {
   window.dispatchEvent(new Event('solomd:flush-content-sync'));
 }
 
-/** Closing a second editor window: ask about each unsaved tab, the way
- *  closing a single tab does. False = the user cancelled (or a save failed),
- *  so the window stays. A second ✕ while the dialog is up is ignored. */
+/** Closing an editor window: ask about each unsaved tab, the way closing a
+ *  single tab does (#468). False = the user cancelled (or a save failed),
+ *  so the window stays open and no edits are ever lost. A second ✕ while the
+ *  dialog is up is ignored. */
 let closePromptOpen = false;
-async function confirmCloseWithUnsavedTabs(): Promise<boolean> {
+async function confirmCloseWithUnsavedTabs(isMainWindow = false): Promise<boolean> {
   if (closePromptOpen) return false;
   closePromptOpen = true;
   try {
@@ -377,6 +378,9 @@ async function confirmCloseWithUnsavedTabs(): Promise<boolean> {
       const action = await showUnsavedDialog('window', tab.fileName, 1);
       if (action === 'cancel') return false;
       if (action === 'save' && !(await files.saveTab(tab))) return false;
+      if (action === 'discard' && isMainWindow) {
+        tab.content = tab.savedContent;
+      }
     }
     return true;
   } finally {
@@ -612,7 +616,41 @@ watch(
   { immediate: true },
 );
 
-// UI font size
+// #475 — Brief centered HUD pill showing the current zoom percentage whenever
+// global UI zoom, editor font size, or preview font size changes.
+const zoomHudText = ref('');
+let zoomHudTimer: ReturnType<typeof setTimeout> | null = null;
+function showZoomHud(label: string) {
+  zoomHudText.value = label;
+  if (zoomHudTimer) clearTimeout(zoomHudTimer);
+  zoomHudTimer = setTimeout(() => {
+    zoomHudText.value = '';
+    zoomHudTimer = null;
+  }, 1200);
+}
+watch(
+  () => settings.globalZoom,
+  (z, prev) => {
+    if (prev === undefined || z === prev) return;
+    showZoomHud(`${Math.round((z || 1) * 100)}%`);
+  },
+);
+watch(
+  () => settings.fontSize,
+  (sz, prev) => {
+    if (prev === undefined || sz === prev) return;
+    const pct = Math.round(((sz || 16) / 16) * 100);
+    showZoomHud(`${pct}% (${sz}px)`);
+  },
+);
+watch(
+  () => settings.previewFontSize,
+  (sz, prev) => {
+    if (prev === undefined || sz === prev) return;
+    const pct = Math.round(((sz || 16) / 16) * 100);
+    showZoomHud(`${pct}% (${sz}px)`);
+  },
+);
 watchEffect(() => {
   document.documentElement.style.setProperty('--ui-font-size', `${settings.uiFontSize}px`);
 });
@@ -1505,10 +1543,8 @@ onMounted(async () => {
       // Editors sync their document into the store on a debounce; text typed
       // just before the close would otherwise miss the persist below.
       flushPendingEdits();
+      if (!(await confirmCloseWithUnsavedTabs(me === 'main'))) return;
       if (me !== 'main') {
-        // Nothing restores a second window's tabs on the next launch, so its
-        // unsaved edits are asked about here instead of silently dropped.
-        if (!(await confirmCloseWithUnsavedTabs())) return;
         if (isAuxLabel(me)) windowsStore.unregister(me);
       } else {
         tabs.persist?.();
@@ -2595,6 +2631,11 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @cancel="onFileChangedAction('cancel')"
     />
     <Toast />
+    <Transition name="zoom-hud-fade">
+      <div v-if="zoomHudText" class="zoom-hud" role="status" aria-live="polite">
+        {{ zoomHudText }}
+      </div>
+    </Transition>
     <pre v-if="layoutDebug" class="layout-debug">{{ layoutDebug }}</pre>
     <!-- 5.0 — format bar above the software keyboard (phones / tablets). -->
     <KeyboardBar v-if="isMobile() || forceKeyboardBarPreview()" />
@@ -3021,5 +3062,35 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   min-width: 0;
   overflow: hidden;
   position: relative;
+}
+.zoom-hud {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 6px 14px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(0, 0, 0, 0.14));
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+.zoom-hud-fade-enter-active,
+.zoom-hud-fade-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.zoom-hud-fade-enter-from,
+.zoom-hud-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.95);
 }
 </style>

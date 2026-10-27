@@ -2111,6 +2111,7 @@ export const es: I18n = {
       promote: "Subir nivel de encabezado",
       demote: "Bajar nivel de encabezado",
       paragraph: "Convertir en párrafo",
+      autoNumber: "Numerar encabezados automáticamente (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Negrita",

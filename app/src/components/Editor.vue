@@ -3,8 +3,9 @@ import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { EditorState, Compartment, Prec } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab, undo as cmUndo, redo as cmRedo } from '@codemirror/commands';
-import { searchKeymap, search, openSearchPanel, getSearchQuery, setSearchQuery } from '@codemirror/search';
+import { searchKeymap, search, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery } from '@codemirror/search';
 import { createFindPanel, type FindPanelLabels } from '../lib/cm-find-panel';
+import { tabCaretMemory, tabTopLineMemory, type TabCaretSnapshot } from '../lib/scroll-memory';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { cjkFriendlyEmphasis } from '../lib/cm-cjk-emphasis';
@@ -40,6 +41,7 @@ import {
 import {
   EDITOR_COMMANDS,
   MARKDOWN_ONLY_COMMANDS,
+  autoNumberHeadings,
   deleteWord as deleteWordEdit,
   selectLine as selectLineRange,
   selectWord as selectWordRange,
@@ -233,11 +235,32 @@ const baseKeymapCompartment = new Compartment();
 function baseKeymap() {
   const overrides = { ...settings.keybindings };
   return keymap.of(
-    [...defaultKeymap, ...searchKeymap].filter(
-      // #296 — Mod-i is CodeMirror's selectParentSyntax; it would widen the
-      // selection to the whole paragraph before Italic ran.
-      (b) => b.key !== 'Mod-i' && !cmKeyOwnedByApp(b, overrides),
-    ),
+    [...defaultKeymap, ...searchKeymap]
+      .filter(
+        // #296 — Mod-i is CodeMirror's selectParentSyntax; it would widen the
+        // selection to the whole paragraph before Italic ran.
+        (b) => b.key !== 'Mod-i' && !cmKeyOwnedByApp(b, overrides),
+      )
+      .map((b) => {
+        if (b.key === 'Mod-f') {
+          return {
+            ...b,
+            run: (v: EditorView) => {
+              const panelOpen = !!v.dom.querySelector('.cm-search');
+              const sel = v.state.selection.main;
+              const selectedText = sel.empty ? '' : v.state.sliceDoc(sel.from, sel.to);
+              const curSearch = getSearchQuery(v.state).search;
+              if (panelOpen && (!selectedText || selectedText.includes('\n') || selectedText === curSearch)) {
+                closeSearchPanel(v);
+                v.focus();
+                return true;
+              }
+              return openSearchPanel(v);
+            },
+          };
+        }
+        return b;
+      }),
   );
 }
 const richCompartment = new Compartment();
@@ -1319,7 +1342,18 @@ function plainLineStartOffset(line: number): number {
 
 function plainScrollToLine(line: number) {
   if (plainLiveEnabled.value) {
-    plainSetCaret(plainLineStartOffset(Math.floor(line)));
+    const hostEl = plainLiveHost.value;
+    if (!hostEl) return;
+    const offset = plainLineStartOffset(Math.floor(line));
+    const blocks = plainBlocks.value;
+    const idx = blocks.findIndex((b) => offset >= b.start && offset <= b.end);
+    const targetIdx = idx >= 0 ? idx : Math.max(0, blocks.length - 1);
+    const blockEl = hostEl.querySelector<HTMLElement>(`[data-plain-block-index="${targetIdx}"]`);
+    if (blockEl) {
+      const hostRect = hostEl.getBoundingClientRect();
+      const blockRect = blockEl.getBoundingClientRect();
+      hostEl.scrollTop = Math.max(0, hostEl.scrollTop + (blockRect.top - hostRect.top) - 8);
+    }
     return;
   }
   const el = plainEditor.value;
@@ -1377,7 +1411,7 @@ function plainInsertText(snippet: string) {
   emitPlainCursorAndSelection();
 }
 
-function focusPlainEditor() {
+function focusPlainEditor(preventScroll = false) {
   // Plain editors don't take focus on their own (the CodeMirror path calls
   // view.focus()). Without this, a freshly opened/created document has focus on
   // <body> and keystrokes go nowhere until the user clicks the editor.
@@ -1385,7 +1419,7 @@ function focusPlainEditor() {
     const el = plainLiveEnabled.value
       ? plainBlockEditors.value[plainActiveBlock.value]
       : plainEditor.value;
-    el?.focus();
+    el?.focus({ preventScroll });
   });
 }
 
@@ -1612,9 +1646,20 @@ function runPlainSearch() {
 
 function openPlainFind(replace = false) {
   const wasOpen = plainFindOpen.value;
+  const selected = plainSelectionText();
+  const hasNewSelection = !!selected && !selected.includes('\n') && selected !== plainFindQuery.value;
+  if (wasOpen && !hasNewSelection) {
+    if (!replace && document.activeElement !== plainReplaceInput.value) {
+      closePlainFind(true);
+      return;
+    }
+    if (replace && document.activeElement === plainReplaceInput.value) {
+      closePlainFind(true);
+      return;
+    }
+  }
   plainFindOpen.value = true;
   if (!wasOpen) plainFindAnchor = plainCaretDocOffset();
-  const selected = plainSelectionText();
   if (selected && !selected.includes('\n')) plainFindQuery.value = selected;
   nextTick(() => {
     // Replace (Ctrl+H) lands in the replace field when there is already
@@ -1624,6 +1669,32 @@ function openPlainFind(replace = false) {
     target?.select();
     revealPlainMatchFromAnchor();
   });
+}
+
+function onPlainFindKeydown(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return;
+  const mod = event.ctrlKey || event.metaKey;
+  if (!mod || event.altKey || event.shiftKey) return;
+  const letter = plainModLetter(event);
+  if (letter === 'f') {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.target === plainReplaceInput.value) {
+      plainFindInput.value?.focus();
+      plainFindInput.value?.select();
+    } else {
+      closePlainFind(true);
+    }
+  } else if (letter === 'h') {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.target === plainReplaceInput.value) {
+      closePlainFind(true);
+    } else {
+      plainReplaceInput.value?.focus();
+      plainReplaceInput.value?.select();
+    }
+  }
 }
 
 /**
@@ -2184,7 +2255,7 @@ function plainModLetter(event: KeyboardEvent): string {
 function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   const mod = event.ctrlKey || event.metaKey;
   const letter = mod ? plainModLetter(event) : '';
-  if (mod && !event.altKey && letter === 'f') {
+  if (mod && !event.altKey && !event.shiftKey && letter === 'f') {
     event.preventDefault();
     openPlainFind();
     return true;
@@ -3865,13 +3936,21 @@ function richExtensionsFor(tab: Tab) {
     : richHighlightOnly();
 }
 
-// #344 — caret-line tint. Selector is one step more specific than the base
-// theme's transparent `.cm-activeLine` so it wins regardless of order.
+// #344 / #467 — caret-line tint. Selector is one step more specific than the
+// base theme's transparent `.cm-activeLine` so it wins regardless of order.
+// In non-dark themes, uses the warm soft pink tint users expect on the active
+// editing line; in dark themes, uses a subtle accent tint.
 function activeLineExtension(on: boolean) {
   if (!on) return [];
   return EditorView.theme({
     '.cm-content .cm-line.cm-activeLine': {
-      backgroundColor: 'color-mix(in srgb, var(--accent) 9%, transparent)',
+      backgroundColor:
+        'color-mix(in srgb, #f48fb1 16%, color-mix(in srgb, var(--accent) 8%, transparent))',
+      borderRadius: '3px',
+    },
+    '&dark .cm-content .cm-line.cm-activeLine': {
+      backgroundColor: 'color-mix(in srgb, var(--accent) 11%, transparent)',
+      borderRadius: '3px',
     },
   });
 }
@@ -4126,10 +4205,16 @@ onMounted(() => {
   }
 
   if (usePlainWindowsEditor) {
+    const savedInit = tabCaretMemory.get(props.tab.id);
     syncPlainEditorFromStore(props.tab.content);
     maybeRestoreSession();
     void processPlainLiveRenderedBlocks();
-    focusPlainEditor();
+    if (savedInit && plainLiveEnabled.value && typeof savedInit.activeBlock === 'number') {
+      const blocks = plainBlocks.value;
+      plainActiveBlock.value = Math.max(0, Math.min(savedInit.activeBlock, Math.max(0, blocks.length - 1)));
+    }
+    focusPlainEditor(true);
+    restorePlainScroll(savedInit);
     // #126 — let the toolbar AI-rewrite button read this editor's selection
     // (no CodeMirror view exists on this path for it to scan).
     cleanupPlainSelection = registerPlainSelectionGetter(() => {
@@ -4140,13 +4225,21 @@ onMounted(() => {
     return;
   }
   if (!host.value) return;
+  const savedInit = tabCaretMemory.get(props.tab.id);
   view = new EditorView({
-    state: EditorState.create({ doc: props.tab.content, extensions: buildExtensions() }),
+    state: EditorState.create({
+      doc: props.tab.content,
+      extensions: buildExtensions(),
+      selection: { anchor: Math.min(savedInit?.caret ?? 0, props.tab.content.length) },
+    }),
     parent: host.value,
   });
   maybeRestoreSession();
   if (!isMobile()) {
     focusFreshCodeMirror();
+  }
+  if (savedInit) {
+    restoreCodeMirrorScroll(savedInit);
   }
   // Expose the focused EditorView on `window` for dev-bridge / self-test
   // harnesses. Vite injects `import.meta.env.DEV === true` only in dev
@@ -4432,6 +4525,9 @@ function onPlainWindowKeydown(event: KeyboardEvent) {
   } else if (letter === 'y') {
     event.preventDefault();
     plainRedo();
+  } else if (letter === 'f' && !event.shiftKey) {
+    event.preventDefault();
+    openPlainFind();
   }
 }
 
@@ -4467,7 +4563,9 @@ function onEditorCommand(e: Event) {
     } else {
       const edit = cmd === 'deleteWord'
         ? deleteWordEdit(doc, sel.from, sel.to)
-        : shiftHeading(doc, sel.from, sel.to, headingMode(cmd));
+        : cmd === 'headingAutoNumber'
+          ? autoNumberHeadings(doc, sel.from, sel.to)
+          : shiftHeading(doc, sel.from, sel.to, headingMode(cmd));
       if (edit) {
         v.dispatch({
           changes: { from: edit.from, to: edit.to, insert: edit.insert },
@@ -4497,7 +4595,9 @@ function onEditorCommand(e: Event) {
   }
   const edit = cmd === 'deleteWord'
     ? deleteWordEdit(doc, sel.from, sel.to)
-    : shiftHeading(doc, sel.from, sel.to, headingMode(cmd));
+    : cmd === 'headingAutoNumber'
+      ? autoNumberHeadings(doc, sel.from, sel.to)
+      : shiftHeading(doc, sel.from, sel.to, headingMode(cmd));
   if (!edit) return;
   recordPlainHistory();
   applyPlainContent(doc.slice(0, edit.from) + edit.insert + doc.slice(edit.to), edit.selTo);
@@ -4531,6 +4631,24 @@ function openFind(replace = false): void {
     return;
   }
   if (view) {
+    const searchEl = view.dom.querySelector<HTMLInputElement>('.cm-search input[name=search]');
+    const replaceEl = view.dom.querySelector<HTMLInputElement>('.cm-search input[name=replace]');
+    const sel = view.state.selection.main;
+    const selectedText = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
+    const curSearch = getSearchQuery(view.state).search;
+    const hasNewSelection = !!selectedText && !selectedText.includes('\n') && selectedText !== curSearch;
+    if (searchEl && !hasNewSelection) {
+      if (!replace && document.activeElement !== replaceEl) {
+        closeSearchPanel(view);
+        view.focus();
+        return;
+      }
+      if (replace && replaceEl && document.activeElement === replaceEl) {
+        closeSearchPanel(view);
+        view.focus();
+        return;
+      }
+    }
     view.focus();
     openSearchPanel(view);
     // CodeMirror's panel always carries the replace row; "Replace" (Ctrl+H)
@@ -4718,7 +4836,42 @@ function applyFold(action: 'toggle' | 'all' | 'none' | 'level', level = 2): void
   else foldHeadingsToLevel(view, level);
 }
 
+function saveCurrentTabCaret(tabId: string) {
+  if (!tabId) return;
+  const topLine = getViewLine();
+  if (topLine != null && topLine >= 1) {
+    tabTopLineMemory.set(tabId, topLine);
+  }
+  if (usePlainWindowsEditor) {
+    if (plainLiveEnabled.value) {
+      const idx = plainActiveBlock.value;
+      const block = plainBlocks.value[idx];
+      const el = plainBlockEditors.value[idx];
+      const blockCaret = el?.selectionStart ?? 0;
+      const absCaret = block ? block.start + blockCaret : 0;
+      tabCaretMemory.set(tabId, {
+        caret: absCaret,
+        scrollTop: plainLiveHost.value?.scrollTop ?? 0,
+        activeBlock: idx,
+        blockCaret,
+      });
+    } else if (plainEditor.value) {
+      tabCaretMemory.set(tabId, {
+        caret: plainEditor.value.selectionStart ?? 0,
+        scrollTop: plainEditor.value.scrollTop,
+      });
+    }
+  } else if (view) {
+    tabCaretMemory.set(tabId, {
+      caret: view.state.selection.main.head,
+      scrollTop: view.scrollDOM.scrollTop,
+    });
+  }
+}
+
 onBeforeUnmount(() => {
+  saveCurrentTabCaret(props.tab.id);
+  cancelCmScrollRestore?.();
   cleanupRelayout?.();
   cleanupTransformCase?.();
   cleanupTransformCase = null;
@@ -4753,31 +4906,64 @@ onBeforeUnmount(() => {
 
 // Switching tabs: replace doc (and rebuild extensions so the
 // session-restore plugin is recreated with the new tab id).
-// #144 — per-tab caret + scroll memory (runtime-only, per editor pane; a tab
-// shown in two split panes keeps an independent position in each). Without
-// this, switching tabs dropped the position: the plain textarea's `el.value =`
-// re-sync moves the caret to the END of the document, and the CodeMirror
-// `setState` reset it to 0.
-const tabCaretMemory = new Map<string, { caret: number; scrollTop: number }>();
-
-/**
- * F-10 — a document just made: nothing in it, and not a tab this editor has
- * shown before (switching away records it in tabCaretMemory). That covers
- * file.new / file.newText (no path yet) and New Note in Selected Folder,
- * which names the file in the tree first, so it arrives with a path — it
- * used to be left without focus and the first keystrokes went nowhere. Only
- * these take focus on the CodeMirror path; opening or switching to a
- * document with content leaves focus where it is, as before.
- */
-function isFreshUntitledTab(): boolean {
-  const t = props.tab;
-  return t.content === '' && t.savedContent === '' && !tabCaretMemory.has(t.id);
-}
+// #144 / #467 / #406 — per-tab caret + scroll memory now lives in
+// `lib/scroll-memory.ts` so switching tabs or unmounting/remounting `<Editor>`
+// across view modes (`liveEdit` ↔ `edit` ↔ `split` ↔ `preview` ↔ `reading`)
+// preserves the exact cursor and scroll position.
 
 function focusFreshCodeMirror() {
-  if (!isFreshUntitledTab()) return;
-  // After the palette / menu that ran the command has closed.
-  nextTick(() => view?.focus());
+  if (isMobile()) return;
+  // After the palette / menu / tab bar click that ran the command has closed,
+  // focus the editor without scrolling the viewport to the caret.
+  nextTick(() => {
+    if (!view) return;
+    const active = document.activeElement;
+    const inModalOrSidebarInput =
+      active instanceof HTMLElement &&
+      !active.closest('.cm-editor') &&
+      (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
+    if (inModalOrSidebarInput) return;
+    const savedSt = view.scrollDOM.scrollTop;
+    view.contentDOM.focus({ preventScroll: true });
+    if (savedSt > 0 && Math.abs(view.scrollDOM.scrollTop - savedSt) > 1) {
+      view.scrollDOM.scrollTop = savedSt;
+    }
+  });
+}
+
+let cancelCmScrollRestore: (() => void) | null = null;
+
+function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
+  cancelCmScrollRestore?.();
+  if (!view || !saved) return;
+  const st = saved.scrollTop;
+  view.scrollDOM.scrollTop = st;
+  if (st <= 0) return;
+  let cancelled = false;
+  const dom = view.scrollDOM;
+  const intentEvents = ['wheel', 'pointerdown', 'keydown', 'touchstart'] as const;
+  const stop = () => {
+    if (cancelled) return;
+    cancelled = true;
+    for (const ev of intentEvents) dom.removeEventListener(ev, stop);
+    if (cancelCmScrollRestore === stop) cancelCmScrollRestore = null;
+  };
+  cancelCmScrollRestore = stop;
+  for (const ev of intentEvents) dom.addEventListener(ev, stop, { passive: true });
+  const reassert = () => {
+    if (cancelled || !view) return;
+    if (Math.abs(view.scrollDOM.scrollTop - st) > 2) {
+      view.scrollDOM.scrollTop = st;
+    }
+  };
+  nextTick(() => requestAnimationFrame(reassert));
+  setTimeout(reassert, 60);
+  setTimeout(reassert, 160);
+  setTimeout(reassert, 400);
+  setTimeout(() => {
+    reassert();
+    stop();
+  }, 760);
 }
 
 // #169 (Windows) — one synchronous scrollTop assignment is not enough on the
@@ -4787,7 +4973,7 @@ function focusFreshCodeMirror() {
 // The live block editor additionally re-renders its blocks asynchronously,
 // growing scrollHeight after the restore. Pin the saved position through that
 // settle window, backing off the moment the user scrolls themselves.
-function restorePlainScroll(saved?: { caret: number; scrollTop: number }) {
+function restorePlainScroll(saved?: TabCaretSnapshot) {
   const scroller = (): HTMLElement | null =>
     plainLiveEnabled.value ? plainLiveHost.value : plainEditor.value;
   const el = scroller();
@@ -4796,6 +4982,14 @@ function restorePlainScroll(saved?: { caret: number; scrollTop: number }) {
     const ta = el as HTMLTextAreaElement;
     const pos = Math.min(saved?.caret ?? 0, ta.value.length);
     ta.setSelectionRange(pos, pos);
+  } else {
+    nextTick(() => {
+      const bEl = plainBlockEditors.value[plainActiveBlock.value];
+      if (bEl) {
+        const pos = Math.min(saved?.blockCaret ?? 0, bEl.value.length);
+        bEl.setSelectionRange(pos, pos);
+      }
+    });
   }
   const st = saved?.scrollTop ?? 0;
   el.scrollTop = st;
@@ -4837,24 +5031,7 @@ watch(
     // Snapshot the OUTGOING tab first — at this point the editor DOM/state
     // still holds the old document (re-sync happens below).
     if (oldId) {
-      if (usePlainWindowsEditor) {
-        if (plainLiveEnabled.value) {
-          tabCaretMemory.set(oldId, {
-            caret: 0,
-            scrollTop: plainLiveHost.value?.scrollTop ?? 0,
-          });
-        } else if (plainEditor.value) {
-          tabCaretMemory.set(oldId, {
-            caret: plainEditor.value.selectionStart ?? 0,
-            scrollTop: plainEditor.value.scrollTop,
-          });
-        }
-      } else if (view) {
-        tabCaretMemory.set(oldId, {
-          caret: view.state.selection.main.head,
-          scrollTop: view.scrollDOM.scrollTop,
-        });
-      }
+      saveCurrentTabCaret(oldId);
     }
     const saved = newId ? tabCaretMemory.get(newId) : undefined;
     if (usePlainWindowsEditor) {
@@ -4870,11 +5047,15 @@ watch(
       closePlainFind();
       syncPlainEditorFromStore(props.tab.content);
       maybeRestoreSession();
+      if (saved && plainLiveEnabled.value && typeof saved.activeBlock === 'number') {
+        const blocks = plainBlocks.value;
+        plainActiveBlock.value = Math.max(0, Math.min(saved.activeBlock, Math.max(0, blocks.length - 1)));
+      }
       void processPlainLiveRenderedBlocks();
-      focusPlainEditor();
+      focusPlainEditor(true);
       // Restore the caret/scroll (default: document START, not end — the
       // `el.value =` assignment above parked it at the end). Block live-edit
-      // restores the scroll container only; per-block focus is its own.
+      // restores the scroll container and active block caret.
       restorePlainScroll(saved);
       return;
     }
@@ -4888,24 +5069,7 @@ watch(
     );
     maybeRestoreSession();
     focusFreshCodeMirror();
-    if (saved) {
-      // #169 — one synchronous assignment is not enough: async widget renders
-      // (tables / images / mermaid) and CM's post-setState measure pass can
-      // yank the viewport back to the caret, which sits on line 1 when the
-      // user scrolled without ever clicking. Re-assert after layout, but ONLY
-      // when the viewport was reset toward the top — never fight a scroll the
-      // user just made themselves.
-      const st = saved.scrollTop;
-      view.scrollDOM.scrollTop = st;
-      const reassert = () => {
-        if (view && st > 50 && view.scrollDOM.scrollTop < 10) {
-          view.scrollDOM.scrollTop = st;
-        }
-      };
-      requestAnimationFrame(reassert);
-      setTimeout(reassert, 120);
-      setTimeout(reassert, 400);
-    }
+    restoreCodeMirrorScroll(saved);
   }
 );
 
@@ -5302,7 +5466,23 @@ function parseFrontMatterImageRoot(source: string): string | undefined {
 function getViewLine(): number | null {
   if (usePlainWindowsEditor) {
     if (plainLiveEnabled.value) {
-      const block = plainBlocks.value[plainActiveBlock.value];
+      const hostEl = plainLiveHost.value;
+      const blocks = plainBlocks.value;
+      if (hostEl && hostEl.scrollTop > 8 && blocks.length > 0) {
+        const hostTop = hostEl.getBoundingClientRect().top;
+        const blockNodes = hostEl.querySelectorAll<HTMLElement>('[data-plain-block-index]');
+        for (const node of Array.from(blockNodes)) {
+          const rect = node.getBoundingClientRect();
+          if (rect.bottom > hostTop + 12) {
+            const idx = Number(node.getAttribute('data-plain-block-index') || '0');
+            const b = blocks[idx];
+            if (b) {
+              return plainText.value.slice(0, b.start).split('\n').length;
+            }
+          }
+        }
+      }
+      const block = blocks[plainActiveBlock.value];
       if (!block) return 1;
       return plainText.value.slice(0, block.start).split('\n').length;
     }
@@ -5373,6 +5553,7 @@ function docTopInScroller(v: EditorView): number {
  * split-pane sync can interpolate inside tall wrapped lines.
  */
 function scrollToLine(line: number): void {
+  cancelCmScrollRestore?.();
   if (usePlainWindowsEditor) {
     plainScrollToLine(line);
     return;
@@ -5459,6 +5640,7 @@ const cls = computed(() => ({
         {
           'plain-block-editor--cb-numbers': settings.codeBlockLineNumbers,
           'plain-block-editor--focus': plainFocusMode,
+          'plain-block-editor--hl-line': settings.highlightCurrentLine,
         },
       ]"
       :style="plainEditorStyle"
@@ -5624,6 +5806,7 @@ const cls = computed(() => ({
       ref="plainFindBar"
       class="plain-find"
       :class="{ 'plain-find--dodge': plainFindDodge }"
+      @keydown="onPlainFindKeydown"
       @keydown.esc.prevent.stop="closePlainFind(true)"
     >
       <div class="plain-find__row">
@@ -5961,6 +6144,17 @@ const cls = computed(() => ({
 .plain-block--active {
   background: var(--bg);
 }
+/* #467 — active editing line/block tint in non-dark and dark modes. */
+.plain-block-editor--hl-line .plain-block--active,
+.plain-block-editor--hl-line .plain-block--active .plain-block__textarea {
+  background: color-mix(in srgb, #f48fb1 16%, color-mix(in srgb, var(--accent) 8%, var(--bg)));
+  border-radius: 3px;
+}
+.cm-host--dark.plain-block-editor--hl-line .plain-block--active,
+.cm-host--dark.plain-block-editor--hl-line .plain-block--active .plain-block__textarea {
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg));
+  border-radius: 3px;
+}
 /* #316 — focus mode in the block live editor: one element per paragraph
    already exists, so the inactive ones just dim. Same 0.35 the CodeMirror
    extension uses for a dimmed line. */
@@ -6089,6 +6283,17 @@ const cls = computed(() => ({
 .plain-block__render :deep(table) {
   margin-top: 0;
   margin-bottom: 0.8em;
+}
+.plain-block__render :deep(ul),
+.plain-block__render :deep(ol) {
+  padding-left: 1.8em;
+}
+.plain-block__render :deep(ol > li) {
+  padding-left: 0.2em;
+}
+.plain-block__render :deep(li::marker) {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 .plain-block__render :deep(p) {
   white-space: pre-wrap;

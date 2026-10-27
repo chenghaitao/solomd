@@ -2111,6 +2111,7 @@ export const it: I18n = {
       promote: "Aumenta livello titolo",
       demote: "Diminuisci livello titolo",
       paragraph: "Converti in paragrafo",
+      autoNumber: "Numera automaticamente i titoli (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Grassetto",

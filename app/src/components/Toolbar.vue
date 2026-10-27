@@ -1554,14 +1554,11 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .titlebar__title {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  height: 100%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  max-width: 40%;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 12px;
+  line-height: 32px;
+  text-align: center;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

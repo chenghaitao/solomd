@@ -2115,6 +2115,7 @@ export const zh: I18n = {
       promote: "提升标题级别",
       demote: "降低标题级别",
       paragraph: "转为普通段落",
+      autoNumber: "自动为标题编号 (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "加粗",

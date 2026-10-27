@@ -478,6 +478,25 @@ export const useTabsStore = defineStore('tabs', {
       if (target === fromIdx) { this.tabs.splice(fromIdx, 0, moved); return; }
       this.tabs.splice(target, 0, moved);
     },
+    togglePin(tabId: string) {
+      const idx = this.tabs.findIndex((t) => t.id === tabId);
+      if (idx < 0) return;
+      const tab = this.tabs[idx];
+      tab.pinned = !tab.pinned;
+      const [moved] = this.tabs.splice(idx, 1);
+      if (tab.pinned) {
+        let lastPinned = -1;
+        for (let i = 0; i < this.tabs.length; i++) {
+          if (this.tabs[i].pinned) lastPinned = i;
+        }
+        this.tabs.splice(lastPinned + 1, 0, moved);
+      } else {
+        let firstUnpinned = this.tabs.findIndex((t) => !t.pinned);
+        if (firstUnpinned < 0) firstUnpinned = this.tabs.length;
+        this.tabs.splice(firstUnpinned, 0, moved);
+      }
+      this.persist();
+    },
     toggleOutline(id: string) {
       const t = this.tabs.find((x) => x.id === id);
       if (t) {

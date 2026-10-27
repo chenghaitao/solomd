@@ -358,6 +358,9 @@ interface Settings {
   // like an IDE's "always select opened file". Default on. It never re-roots
   // the workspace: a file outside it is simply not followed.
   explorerFollowActive: boolean;
+  explorerDoubleClickFiles: boolean;
+  explorerShowFolderCount: boolean;
+  v507HighlightLineMigrated: boolean;
   // Show dot-files / dot-folders in the Explorer tree. Off by default: a
   // vault's `.git`, `.obsidian` and friends are noise for most people. On,
   // they're reachable from inside the app instead of only from Finder.
@@ -624,7 +627,8 @@ function defaults(): Settings {
     solidCursor: false,
     selectionBubble: true,
     alwaysShowMarkers: false,
-    highlightCurrentLine: false,
+    highlightCurrentLine: true,
+    v507HighlightLineMigrated: true,
     codeFontFamily: '',
     showOutline: false,
     outlineSide: 'right',
@@ -758,6 +762,8 @@ function defaults(): Settings {
     codeBlockWrap: false,
     explorerFullNames: false,
     explorerDoubleClickFolders: false,
+    explorerDoubleClickFiles: false,
+    explorerShowFolderCount: true,
     explorerFollowActive: true,
     explorerShowHidden: false,
     explorerExtFilter: [] as string[],
@@ -965,6 +971,10 @@ function load(): Settings {
       if (!parsed.v503SourceModeMigrated) {
         merged.livePreview = false;
         merged.v503SourceModeMigrated = true;
+      }
+      if (!parsed.v507HighlightLineMigrated) {
+        merged.highlightCurrentLine = true;
+        merged.v507HighlightLineMigrated = true;
       }
       // D6 — a theme outside the built-in list (e.g. a hand-edited or
       // MCP-written 'system') rendered as a bare white page; reset it to the
@@ -1651,6 +1661,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleExplorerDoubleClickFolders() {
       this.explorerDoubleClickFolders = !this.explorerDoubleClickFolders;
+      this.persist();
+    },
+    toggleExplorerDoubleClickFiles() {
+      this.explorerDoubleClickFiles = !this.explorerDoubleClickFiles;
+      this.persist();
+    },
+    toggleExplorerShowFolderCount() {
+      this.explorerShowFolderCount = !this.explorerShowFolderCount;
       this.persist();
     },
     toggleExplorerFollowActive() {

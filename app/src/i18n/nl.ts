@@ -2128,6 +2128,7 @@ export const nl: I18n = {
       promote: "Kopniveau verhogen",
       demote: "Kopniveau verlagen",
       paragraph: "Omzetten naar alinea",
+      autoNumber: "Koppen automatisch nummeren (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Vet",

@@ -205,6 +205,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'heading.promote', label: 'Increase Heading Level', category: 'paragraph', defaults: [] },
   { id: 'heading.demote', label: 'Decrease Heading Level', category: 'paragraph', defaults: [] },
   { id: 'heading.paragraph', label: 'Convert to Paragraph', category: 'paragraph', defaults: [] },
+  { id: 'heading.autoNumber', label: 'Auto-Number Headings', category: 'paragraph', defaults: [] },
   { id: 'fmt.ol', label: 'Numbered List', category: 'paragraph', defaults: ['Mod+Alt+7'] },
   { id: 'fmt.ul', label: 'Bulleted List', category: 'paragraph', defaults: ['Mod+Alt+8'] },
   { id: 'fmt.task', label: 'Task List', category: 'paragraph', defaults: ['Mod+Alt+9'] },

@@ -2128,6 +2128,7 @@ export const sv: I18n = {
       promote: "Höj rubriknivå",
       demote: "Sänk rubriknivå",
       paragraph: "Gör om till stycke",
+      autoNumber: "Numrera rubriker automatiskt (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Fet",

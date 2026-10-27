@@ -264,7 +264,7 @@ export const PROVIDERS: ProviderConfig[] = [
     // reach such a server was to borrow another provider's slot and store
     // a dummy key, because every non-Ollama provider demanded one.
     id: 'openai-compat',
-    label: 'OpenAI 兼容 / OpenAI-compatible (llama.cpp · LM Studio · vLLM)',
+    label: 'OpenAI 兼容 (llama.cpp / LM Studio / vLLM)',
     apiFormat: 'openai',
     // llama-server's default port. LM Studio is 1234, vLLM 8000 — all
     // three print their address on startup and it goes in this field.

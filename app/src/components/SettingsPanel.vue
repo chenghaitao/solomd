@@ -1449,6 +1449,28 @@ function onSelectPdfFont(v: string) {
 
         <section data-cat="basics">
           <label>
+            <input
+              type="checkbox"
+              :checked="settings.explorerDoubleClickFiles"
+              @change="settings.toggleExplorerDoubleClickFiles()"
+            />
+            {{ settings.language === 'zh' ? '双击打开文件树中的文件（单击仅选中）' : 'Double-click to open files in file tree' }}
+          </label>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input
+              type="checkbox"
+              :checked="settings.explorerShowFolderCount"
+              @change="settings.toggleExplorerShowFolderCount()"
+            />
+            {{ settings.language === 'zh' ? '显示文件夹内的子项数量' : 'Show item count on folders in file tree' }}
+          </label>
+        </section>
+
+        <section data-cat="basics">
+          <label>
             <input type="checkbox" :checked="settings.showBacklinks" @change="settings.toggleBacklinks()" />
             {{ t('settings.showBacklinks') }}
           </label>
@@ -3258,7 +3280,7 @@ input[type='range']:disabled {
   border-radius: var(--r-md);
 }
 :root:not(.narrow-viewport) .ds-modal.settings-modal .ds-modal__panel {
-  height: clamp(380px, 52vh, 520px);
+  height: clamp(480px, 68vh, 660px);
   max-height: calc(100% - 32px);
 }
 .ds-modal.settings-modal .ds-modal__head {
@@ -3306,6 +3328,17 @@ input[type='range']:disabled {
   border-radius: var(--r-sm);
   outline: none;
   box-shadow: none;
+}
+.ds-modal.settings-modal .settings__body > div[data-cat] select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  min-width: 0;
+  max-width: 260px;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%238a8a8e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3 4.5l3 3 3-3'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
 }
 .ds-modal.settings-modal .settings__body > div[data-cat] :is(input, select, textarea)::placeholder {
   color: var(--text-3);

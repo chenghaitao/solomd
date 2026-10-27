@@ -2111,6 +2111,7 @@ export const de: I18n = {
       promote: "Überschriftenebene erhöhen",
       demote: "Überschriftenebene verringern",
       paragraph: "In Absatz umwandeln",
+      autoNumber: "Überschriften automatisch nummerieren (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Fett",

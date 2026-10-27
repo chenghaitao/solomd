@@ -2113,6 +2113,7 @@ export const pt: I18n = {
       promote: "Aumentar nível do título",
       demote: "Diminuir nível do título",
       paragraph: "Converter em parágrafo",
+      autoNumber: "Numerar títulos automaticamente (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Negrito",

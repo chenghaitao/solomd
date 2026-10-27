@@ -2111,6 +2111,7 @@ export const ko: I18n = {
       promote: "제목 수준 올리기",
       demote: "제목 수준 내리기",
       paragraph: "일반 단락으로 변환",
+      autoNumber: "제목 자동 번호 매기기 (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "굵게",

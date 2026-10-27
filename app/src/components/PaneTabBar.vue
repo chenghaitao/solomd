@@ -93,7 +93,7 @@ const ctxFlags = computed(() => {
     hasLeft: idx > 0,
     hasRight: idx < list.length - 1,
     hasOthers: list.length > 1,
-    hasSaved: list.some((x) => x.id !== ctxMenu.value!.tabId && x.content === x.savedContent),
+    hasSaved: list.some((x) => x.id !== ctxMenu.value!.tabId && x.content === x.savedContent && !x.pinned),
     hasAny: list.length > 0,
     // Issue #64 — "Open Enclosing Folder" only meaningful when the tab
     // is backed by a real on-disk path. Untitled / unsaved buffers have
@@ -101,8 +101,15 @@ const ctxFlags = computed(() => {
     hasFilePath: !!target?.filePath,
     isMarkdown: target?.language === 'markdown',
     showOutline: !!target?.showOutline,
+    pinned: !!target?.pinned,
   };
 });
+
+function onTogglePin() {
+  const m = ctxMenu.value;
+  closeCtxMenu();
+  if (m) tabs.togglePin(m.tabId);
+}
 
 function onToggleOutline() {
   const m = ctxMenu.value;
@@ -125,7 +132,21 @@ async function copyTextSafe(text: string) {
   }
 }
 
-async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'revealInFileTree' | 'copyFileName' | 'copyFilePath') {
+function relativeFilePath(fullPath: string): string {
+  const root = workspace.currentFolder;
+  if (!root) return fullPath;
+  const normRoot = root.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normPath = fullPath.replace(/\\/g, '/');
+  const ci = /^[a-zA-Z]:\//.test(normRoot);
+  const r = ci ? normRoot.toLowerCase() : normRoot;
+  const p = ci ? normPath.toLowerCase() : normPath;
+  if (p.startsWith(r + '/')) {
+    return normPath.slice(normRoot.length + 1);
+  }
+  return fullPath.split(/[\\/]/).pop() || fullPath;
+}
+
+async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'revealInFileTree' | 'copyFileName' | 'copyFilePath' | 'copyRelativePath') {
   const m = ctxMenu.value;
   closeCtxMenu();
   if (!m) return;
@@ -148,6 +169,17 @@ async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'close
     if (!path) return;
     try {
       await copyTextSafe(path);
+      useToastsStore().success(t('tabMenu.copyFilePathDone'));
+    } catch (e) {
+      useToastsStore().error(`${e}`);
+    }
+    return;
+  }
+  if (action === 'copyRelativePath') {
+    const path = list[idx]?.filePath;
+    if (!path) return;
+    try {
+      await copyTextSafe(relativeFilePath(path));
       useToastsStore().success(t('tabMenu.copyFilePathDone'));
     } catch (e) {
       useToastsStore().error(`${e}`);
@@ -184,11 +216,11 @@ async function onTabAction(action: 'close' | 'closeLeft' | 'closeRight' | 'close
   const ids = (() => {
     switch (action) {
       case 'close':       return [m.tabId];
-      case 'closeLeft':   return list.slice(0, idx).map((x) => x.id);
-      case 'closeRight':  return list.slice(idx + 1).map((x) => x.id);
-      case 'closeOthers': return list.filter((x) => x.id !== m.tabId).map((x) => x.id);
-      case 'closeSaved':  return list.filter((x) => x.content === x.savedContent).map((x) => x.id);
-      case 'closeAll':    return list.map((x) => x.id);
+      case 'closeLeft':   return list.slice(0, idx).filter((x) => !x.pinned).map((x) => x.id);
+      case 'closeRight':  return list.slice(idx + 1).filter((x) => !x.pinned).map((x) => x.id);
+      case 'closeOthers': return list.filter((x) => x.id !== m.tabId && !x.pinned).map((x) => x.id);
+      case 'closeSaved':  return list.filter((x) => x.content === x.savedContent && !x.pinned).map((x) => x.id);
+      case 'closeAll':    return list.filter((x) => !x.pinned).map((x) => x.id);
     }
     return [];
   })();
@@ -339,16 +371,31 @@ watch(
 );
 
 const tabListPos = ref<{ top: number; right: number } | null>(null);
+const tabListFilter = ref('');
+const tabListFilterInput = ref<HTMLInputElement | null>(null);
+const filteredTabList = computed(() => {
+  const q = tabListFilter.value.trim().toLowerCase();
+  if (!q) return tabs.tabs;
+  return tabs.tabs.filter(
+    (tl) =>
+      tl.fileName.toLowerCase().includes(q) ||
+      (tl.filePath && tl.filePath.toLowerCase().includes(q)),
+  );
+});
 function toggleTabList(e: MouseEvent) {
   if (tabListPos.value) {
     tabListPos.value = null;
+    tabListFilter.value = '';
     return;
   }
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  tabListFilter.value = '';
   tabListPos.value = { top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) };
+  nextTick(() => tabListFilterInput.value?.focus());
 }
 function pickFromTabList(tabId: string) {
   tabListPos.value = null;
+  tabListFilter.value = '';
   tiles.setActiveTab(props.paneId, tabId);
 }
 
@@ -445,6 +492,7 @@ onBeforeUnmount(() => {
         :class="{
           'tab--active': tab.id === activeTabId,
           'tab--dirty': tabs.isDirty(tab.id),
+          'tab--pinned': !!tab.pinned,
           'tab--dragging': tiles.dragTabId === tab.id,
         }"
         role="tab"
@@ -455,6 +503,7 @@ onBeforeUnmount(() => {
         @contextmenu="onContextMenu($event, tab.id)"
         :title="tab.filePath || tab.fileName"
       >
+        <span v-if="tab.pinned" class="tab__pin" aria-hidden="true">📌</span>
         <span class="tab__name">{{ tab.fileName }}</span>
         <!-- One 16px slot at the end: the unsaved dot sits in it until the
              pointer arrives, then the close button takes its place. -->
@@ -474,7 +523,7 @@ onBeforeUnmount(() => {
     </div>
     <div class="tabbar__actions">
       <button
-        v-if="tabsOverflow"
+        v-if="tabsOverflow || tabs.tabs.length > 1"
         class="tabbar__btn"
         :class="{ 'tabbar__btn--open': tabListPos }"
         :title="t('tabMenu.allTabs')"
@@ -516,7 +565,7 @@ onBeforeUnmount(() => {
       </svg>
     </button>
 
-    <!-- #218 — all open tabs -->
+    <!-- #218 / #398 — all open tabs with quick filter -->
     <Teleport to="body">
       <div
         v-if="tabListPos"
@@ -525,8 +574,19 @@ onBeforeUnmount(() => {
         :style="{ top: tabListPos.top + 'px', right: tabListPos.right + 'px' }"
         @click.stop
       >
+        <div v-if="tabs.tabs.length > 3" class="tablist__search">
+          <input
+            ref="tabListFilterInput"
+            v-model="tabListFilter"
+            class="tablist__filter"
+            type="text"
+            :placeholder="settings.language === 'zh' ? '筛选已打开标签页…' : 'Filter open tabs…'"
+            @keydown.esc.stop="tabListPos = null"
+            @keydown.enter.prevent="filteredTabList[0] && pickFromTabList(filteredTabList[0].id)"
+          />
+        </div>
         <button
-          v-for="tl in tabs.tabs"
+          v-for="tl in filteredTabList"
           :key="tl.id"
           class="ctx-item tablist__item"
           :class="{ 'tablist__item--active': tl.id === activeTabId }"
@@ -534,6 +594,7 @@ onBeforeUnmount(() => {
           :title="tl.filePath || tl.fileName"
           @click="pickFromTabList(tl.id)"
         >
+          <span v-if="tl.pinned" class="tablist__pin" aria-hidden="true">📌</span>
           <span class="tablist__name">{{ tl.fileName }}</span>
           <span v-if="tabs.isDirty(tl.id)" class="tablist__dot" aria-hidden="true"></span>
         </button>
@@ -549,6 +610,10 @@ onBeforeUnmount(() => {
         :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
         @click.stop
       >
+        <button class="ctx-item" @click="onTogglePin">
+          {{ ctxFlags?.pinned ? (settings.language === 'zh' ? '取消固定标签页' : 'Unpin Tab') : (settings.language === 'zh' ? '固定标签页' : 'Pin Tab') }}
+        </button>
+        <div class="ctx-sep" />
         <button class="ctx-item" @click="onTabAction('close')">{{ t('tabMenu.close') }}</button>
         <div class="ctx-sep" />
         <button class="ctx-item" :disabled="!ctxFlags?.hasLeft"   @click="onTabAction('closeLeft')">{{ t('tabMenu.closeLeft') }}</button>
@@ -568,6 +633,9 @@ onBeforeUnmount(() => {
         <div class="ctx-sep" />
         <button class="ctx-item" data-tab-copy-name @click="onTabAction('copyFileName')">{{ t('tabMenu.copyFileName') }}</button>
         <button class="ctx-item" data-tab-copy-path :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('copyFilePath')">{{ t('tabMenu.copyFilePath') }}</button>
+        <button class="ctx-item" data-tab-copy-rel-path :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('copyRelativePath')">
+          {{ settings.language === 'zh' ? '复制相对路径' : 'Copy Relative Path' }}
+        </button>
         <div class="ctx-sep" />
         <button class="ctx-item" :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('revealInFolder')">{{ t(revealLabelKey('tabMenu.revealInFolder')) }}</button>
         <button class="ctx-item" :disabled="!ctxFlags?.hasFilePath" @click="onTabAction('revealInFileTree')">{{ t('tabMenu.revealInFileTree') }}</button>
@@ -672,6 +740,35 @@ onBeforeUnmount(() => {
 .tab__name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tab__pin,
+.tablist__pin {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+.tablist__search {
+  padding: 4px 4px 6px;
+  border-bottom: var(--bd-hair);
+  margin-bottom: 4px;
+}
+.tablist__filter {
+  width: 100%;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--fill-1);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.tablist__filter:focus {
+  background: var(--bg);
+  box-shadow: var(--ring);
 }
 .tab__end {
   position: relative;

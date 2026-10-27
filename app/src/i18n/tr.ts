@@ -2128,6 +2128,7 @@ export const tr: I18n = {
       promote: "Başlık düzeyini yükselt",
       demote: "Başlık düzeyini düşür",
       paragraph: "Paragrafa dönüştür",
+      autoNumber: "Başlıkları Otomatik Numaralandır (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Kalın",

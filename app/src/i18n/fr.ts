@@ -2111,6 +2111,7 @@ export const fr: I18n = {
       promote: "Augmenter le niveau de titre",
       demote: "Diminuer le niveau de titre",
       paragraph: "Convertir en paragraphe",
+      autoNumber: "Numéroter automatiquement les titres (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Gras",

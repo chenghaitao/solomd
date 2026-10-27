@@ -2128,6 +2128,7 @@ export const pl: I18n = {
       promote: "Podnieś poziom nagłówka",
       demote: "Obniż poziom nagłówka",
       paragraph: "Zamień na akapit",
+      autoNumber: "Automatycznie numeruj nagłówki (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Pogrubienie",

@@ -2111,6 +2111,7 @@ export const ja: I18n = {
       promote: "見出しレベルを上げる",
       demote: "見出しレベルを下げる",
       paragraph: "標準の段落に戻す",
+      autoNumber: "見出しに自動番号を付ける (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "太字",

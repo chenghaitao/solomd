@@ -320,6 +320,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('heading.promote', t('cmd.heading.promote')),
     item('heading.demote', t('cmd.heading.demote')),
     item('heading.paragraph', t('cmd.heading.paragraph')),
+    item('heading.autoNumber', t('cmd.heading.autoNumber')),
     sep,
     // In chord order: ⌘⌥7 / 8 / 9.
     fmt('ol'), fmt('ul'), fmt('task'),

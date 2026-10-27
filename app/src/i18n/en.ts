@@ -2140,6 +2140,7 @@ export const en = {
       promote: "Increase Heading Level",
       demote: "Decrease Heading Level",
       paragraph: "Convert to Paragraph",
+      autoNumber: "Auto-Number Headings (1 / 1.1 / 1.1.1)",
     },
     fmt: {
       bold: "Bold",
