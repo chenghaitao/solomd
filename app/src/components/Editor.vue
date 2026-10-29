@@ -43,6 +43,7 @@ import {
   MARKDOWN_ONLY_COMMANDS,
   autoNumberHeadings,
   deleteWord as deleteWordEdit,
+  selectCodeBlockBody,
   selectLine as selectLineRange,
   selectWord as selectWordRange,
   shiftHeading,
@@ -102,7 +103,7 @@ import { plantumlSvgUrl } from '../lib/plantuml';
 import { stableClickSelection } from '../lib/cm-stable-click';
 import { cjkDoubleClickSelection } from '../lib/cm-cjk-dblclick';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
-import { SLASH_BLOCKS, filterBlocks, expandSnippet } from '../lib/slash-blocks';
+import { SLASH_BLOCKS, filterBlocks, expandSnippet, indentExpandedSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
 import { isAndroid, isIOS, isMobile } from '../lib/platform';
@@ -112,7 +113,7 @@ import EditorContextMenu, { type EditorMenuAction, type EditorMenuSpell } from '
 import { lookupMisspelling, addToSpellDict } from '../lib/spell-suggest';
 import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
-import { computeListContinuation } from '../lib/list-continuation';
+import { computeListContinuation, computeListSoftBreak, repairIndentedFenceEdit } from '../lib/list-continuation';
 import { mapPos, renumberAfterEdit, renumberChanges } from '../lib/list-renumber';
 import { openRenderedLink } from '../lib/link-open';
 
@@ -242,6 +243,22 @@ function baseKeymap() {
         (b) => b.key !== 'Mod-i' && !cmKeyOwnedByApp(b, overrides),
       )
       .map((b) => {
+        if (b.key === 'Mod-a') {
+          return {
+            ...b,
+            run: (v: EditorView) => {
+              if (props.tab.language === 'markdown' && v.state.selection.ranges.length === 1) {
+                const sel = v.state.selection.main;
+                const r = selectCodeBlockBody(v.state.doc.toString(), sel.from, sel.to);
+                if (r) {
+                  v.dispatch({ selection: { anchor: r.from, head: r.to }, userEvent: 'select' });
+                  return true;
+                }
+              }
+              return b.run ? b.run(v) : false;
+            },
+          };
+        }
         if (b.key === 'Mod-f') {
           return {
             ...b,
@@ -438,6 +455,8 @@ function flushContentSync() {
   }
 }
 
+let skipNextAutoNumber = false;
+
 function syncEditorContentSoon(text: string) {
   if (contentSyncTimer) clearTimeout(contentSyncTimer);
   contentSyncTimer = setTimeout(() => {
@@ -453,12 +472,51 @@ function syncEditorContentSoon(text: string) {
         syncEditorContentSoon(text);
         return;
       }
-      tabs.setContent(props.tab.id, view.state.doc.toString());
+      const curDoc = view.state.doc.toString();
+      if (
+        settings.autoNumberHeadings &&
+        !skipNextAutoNumber &&
+        props.tab.language === 'markdown'
+      ) {
+        const sel = view.state.selection.main;
+        const edit = autoNumberHeadings(curDoc, sel.from, sel.to, 'add');
+        if (edit) {
+          skipNextAutoNumber = true;
+          view.dispatch({
+            changes: { from: edit.from, to: edit.to, insert: edit.insert },
+            selection: { anchor: edit.selFrom, head: edit.selTo },
+          });
+          tabs.setContent(props.tab.id, edit.insert);
+          return;
+        }
+      }
+      skipNextAutoNumber = false;
+      tabs.setContent(props.tab.id, curDoc);
       return;
     }
     tabs.setContent(props.tab.id, text);
   }, 350);
 }
+
+watch(
+  () => settings.autoNumberHeadings,
+  (enabled) => {
+    if (props.tab.id !== tabs.activeId || props.tab.language !== 'markdown') return;
+    if (view && !view.composing) {
+      const curDoc = view.state.doc.toString();
+      const sel = view.state.selection.main;
+      const edit = autoNumberHeadings(curDoc, sel.from, sel.to, enabled ? 'add' : 'remove');
+      if (edit) {
+        skipNextAutoNumber = true;
+        view.dispatch({
+          changes: { from: edit.from, to: edit.to, insert: edit.insert },
+          selection: { anchor: edit.selFrom, head: edit.selTo },
+        });
+        tabs.setContent(props.tab.id, edit.insert);
+      }
+    }
+  },
+);
 
 const plainEditor = ref<HTMLTextAreaElement | null>(null);
 const plainHostEl = ref<HTMLDivElement | null>(null);
@@ -971,7 +1029,44 @@ function splitPlainMarkdownBlocks(
       continue;
     }
 
-    if (kind === 'list' || kind === 'quote' || kind === 'indented') {
+    if (kind === 'list') {
+      let j = i + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        const nextKind = kindFor(nextLine);
+        const isIndentedContinuation = /^[ \t]{2,}\S/.test(nextLine.text);
+        if ((nextKind === 'fence' || nextKind === 'mathfence') && isIndentedContinuation) {
+          const trimmedNext = nextLine.text.trim();
+          const closeMarker = nextKind === 'fence'
+            ? (trimmedNext.startsWith('~~~') ? '~~~' : '```')
+            : (trimmedNext.startsWith('\\[') ? '\\]' : '$$');
+          j++;
+          while (j < lines.length) {
+            const t = lines[j].text.trim();
+            j++;
+            if (nextKind === 'fence' ? t.startsWith(closeMarker) : t.endsWith(closeMarker)) break;
+          }
+          continue;
+        }
+        if (nextKind === 'list' || isIndentedContinuation) {
+          j++;
+          continue;
+        }
+        if (nextKind === 'blank' && j + 1 < lines.length) {
+          const afterBlank = lines[j + 1];
+          if (kindFor(afterBlank) === 'list' || /^[ \t]{2,}\S/.test(afterBlank.text)) {
+            j++;
+            continue;
+          }
+        }
+        break;
+      }
+      pushRange(line.start, lines[j - 1]?.end ?? line.end);
+      i = j;
+      continue;
+    }
+
+    if (kind === 'quote' || kind === 'indented') {
       let j = i + 1;
       while (j < lines.length) {
         const nextKind = kindFor(lines[j]);
@@ -1499,6 +1594,14 @@ function handlePlainInput(event: Event) {
   }
   if (!plainComposing.value) {
     recordPlainHistory();
+    if (props.tab.language === 'markdown') {
+      const selPos = el.selectionStart ?? 0;
+      const repaired = repairIndentedFenceEdit(el.value, Math.max(0, selPos - 1), selPos, selPos);
+      if (repaired) {
+        el.value = repaired.value;
+        el.setSelectionRange(repaired.caret, repaired.caret);
+      }
+    }
     // Ordered-list numbers follow a line added or removed (lib/list-renumber).
     const renum = props.tab.language === 'markdown' ? renumberAfterEdit(plainText.value, el.value) : null;
     if (renum) {
@@ -2148,8 +2251,13 @@ function applyPlainAutocomplete(item: AcItem) {
     const flat = plainEditor.value;
     if (!flat || acTriggerStart < 0) { closePlainAutocomplete(); return; }
     const caret = flat.selectionStart ?? flat.value.length;
-    const value = flat.value.slice(0, acTriggerStart) + item.insert + flat.value.slice(caret);
-    const newCaret = acTriggerStart + item.cursorOffset;
+    const lineStart = flat.value.lastIndexOf('\n', Math.max(0, acTriggerStart - 1)) + 1;
+    const lineIndent = /^[ \t]+/.exec(flat.value.slice(lineStart, acTriggerStart))?.[0] ?? '';
+    const expanded = lineIndent && item.insert.includes('\n')
+      ? indentExpandedSnippet({ text: item.insert, cursorOffset: item.cursorOffset }, lineIndent)
+      : { text: item.insert, cursorOffset: item.cursorOffset };
+    const value = flat.value.slice(0, acTriggerStart) + expanded.text + flat.value.slice(caret);
+    const newCaret = acTriggerStart + expanded.cursorOffset;
     closePlainAutocomplete();
     recordPlainHistory();
     flat.value = value;
@@ -2168,8 +2276,13 @@ function applyPlainAutocomplete(item: AcItem) {
   const index = plainActiveBlock.value;
   const caret = el.selectionStart ?? el.value.length;
   const start = acTriggerStart;
-  const value = el.value.slice(0, start) + item.insert + el.value.slice(caret);
-  const newCaret = start + item.cursorOffset;
+  const lineStart = el.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const lineIndent = /^[ \t]+/.exec(el.value.slice(lineStart, start))?.[0] ?? '';
+  const expanded = lineIndent && item.insert.includes('\n')
+    ? indentExpandedSnippet({ text: item.insert, cursorOffset: item.cursorOffset }, lineIndent)
+    : { text: item.insert, cursorOffset: item.cursorOffset };
+  const value = el.value.slice(0, start) + expanded.text + el.value.slice(caret);
+  const newCaret = start + expanded.cursorOffset;
   closePlainAutocomplete();
   updatePlainBlock(index, value, newCaret);
   nextTick(() => {
@@ -2251,6 +2364,37 @@ function plainModLetter(event: KeyboardEvent): string {
   return '';
 }
 
+function runPlainSelectAll(targetEl?: HTMLTextAreaElement | null): void {
+  if (plainLiveEnabled.value) {
+    if (!plainSelectAll.value && props.tab.language === 'markdown') {
+      const el = targetEl ?? plainBlockEditors.value[plainActiveBlock.value];
+      if (el) {
+        const r = selectCodeBlockBody(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
+        if (r) {
+          el.focus();
+          el.setSelectionRange(r.from, r.to);
+          clearStrayDocumentSelection(el);
+          emitPlainCursorAndSelection();
+          return;
+        }
+      }
+    }
+    enterPlainSelectAll();
+    return;
+  }
+  const el = targetEl ?? plainEditor.value;
+  if (el) {
+    el.focus();
+    const r = props.tab.language === 'markdown'
+      ? selectCodeBlockBody(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
+      : null;
+    if (r) el.setSelectionRange(r.from, r.to);
+    else el.select();
+    clearStrayDocumentSelection(el);
+    emitPlainCursorAndSelection();
+  }
+}
+
 /** Shared keydown handling (undo/redo, Tab indent) for the plain editors. */
 function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   const mod = event.ctrlKey || event.metaKey;
@@ -2271,7 +2415,8 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
     plainRedo();
     return true;
   }
-  // Ctrl/Cmd+A — whole-document select-all.
+  // Ctrl/Cmd+A — select code-block body first when inside a fence, then
+  // whole-document select-all on a second press.
   //   • Live block editor: merge blocks into one textarea and select it
   //     (native select-all otherwise stops at the current block).
   //   • Single-textarea (edit-only / split): select the textarea's own
@@ -2287,17 +2432,7 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   //     it's already empty).
   if (mod && !event.altKey && letter === 'a') {
     event.preventDefault();
-    if (plainLiveEnabled.value) {
-      enterPlainSelectAll();
-    } else {
-      const el = plainEditor.value;
-      if (el) {
-        el.focus();
-        el.select();
-        clearStrayDocumentSelection(el);
-        emitPlainCursorAndSelection();
-      }
-    }
+    runPlainSelectAll();
     return true;
   }
   // Ctrl/Cmd+J — AI rewrite of the selection (matches cm-ai-rewrite). The
@@ -2362,11 +2497,24 @@ function computeSmartEnter(el: HTMLTextAreaElement): { value: string; caret: num
   return computeListContinuation(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
 }
 
+function computeSmartSoftBreak(el: HTMLTextAreaElement): { value: string; caret: number } | null {
+  return computeListSoftBreak(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
+}
+
 /** A bare Enter that is not part of an IME composition. */
 function isPlainEnter(event: KeyboardEvent): boolean {
   return (
     event.key === 'Enter' &&
     !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
+    !event.isComposing && event.keyCode !== 229
+  );
+}
+
+/** Shift+Enter (soft line break inside a list item or block). */
+function isPlainSoftEnter(event: KeyboardEvent): boolean {
+  return (
+    event.key === 'Enter' &&
+    event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
     !event.isComposing && event.keyCode !== 229
   );
 }
@@ -2529,6 +2677,23 @@ function handlePlainBlockKeydown(index: number, event: KeyboardEvent) {
     });
     return;
   }
+  if (isPlainSoftEnter(event) && props.tab.language === 'markdown') {
+    const el = event.target as HTMLTextAreaElement;
+    const soft = computeSmartSoftBreak(el);
+    if (soft) {
+      event.preventDefault();
+      updatePlainBlock(index, soft.value, soft.caret);
+      nextTick(() => {
+        const e2 = plainBlockEditors.value[plainActiveBlock.value];
+        if (e2) {
+          e2.focus();
+          const p = Math.min(soft.caret, e2.value.length);
+          e2.setSelectionRange(p, p);
+        }
+      });
+      return;
+    }
+  }
   if (isPlainEnter(event)) {
     const el = event.target as HTMLTextAreaElement;
     const smart = computeSmartEnter(el);
@@ -2573,6 +2738,20 @@ function handlePlainEditorKeydown(event: KeyboardEvent) {
     tabs.setContent(props.tab.id, edit.value);
     emitPlainCursorAndSelection();
     return;
+  }
+  if (isPlainSoftEnter(event) && props.tab.language === 'markdown') {
+    const el = event.target as HTMLTextAreaElement;
+    const soft = computeSmartSoftBreak(el);
+    if (soft) {
+      event.preventDefault();
+      recordPlainHistory();
+      el.value = soft.value;
+      el.setSelectionRange(soft.caret, soft.caret);
+      plainText.value = soft.value;
+      tabs.setContent(props.tab.id, soft.value);
+      emitPlainCursorAndSelection();
+      return;
+    }
   }
   // #341 — the flat textarea (edit-only / split) never had list continuation;
   // only the live-edit blocks did.
@@ -3614,7 +3793,13 @@ async function onEditorMenuAction(id: EditorMenuAction) {
     if (!v) return;
     const sel = v.state.selection.main;
     if (id === 'selectAll') {
-      v.dispatch({ selection: { anchor: 0, head: v.state.doc.length }, userEvent: 'select' });
+      const r = props.tab.language === 'markdown'
+        ? selectCodeBlockBody(v.state.doc.toString(), sel.from, sel.to)
+        : null;
+      v.dispatch({
+        selection: r ? { anchor: r.from, head: r.to } : { anchor: 0, head: v.state.doc.length },
+        userEvent: 'select',
+      });
     } else if (id === 'copy' || id === 'cut') {
       if (sel.empty) return;
       await writeClipboard(v.state.sliceDoc(sel.from, sel.to));
@@ -3631,14 +3816,7 @@ async function onEditorMenuAction(id: EditorMenuAction) {
   const el = ctxTextarea ?? plainActiveTextarea();
   ctxTextarea = null;
   if (id === 'selectAll') {
-    if (plainLiveEnabled.value) {
-      enterPlainSelectAll();
-    } else if (el) {
-      el.focus();
-      el.select();
-      clearStrayDocumentSelection(el);
-      emitPlainCursorAndSelection();
-    }
+    runPlainSelectAll(el);
     return;
   }
   if (!el) return;
@@ -3708,6 +3886,13 @@ function updatePlainBlock(index: number, text: string, caret?: number) {
   // the editable text, so neighbouring blocks don't merge on every edit.
   const tail = block.hasTrailingNewline ? '\n' : '';
   let next = `${plainText.value.slice(0, block.start)}${text}${tail}${plainText.value.slice(block.end)}`;
+  const repaired = !plainComposing.value && props.tab.language === 'markdown'
+    ? repairIndentedFenceEdit(next, Math.max(0, nextCaret - 1), nextCaret, nextCaret)
+    : null;
+  if (repaired) {
+    next = repaired.value;
+    nextCaret = repaired.caret;
+  }
   // Ordered-list numbers follow a line added or removed. When this rewrites
   // the active block, its text no longer matches the textarea, so the fast
   // path below is skipped and the caret is restored from `nextCaret`.
@@ -3751,7 +3936,7 @@ function updatePlainBlock(index: number, text: string, caret?: number) {
   // everything, or type-over a doc that re-splits to one block). Skipping the
   // nextTick would leave focus on <body> and swallow every subsequent
   // keystroke — caught by real-key testing in the Windows VM.
-  if (!wasSelectAll && nextIndex === index && nextBlock?.start === block.start && nextBlock?.text === text) {
+  if (!wasSelectAll && !repaired && nextIndex === index && nextBlock?.start === block.start && nextBlock?.text === text) {
     emitPlainCursorAndSelection();
     return;
   }
@@ -3764,6 +3949,7 @@ function updatePlainBlock(index: number, text: string, caret?: number) {
     // textarea unmounted, dropping focus to <body>, which leaves the caret
     // invisible and swallows subsequent keystrokes — so re-focus the new one.
     if (document.activeElement !== el) el.focus();
+    if (activeBlock && el.value !== activeBlock.text) el.value = activeBlock.text;
     autoSizePlainBlock(el);
     if (activeBlock) {
       const pos = Math.max(0, Math.min(nextCaret - activeBlock.start, el.value.length));
@@ -3804,6 +3990,12 @@ function markdownExt() {
   // `**限制：**硬链接`-shaped CJK bold (#262); without it the two panes
   // disagree about the same document.
   return [
+    Prec.high(
+      keymap.of([
+        { key: 'Shift-Enter', run: listSoftBreakCommand },
+        { key: 'Enter', run: markdownEnterCommand },
+      ]),
+    ),
     markdown({
       base: markdownLanguage,
       codeLanguages,
@@ -3812,6 +4004,45 @@ function markdownExt() {
     }),
     listRenumberFilter,
   ];
+}
+
+function applyTextComputation(v: EditorView, computed: { value: string; caret: number }, userEvent: string): boolean {
+  const oldDoc = v.state.doc.toString();
+  const newDoc = computed.value;
+  let prefix = 0;
+  const minLen = Math.min(oldDoc.length, newDoc.length);
+  while (prefix < minLen && oldDoc.charCodeAt(prefix) === newDoc.charCodeAt(prefix)) prefix++;
+  let oldEnd = oldDoc.length;
+  let newEnd = newDoc.length;
+  while (oldEnd > prefix && newEnd > prefix && oldDoc.charCodeAt(oldEnd - 1) === newDoc.charCodeAt(newEnd - 1)) {
+    oldEnd--;
+    newEnd--;
+  }
+  v.dispatch({
+    changes: { from: prefix, to: oldEnd, insert: newDoc.slice(prefix, newEnd) },
+    selection: { anchor: computed.caret },
+    scrollIntoView: true,
+    userEvent,
+  });
+  return true;
+}
+
+function listSoftBreakCommand(v: EditorView): boolean {
+  if (props.tab.language !== 'markdown' || v.state.readOnly) return false;
+  if (v.state.selection.ranges.length > 1) return false;
+  const sel = v.state.selection.main;
+  const res = computeListSoftBreak(v.state.doc.toString(), sel.from, sel.to);
+  if (!res) return false;
+  return applyTextComputation(v, res, 'input.type');
+}
+
+function markdownEnterCommand(v: EditorView): boolean {
+  if (props.tab.language !== 'markdown' || v.state.readOnly) return false;
+  if (v.state.selection.ranges.length > 1) return false;
+  const sel = v.state.selection.main;
+  const res = computeListContinuation(v.state.doc.toString(), sel.from, sel.to);
+  if (!res) return false;
+  return applyTextComputation(v, res, 'input.type');
 }
 
 /**
@@ -3845,14 +4076,36 @@ const listRenumberFilter = EditorState.transactionFilter.of((tr) => {
     return tr;
   }
   let structural = false;
+  let hasInsert = false;
   let from = Infinity;
   let to = -1;
   tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (inserted.length > 0) hasInsert = true;
     if (inserted.lines > 1 || tr.startState.doc.sliceString(fromA, toA).includes('\n')) structural = true;
     from = Math.min(from, fromB);
     to = Math.max(to, toB);
   });
-  if (!structural) return tr;
+  if (!structural) {
+    if (hasInsert && (tr.isUserEvent('input.type') || tr.isUserEvent('input.paste') || tr.isUserEvent('input'))) {
+      const newDoc = tr.newDoc.toString();
+      const head = tr.newSelection.main.head;
+      const repaired = repairIndentedFenceEdit(newDoc, from, to, head);
+      if (repaired) {
+        const lineStart = newDoc.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+        const addedLen = repaired.value.length - newDoc.length;
+        const addedPrefix = repaired.value.slice(lineStart, lineStart + addedLen);
+        return [
+          tr,
+          {
+            changes: { from: lineStart, to: lineStart, insert: addedPrefix },
+            selection: { anchor: repaired.caret },
+            sequential: true,
+          },
+        ];
+      }
+    }
+    return tr;
+  }
   const changes = renumberChanges(tr.newDoc.toString(), from, to);
   return changes.length ? [tr, { changes, sequential: true }] : tr;
 });
@@ -4084,6 +4337,9 @@ function buildExtensions() {
     cjkDoubleClickSelection(),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) {
+        if (u.transactions.some((tr) => tr.isUserEvent('undo'))) {
+          skipNextAutoNumber = true;
+        }
         const text = u.state.doc.toString();
         // #450 — Always arm the debounced sync even if `u.view.composing` is
         // true during an IME candidate commit (e.g. 清风/五笔/拼音 on Windows):

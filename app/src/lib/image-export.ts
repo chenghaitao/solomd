@@ -13,7 +13,7 @@ import { initMermaid } from './mermaid-lazy';
 import { sanitizeModernColors } from './export-colors';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import { loadRenderDeps } from './render-deps';
-import { rewriteImageUrls } from './image-resolve';
+import { inlineLocalImages, rewriteImageUrls } from './image-resolve';
 
 export interface ImageExportOptions {
   /** When true, append a "Created with SoloMD · solomd.app" footer.
@@ -185,7 +185,9 @@ export async function markdownToImageBlob(
 ): Promise<Blob> {
   await loadRenderDeps(); // rendered once — no placeholder math / plain code
   const rawHtml = renderMarkdown(source || '');
-  const html = rewriteImageUrls(rawHtml, extractImageRoot(source || ''), filePath);
+  const imageRoot = extractImageRoot(source || '');
+  const withLocalImages = await inlineLocalImages(rawHtml, imageRoot, filePath);
+  const html = rewriteImageUrls(withLocalImages, imageRoot, filePath);
 
   const styleEl = document.createElement('style');
   styleEl.textContent = IMAGE_CSS;

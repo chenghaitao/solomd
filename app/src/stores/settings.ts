@@ -67,6 +67,13 @@ interface Settings {
   alwaysShowMarkers: boolean;
   // #344 — tint the caret line's background in the CodeMirror editor.
   highlightCurrentLine: boolean;
+  /** Use the document's first non-empty line as the tab title instead of the
+   *  on-disk filename (off by default). Useful when a 3rd-party tool opens
+   *  temporary/UUID-named files in SoloMD. */
+  tabTitleFromFirstLine: boolean;
+  /** #484 — automatically maintain hierarchical 1–6 heading numbers (`1.`, `1.1`, `1.1.1`)
+   *  when headings are added, deleted, or modified (off by default). */
+  autoNumberHeadings: boolean;
   // #190 — dedicated code font (code blocks / inline code / mono UI).
   // Empty = built-in monospace stack.
   codeFontFamily: string;
@@ -628,6 +635,8 @@ function defaults(): Settings {
     selectionBubble: true,
     alwaysShowMarkers: false,
     highlightCurrentLine: true,
+    tabTitleFromFirstLine: false,
+    autoNumberHeadings: false,
     v507HighlightLineMigrated: true,
     codeFontFamily: '',
     showOutline: false,
@@ -1173,6 +1182,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleHighlightCurrentLine() {
       this.highlightCurrentLine = !this.highlightCurrentLine;
+      this.persist();
+    },
+    toggleTabTitleFromFirstLine() {
+      this.tabTitleFromFirstLine = !this.tabTitleFromFirstLine;
+      this.persist();
+    },
+    toggleAutoNumberHeadings() {
+      this.autoNumberHeadings = !this.autoNumberHeadings;
       this.persist();
     },
     setCodeFontFamily(f: string) {

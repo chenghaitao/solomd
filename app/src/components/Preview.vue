@@ -11,7 +11,9 @@ import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve
 import { openImageOverlay, type OverlayStrings } from '../lib/image-overlay';
 import { svgToPngBlob, diagramBackground } from '../lib/mermaid-export';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { documentDir, join } from '@tauri-apps/api/path';
 import { invoke } from '@tauri-apps/api/core';
+import { isIOS } from '../lib/platform';
 import { useToastsStore } from '../stores/toasts';
 import { useI18n } from '../i18n';
 import { useSettingsStore } from '../stores/settings';
@@ -425,14 +427,19 @@ async function exportDiagramPng(svg: SVGElement) {
   const toasts = useToastsStore();
   try {
     const blob = await svgToPngBlob(svg, { scale: 2, background: diagramBackground() });
-    const path = await saveDialog({
-      defaultPath: diagramExportName(),
-      filters: [{ name: 'PNG Image', extensions: ['png'] }],
-    });
+    const filename = diagramExportName();
+    const path = isIOS()
+      ? await join(await documentDir(), filename)
+      : await saveDialog({
+          defaultPath: filename,
+          filters: [{ name: 'PNG Image', extensions: ['png'] }],
+        });
     if (!path) return;
     const buffer = new Uint8Array(await blob.arrayBuffer());
     await invoke('write_binary_file', { path, data: Array.from(buffer) });
-    toasts.success(`Saved ${path.split(/[\\/]/).pop()}`);
+    toasts.success(
+      isIOS() ? t('toast.savedToIos', { name: filename }) : `Saved ${path.split(/[\\/]/).pop()}`,
+    );
   } catch (err) {
     toasts.error(`Export failed: ${err}`);
   }

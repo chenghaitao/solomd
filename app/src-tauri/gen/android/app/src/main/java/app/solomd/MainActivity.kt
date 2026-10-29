@@ -475,6 +475,110 @@ class MainActivity : TauriActivity() {
       envelope { put("v", DocumentsContract.getDocumentId(created)) }
     } catch (e: Exception) { err(e) } }
 
+    /** Write Base64-encoded bytes to a standalone content:// URI (e.g. from ACTION_CREATE_DOCUMENT). */
+    @JvmStatic
+    fun writeContentUriBase64(uriStr: String, b64: String): String { return try {
+      val uri = Uri.parse(uriStr)
+      val r = resolver() ?: return err2("no resolver")
+      val bytes = Base64.decode(b64, Base64.DEFAULT)
+      val stream = try {
+        r.openOutputStream(uri, "wt")
+      } catch (_: Exception) {
+        try {
+          r.openOutputStream(uri, "w")
+        } catch (_: Exception) {
+          r.openOutputStream(uri)
+        }
+      }
+      stream?.use {
+        it.write(bytes)
+        it.flush()
+      } ?: return err2("openOutputStream null")
+      envelope { put("v", true) }
+    } catch (e: Exception) { err(e) } }
+
+    @JvmStatic
+    private val printFinished = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun findWebView(view: android.view.View?): android.webkit.WebView? {
+      if (view is android.webkit.WebView) return view
+      if (view is android.view.ViewGroup) {
+        for (i in 0 until view.childCount) {
+          val found = findWebView(view.getChildAt(i))
+          if (found != null) return found
+        }
+      }
+      return null
+    }
+
+    /** Trigger Android's native Print / Save-as-PDF dialog for the active WebView. */
+    @JvmStatic
+    fun printWebView(jobName: String): String {
+      val act = instance ?: return err2("no activity")
+      printFinished.set(false)
+      val errRef = AtomicReference<String?>(null)
+      val latch = java.util.concurrent.CountDownLatch(1)
+      act.runOnUiThread {
+        try {
+          val wv = findWebView(act.window?.decorView)
+          if (wv == null) {
+            errRef.set("no WebView found")
+            latch.countDown()
+            return@runOnUiThread
+          }
+          val pm = act.getSystemService(Context.PRINT_SERVICE) as? android.print.PrintManager
+          if (pm == null) {
+            errRef.set("PrintManager unavailable")
+            latch.countDown()
+            return@runOnUiThread
+          }
+          val safeName = jobName.ifEmpty { "SoloMD" }
+          val delegate = wv.createPrintDocumentAdapter(safeName)
+          val wrapper = object : android.print.PrintDocumentAdapter() {
+            override fun onStart() {
+              delegate.onStart()
+            }
+            override fun onLayout(
+              oldAttributes: android.print.PrintAttributes?,
+              newAttributes: android.print.PrintAttributes?,
+              cancellationSignal: android.os.CancellationSignal?,
+              callback: LayoutResultCallback?,
+              extras: Bundle?
+            ) {
+              delegate.onLayout(oldAttributes, newAttributes, cancellationSignal, callback, extras)
+            }
+            override fun onWrite(
+              pages: Array<out android.print.PageRange>?,
+              destination: android.os.ParcelFileDescriptor?,
+              cancellationSignal: android.os.CancellationSignal?,
+              callback: WriteResultCallback?
+            ) {
+              delegate.onWrite(pages, destination, cancellationSignal, callback)
+            }
+            override fun onFinish() {
+              try {
+                delegate.onFinish()
+              } finally {
+                printFinished.set(true)
+              }
+            }
+          }
+          pm.print(safeName, wrapper, android.print.PrintAttributes.Builder().build())
+          latch.countDown()
+        } catch (e: Exception) {
+          errRef.set(e.message ?: e.toString())
+          latch.countDown()
+        }
+      }
+      latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+      val errMsg = errRef.get()
+      if (errMsg != null) return err2(errMsg)
+      return envelope { put("v", true) }
+    }
+
+    @JvmStatic
+    fun pollPrintFinished(): String = if (printFinished.getAndSet(false)) "1" else "0"
+
     /** Delete a document (file or empty dir). */
     @JvmStatic
     fun deleteDoc(treeUri: String, docId: String): String { return try {

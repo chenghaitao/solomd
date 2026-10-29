@@ -118,16 +118,28 @@ const IMAGE_LINE_RE = /^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)\s*$/;
 // at least one body row. We don't try to parse the GFM grammar ourselves —
 // markdown-it does that — we only need a cheap detector to decide which
 // line ranges to swap with widgets.
-function isPipeRow(line: string): boolean {
-  const trimmed = line.trim();
+// #480 — tables inside blockquotes (`> | a | b |`) carry leading `>` markers;
+// strip the quote prefix when checking pipe rows, while requiring every row
+// of the table to share the same blockquote nesting depth.
+function quoteDepth(line: string): number {
+  const m = line.match(/^\s*((?:>\s*)+)/);
+  if (!m) return 0;
+  return (m[1].match(/>/g) || []).length;
+}
+function stripQuotePrefix(line: string): string {
+  return line.replace(/^\s*(?:>\s*)+/, '');
+}
+function isPipeRow(line: string, expectedQuoteDepth?: number): boolean {
+  if (expectedQuoteDepth !== undefined && quoteDepth(line) !== expectedQuoteDepth) return false;
+  const trimmed = stripQuotePrefix(line).trim();
   return trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2;
 }
-function isSeparatorRow(line: string): boolean {
-  const trimmed = line.trim();
+function isSeparatorRow(line: string, expectedQuoteDepth?: number): boolean {
+  const trimmed = stripQuotePrefix(line).trim();
   // `| --- | :---: |` etc. Only `:`, `-`, ` `, `|` characters allowed,
   // and at least one `-` per cell.
   return (
-    isPipeRow(line) &&
+    isPipeRow(line, expectedQuoteDepth) &&
     // `-` must be last in the class so it's a literal, not the range `:`..`|`
     // (which excludes `-` at 0x2D and made every real separator row fail —
     // tables never collapsed to a widget in live-edit).
@@ -1212,15 +1224,16 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             }
           }
 
-          // Table block — header + separator + ≥1 body row.
-          if (isPipeRow(line.text) && i + 1 <= lastLine) {
+          // Table block — header + separator + ≥1 body row (including inside blockquotes, #480).
+          const tableQuoteDepth = quoteDepth(line.text);
+          if (isPipeRow(line.text, tableQuoteDepth) && i + 1 <= lastLine) {
             const sepLine = doc.line(i + 1);
-            if (isSeparatorRow(sepLine.text) && i + 2 <= lastLine) {
-              // Walk forward as long as we keep seeing pipe rows.
+            if (isSeparatorRow(sepLine.text, tableQuoteDepth) && i + 2 <= lastLine) {
+              // Walk forward as long as we keep seeing pipe rows at the same quote depth.
               let endI = i + 2;
               while (endI <= lastLine) {
                 const next = doc.line(endI);
-                if (!isPipeRow(next.text)) break;
+                if (!isPipeRow(next.text, tableQuoteDepth)) break;
                 endI += 1;
               }
               const tableEnd = endI - 1; // last pipe row
@@ -1454,6 +1467,12 @@ export const liveBlocksTheme = EditorView.theme({
   '.cm-live-block--broken': {
     color: 'var(--text-faint)',
     fontStyle: 'italic',
+  },
+  '.cm-live-block--table blockquote': {
+    margin: '0.2em 0',
+    paddingLeft: '1em',
+    borderLeft: '3px solid var(--accent)',
+    color: 'var(--text-muted)',
   },
   '.cm-live-block--table table': {
     borderCollapse: 'collapse',

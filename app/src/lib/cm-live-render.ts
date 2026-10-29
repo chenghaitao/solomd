@@ -44,6 +44,8 @@ import type { Range } from '@codemirror/state';
 // tree-walk fields we touch rather than importing the real type.
 export interface MdSyntaxNode {
   name: string;
+  from: number;
+  to: number;
   parent: MdSyntaxNode | null;
   firstChild: MdSyntaxNode | null;
   nextSibling: MdSyntaxNode | null;
@@ -464,6 +466,35 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
             Math.min(nTo, view.state.doc.length),
           ).number;
           const isFenced = name === 'FencedCode';
+          const firstLineObj = view.state.doc.line(startLine);
+          const fenceIndentCols = isFenced ? Math.max(0, nFrom - firstLineObj.from) : 0;
+          let fencedMarginLeft = '';
+          if (fenceIndentCols > 0) {
+            let indentEm = Math.min(8, fenceIndentCols * 0.58);
+            let cur = (node.node as unknown as MdSyntaxNode).parent;
+            while (cur) {
+              if (cur.name === 'ListItem') {
+                for (let ch = cur.firstChild; ch; ch = ch.nextSibling) {
+                  if (ch.name === 'ListMark') {
+                    const markLine = view.state.doc.lineAt(ch.from);
+                    const mark = view.state.doc.sliceString(ch.from, ch.to);
+                    const isBullet = mark === '-' || mark === '*' || mark === '+';
+                    const leadSpaces = ch.from - markLine.from;
+                    const markCols = ch.to - ch.from + 1;
+                    indentEm = isBullet
+                      ? Math.min(6, Math.max(1.15, leadSpaces * 0.55 + 1.15))
+                      : Math.min(8, Math.max(1.65, leadSpaces * 0.55 + markCols * 0.58));
+                    break;
+                  }
+                }
+                break;
+              }
+              cur = cur.parent;
+            }
+            // `.cm-md-fenced-line` sets `font-size: 0.8125em`, so scale `em`
+            // by `1 / 0.8125` to match the list item's parent-font `em` indent.
+            fencedMarginLeft = `${(indentEm / 0.8125).toFixed(2)}em`;
+          }
           const bodyStart = isFenced ? startLine + 1 : startLine;
           const hasClosingFence =
             isFenced &&
@@ -474,11 +505,30 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
             const lineObj = view.state.doc.line(ln);
             if (!seenFencedLines.has(lineObj.from)) {
               seenFencedLines.add(lineObj.from);
+              const leadingSpaces = /^[ ]*/.exec(lineObj.text)?.[0].length ?? 0;
+              const stripCols = !showMarkers && fenceIndentCols > 0
+                ? Math.min(fenceIndentCols, leadingSpaces)
+                : 0;
+              const styleParts: string[] = [];
+              if (fencedMarginLeft) styleParts.push(`margin-left: ${fencedMarginLeft};`);
+              if (stripCols > 0) styleParts.push(`text-indent: -${stripCols}ch;`);
+              const styleAttr = styleParts.length > 0 ? styleParts.join(' ') : undefined;
               if (ln >= bodyStart && ln <= bodyEnd) {
+                const attrs: Record<string, string> = {
+                  'data-cb-line': String(ln - bodyStart + 1),
+                };
+                if (styleAttr) attrs.style = styleAttr;
                 ranges.push(
                   Decoration.line({
                     class: 'cm-md-fenced-line cm-md-fenced-body-line',
-                    attributes: { 'data-cb-line': String(ln - bodyStart + 1) },
+                    attributes: attrs,
+                  }).range(lineObj.from),
+                );
+              } else if (styleAttr) {
+                ranges.push(
+                  Decoration.line({
+                    class: 'cm-md-fenced-line',
+                    attributes: { style: styleAttr },
                   }).range(lineObj.from),
                 );
               } else {

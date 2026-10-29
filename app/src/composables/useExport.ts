@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { writeText, writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager';
 import { Image } from '@tauri-apps/api/image';
 import { documentDir, join } from '@tauri-apps/api/path';
-import { isIOS, isMacOS, isWindowsDesktop } from '../lib/platform';
+import { isIOS, isMacOS, isMobile, isWindowsDesktop } from '../lib/platform';
 // Loaded per export rather than at startup. Between them these three pull in
 // `docx`, jsPDF + html2canvas and the mermaid renderer — megabytes that a user
 // who only opens a note to read it should never have to compile.
@@ -34,7 +34,7 @@ import {
   printableBox,
   withPrintPagination,
 } from '../lib/print-pages';
-import { rewriteLinkUrls, rewriteImageUrls } from '../lib/image-resolve';
+import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls } from '../lib/image-resolve';
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
@@ -473,8 +473,13 @@ export function useExport() {
     // print dialog) doesn't show `http://tauri.localhost/...` links.
     const imageRoot = extractImageRoot(source);
     await loadRenderDeps(); // printed once — no placeholder math / plain code
+    const withLocalImages = await inlineLocalImages(
+      renderMarkdown(source),
+      imageRoot,
+      ctx.filePath,
+    );
     const body = rewriteLinkUrls(
-      rewriteImageUrls(renderMarkdown(source), imageRoot, ctx.filePath),
+      rewriteImageUrls(withLocalImages, imageRoot, ctx.filePath),
       imageRoot,
       ctx.filePath,
     );
@@ -594,6 +599,10 @@ export function useExport() {
       // rejected, the editor was left under the print-mode body state and
       // felt unresponsive ("mouse input dead after an export error" on macOS).
       cleanup();
+      if (isMobile() && !options?.forcePrintDialog) {
+        await exportPdf();
+        return;
+      }
       toasts.error(t('toast.printFailed', { error: String(e) }));
     }
   }

@@ -1207,6 +1207,22 @@ function onSelectPdfFont(v: string) {
 
         <section data-cat="basics">
           <label>
+            <input type="checkbox" :checked="settings.tabTitleFromFirstLine" @change="settings.toggleTabTitleFromFirstLine()" />
+            {{ t('settings.tabTitleFromFirstLine') }}
+          </label>
+          <div class="hint">{{ t('settings.tabTitleFromFirstLineHint') }}</div>
+        </section>
+
+        <section data-cat="basics">
+          <label>
+            <input type="checkbox" :checked="settings.autoNumberHeadings" @change="settings.toggleAutoNumberHeadings()" />
+            {{ t('settings.autoNumberHeadings') }}
+          </label>
+          <div class="hint">{{ t('settings.autoNumberHeadingsHint') }}</div>
+        </section>
+
+        <section data-cat="basics">
+          <label>
             <input type="checkbox" :checked="settings.showOutline" @change="onToggleOutlineGlobal()" />
             {{ t('settings.showOutline') }}
           </label>

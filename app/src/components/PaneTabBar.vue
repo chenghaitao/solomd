@@ -11,6 +11,7 @@ import { useFiles } from '../composables/useFiles';
 import { requestRevealInTree } from '../composables/useFileTreeReveal';
 import { shortcutLabel } from '../lib/keybindings';
 import { revealLabelKey, usesCommandKey } from '../lib/platform';
+import { displayTabTitle, displayTabTooltip } from '../lib/tab-title';
 import { useI18n } from '../i18n';
 import Icon from './Icons.vue';
 import type { SplitDirection } from '../types';
@@ -366,7 +367,7 @@ onBeforeUnmount(() => {
   tabsMeasureRaf = 0;
 });
 watch(
-  () => tabs.tabs.map((x) => x.fileName).join('\u0000'),
+  () => tabs.tabs.map((x) => displayTabTitle(x, settings.tabTitleFromFirstLine)).join('\u0000'),
   () => nextTick(scheduleMeasureTabsOverflow),
 );
 
@@ -378,6 +379,7 @@ const filteredTabList = computed(() => {
   if (!q) return tabs.tabs;
   return tabs.tabs.filter(
     (tl) =>
+      displayTabTitle(tl, settings.tabTitleFromFirstLine).toLowerCase().includes(q) ||
       tl.fileName.toLowerCase().includes(q) ||
       (tl.filePath && tl.filePath.toLowerCase().includes(q)),
   );
@@ -501,10 +503,10 @@ onBeforeUnmount(() => {
         @pointerdown="onTabPointerDown($event, tab.id)"
         @mousedown.middle="onMiddlePointerDown($event, tab.id)"
         @contextmenu="onContextMenu($event, tab.id)"
-        :title="tab.filePath || tab.fileName"
+        :title="displayTabTooltip(tab, settings.tabTitleFromFirstLine)"
       >
         <span v-if="tab.pinned" class="tab__pin" aria-hidden="true">📌</span>
-        <span class="tab__name">{{ tab.fileName }}</span>
+        <span class="tab__name">{{ displayTabTitle(tab, settings.tabTitleFromFirstLine) }}</span>
         <!-- One 16px slot at the end: the unsaved dot sits in it until the
              pointer arrives, then the close button takes its place. -->
         <span class="tab__end">
@@ -591,11 +593,11 @@ onBeforeUnmount(() => {
           class="ctx-item tablist__item"
           :class="{ 'tablist__item--active': tl.id === activeTabId }"
           role="menuitem"
-          :title="tl.filePath || tl.fileName"
+          :title="displayTabTooltip(tl, settings.tabTitleFromFirstLine)"
           @click="pickFromTabList(tl.id)"
         >
           <span v-if="tl.pinned" class="tablist__pin" aria-hidden="true">📌</span>
-          <span class="tablist__name">{{ tl.fileName }}</span>
+          <span class="tablist__name">{{ displayTabTitle(tl, settings.tabTitleFromFirstLine) }}</span>
           <span v-if="tabs.isDirty(tl.id)" class="tablist__dot" aria-hidden="true"></span>
         </button>
       </div>

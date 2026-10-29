@@ -173,6 +173,67 @@ export function selectLine(doc: string, from: number, to: number = from): Range 
 
 const HEADING = /^( {0,3})(#{1,6})([ \t]+|$)/;
 const NOT_PARAGRAPH = /^\s*(?:[-*+]\s|\d+[.)]\s|>|\||```|~~~|<|\$\$|---\s*$|\*\*\*\s*$|___\s*$)/;
+const FENCE_LINE = /^[ \t]*(?:>[ \t]?)*(`{3,}|~{3,})(.*)$/;
+
+/**
+ * When the caret or selection sits inside a fenced code block, return the
+ * character range of the block's inner body (excluding the opening and closing
+ * fence lines) so `Ctrl/Cmd+A` selects just the code block first.
+ *
+ * Returns `null` when the selection is outside any fenced block, when the code
+ * block has no body lines, or when the selection already covers the entire
+ * code block body (so pressing `Ctrl/Cmd+A` a second time selects the whole
+ * document).
+ */
+export function selectCodeBlockBody(doc: string, from: number, to: number = from): Range | null {
+  const selFrom = Math.max(0, Math.min(from, to));
+  const selTo = Math.min(doc.length, Math.max(from, to));
+  const lines = doc.split('\n');
+
+  let offset = 0;
+  let openFence: { ch: string; len: number; openStart: number; bodyStart: number } | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineStart = offset;
+    const lineEnd = offset + line.length;
+    const m = FENCE_LINE.exec(line);
+
+    if (!openFence) {
+      if (m) {
+        openFence = {
+          ch: m[1][0],
+          len: m[1].length,
+          openStart: lineStart,
+          bodyStart: Math.min(doc.length, lineEnd + 1),
+        };
+      }
+    } else if (m && m[1][0] === openFence.ch && m[1].length >= openFence.len && m[2].trim() === '') {
+      const closeStart = lineStart;
+      const closeEnd = lineEnd;
+      if (selFrom >= openFence.openStart && selTo <= closeEnd) {
+        const bodyFrom = Math.min(openFence.bodyStart, closeStart);
+        const bodyTo = Math.max(bodyFrom, closeStart > openFence.bodyStart ? closeStart - 1 : closeStart);
+        if (bodyTo <= bodyFrom) return null;
+        if (selFrom === bodyFrom && selTo === bodyTo) return null;
+        return { from: bodyFrom, to: bodyTo };
+      }
+      openFence = null;
+    }
+
+    offset = lineEnd + 1;
+  }
+
+  if (openFence && selFrom >= openFence.openStart && selTo <= doc.length) {
+    const bodyFrom = openFence.bodyStart;
+    const bodyTo = doc.length;
+    if (bodyTo <= bodyFrom) return null;
+    if (selFrom === bodyFrom && selTo === bodyTo) return null;
+    return { from: bodyFrom, to: bodyTo };
+  }
+
+  return null;
+}
 
 /** Which lines sit inside a fenced code block (so ⌘= there does nothing). */
 function fencedLines(lines: string[]): boolean[] {
@@ -313,6 +374,9 @@ export function autoNumberHeadings(
     }
   }
 
+  const numberedLines = [...lines];
+  const unnumberedLines = [...lines];
+  let hasOrphanNumber = false;
   const headingIndices: Array<{ idx: number; indent: string; hashes: string; level: number; rest: string; cleanRest: string }> = [];
   for (let i = bodyStartIdx; i < lines.length; i++) {
     if (fenced[i]) continue;
@@ -322,6 +386,14 @@ export function autoNumberHeadings(
     if (!rest.trim()) continue;
     const numMatch = HEADING_NUM_PREFIX.exec(rest);
     const cleanRest = numMatch ? rest.slice(numMatch[0].length) : rest;
+    if (!cleanRest.trim()) {
+      if (numMatch) {
+        numberedLines[i] = `${m[1]}${m[2]} ${cleanRest}`;
+        unnumberedLines[i] = `${m[1]}${m[2]} ${cleanRest}`;
+        hasOrphanNumber = true;
+      }
+      continue;
+    }
     headingIndices.push({
       idx: i,
       indent: m[1],
@@ -332,13 +404,11 @@ export function autoNumberHeadings(
     });
   }
 
-  if (headingIndices.length === 0) return null;
+  if (headingIndices.length === 0 && !hasOrphanNumber) return null;
 
-  const minLevel = Math.min(...headingIndices.map((h) => h.level));
+  const minLevel = headingIndices.length > 0 ? Math.min(...headingIndices.map((h) => h.level)) : 1;
   const counters = [0, 0, 0, 0, 0, 0];
-  const numberedLines = [...lines];
-  const unnumberedLines = [...lines];
-  let allAlreadyMatchNumbered = true;
+  let allAlreadyMatchNumbered = !hasOrphanNumber;
 
   for (const h of headingIndices) {
     const depth = Math.max(0, Math.min(5, h.level - minLevel));

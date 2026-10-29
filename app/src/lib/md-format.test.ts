@@ -52,6 +52,15 @@ test('strike and inline code toggle', () => {
   assert.equal(run('`|x|`', 'code'), '|x|');
 });
 
+test('highlight wraps and unwraps with ==...==, including multi-line and CJK bare caret', () => {
+  assert.equal(run('先选中|需要高亮的文本|再按快捷键', 'highlight'), '先选中==|需要高亮的文本|==再按快捷键');
+  assert.equal(run('先选中==|需要高亮的文本|==再按快捷键', 'highlight'), '先选中|需要高亮的文本|再按快捷键');
+  assert.equal(run('先选中|==需要高亮的文本==|再按快捷键', 'highlight'), '先选中|需要高亮的文本|再按快捷键');
+  assert.equal(run('这是==高|亮==文本', 'highlight'), '这是高|亮文本');
+  assert.equal(run('|1. 第一行\n2. 第二行|', 'highlight'), '|1. ==第一行==\n2. ==第二行==|');
+  assert.equal(run('|1. ==第一行==\n2. ==第二行==|', 'highlight'), '|1. 第一行\n2. 第二行|');
+});
+
 test('link selects the url placeholder; a selected url becomes the target', () => {
   assert.equal(run('see |docs| now', 'link'), 'see [docs](|url|) now');
   assert.equal(run('|https://a.b/c|', 'link'), '[|](https://a.b/c)');
@@ -202,5 +211,31 @@ test('#442: underline wraps and unwraps with <u>...</u>', () => {
   assert.equal(run('a |<u>word</u>| b', 'underline'), 'a |word| b');
   assert.equal(run('|line 1\nline 2|', 'underline'), '|<u>line 1</u>\n<u>line 2</u>|');
   assert.equal(run('|<u>line 1</u>\n<u>line 2</u>|', 'underline'), '|line 1\nline 2|');
+});
+
+test('code block on a list soft-break line indents fences and inner line to match the list item', () => {
+  assert.equal(
+    run('1. 列表一\n   |', 'codeblock'),
+    '1. 列表一\n   ```|\n   \n   ```',
+  );
+  assert.equal(
+    run('- 列表一\n  |', 'codeblock'),
+    '- 列表一\n  ```|\n  \n  ```',
+  );
+  assert.equal(
+    run('1. 列表一\n|', 'codeblock'),
+    '1. 列表一\n   ```|\n   \n   ```',
+  );
+});
+
+test('Tab on an unindented code fence under a list item indents the whole fenced block', async () => {
+  assert.equal(
+    await tab('1. 列表一\n```|\n\n```\n2. 列表二'),
+    '1. 列表一\n   ```|\n   \n   ```\n2. 列表二',
+  );
+  assert.equal(
+    await tab('1. 列表一\n   ```|\n   \n   ```\n2. 列表二', true),
+    '1. 列表一\n```|\n\n```\n2. 列表二',
+  );
 });
 
