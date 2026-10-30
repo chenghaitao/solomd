@@ -249,6 +249,10 @@ class ImageWidget extends WidgetType {
     img.alt = this.cleanAlt;
     img.loading = 'lazy';
     img.draggable = false;
+    // #493 — same rule as the preview renderer: Windows' WebView origin is
+    // `http://tauri.localhost`, which Gitee's hot-link protection answers with
+    // 403. No referrer, no block.
+    img.referrerPolicy = 'no-referrer';
     if (this.width) img.style.width = this.width;
     if (this.height) img.style.height = this.height;
     if (this.lineNumber > 0) img.dataset.solomdLine = String(this.lineNumber);

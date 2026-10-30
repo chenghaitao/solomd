@@ -136,6 +136,16 @@ function getPurifier(): DOMPurifyInstance | null {
     if (tag === 'a' && el.getAttribute('target')) {
       el.setAttribute('rel', 'noopener noreferrer');
     }
+
+    // Images carry no referrer (#493). Tauri 2 serves the Windows WebView from
+    // `http://tauri.localhost`, and hosts that hot-link-protect (Gitee answers
+    // `invalid Referer header`, 403) refuse that origin outright. The
+    // markdown-it renderer sets the same attribute for `![]()` images; this is
+    // the raw-`<img>` half of the same rule, so hand-written HTML in a note
+    // behaves like the Markdown syntax.
+    if (tag === 'img') {
+      el.setAttribute('referrerpolicy', 'no-referrer');
+    }
   });
 
   purifier = instance;

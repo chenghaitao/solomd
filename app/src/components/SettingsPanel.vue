@@ -3492,6 +3492,17 @@ input[type='range']:disabled {
   height: auto;
   max-height: calc(100% - 32px);
 }
+/* #479 — between the phone layout and a desktop window there is the tablet
+   band (iPad portrait 820, Android tablets 800–1100): wide enough for the
+   two-column settings, too small for the fixed 820px panel, which either
+   overflowed the viewport or floated in backdrop with the settings squeezed
+   into a corner. Scale with the viewport instead of pinning a width. */
+@media (min-width: 601px) and (max-width: 1100px) {
+  .ds-modal.settings-modal .ds-modal__panel {
+    width: min(94vw, 900px) !important;
+    max-height: calc(100% - 24px);
+  }
+}
 .ds-modal.settings-modal .ds-modal__head {
   /* 12px total gap to the search row; 6px of it lives in .settings__search
      so the focus ring is not clipped by the scrolling body. */

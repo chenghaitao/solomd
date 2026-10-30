@@ -236,6 +236,16 @@ md.inline.ruler.before('image', 'image_spaced_path', (state, silent) => {
 const defaultImageRenderer = md.renderer.rules.image;
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx];
+  // #493 — Gitee (and a few other domestic image hosts) reject a request whose
+  // `Referer` is `http://tauri.localhost`, which is the origin Tauri 2 gives the
+  // Windows WebView. Every Gitee-hosted image therefore came back 403
+  // (`invalid Referer header`) while the same URL opened fine in a browser or
+  // in Typora. `no-referrer` is the policy a browser applies to a `file://`
+  // page, so it is a well-trodden path, and no host needs the referrer to serve
+  // a plain <img>. Kept per-element rather than a page-wide
+  // `<meta name="referrer">`: that would also drop the referrer on the OAuth
+  // and share links the app opens in the same webview.
+  token.attrSet('referrerpolicy', 'no-referrer');
   const rawAlt = token.children
     ? self.renderInlineAsText(token.children, options, env)
     : (token.content || token.attrGet('alt') || '');

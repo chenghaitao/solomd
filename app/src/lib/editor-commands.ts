@@ -439,10 +439,30 @@ export function autoNumberHeadings(
 
   const nextDoc = targetLines.join('\n');
   if (nextDoc === doc) return null;
+  // #489 — hand back the smallest range that actually differs instead of
+  // replacing the whole document. Two reasons:
+  //   - The caller dispatches this while the user is typing (a heading in a
+  //     long note). A `0 .. doc.length` replacement throws away every
+  //     CodeMirror decoration and re-measures the entire document — including
+  //     any large table in it — which is what made the viewport jump.
+  //   - It also kept the undo history from being one entry per keystroke.
+  // The common prefix ends right after the `## ` marker, so a single heading
+  // getting its `1.1.1.1.1 ` prefix becomes a few-character edit on one line.
+  let head = 0;
+  const headLimit = Math.min(doc.length, nextDoc.length);
+  while (head < headLimit && doc[head] === nextDoc[head]) head += 1;
+  let tail = 0;
+  const tailLimit = Math.min(doc.length - head, nextDoc.length - head);
+  while (
+    tail < tailLimit &&
+    doc[doc.length - 1 - tail] === nextDoc[nextDoc.length - 1 - tail]
+  ) {
+    tail += 1;
+  }
   return {
-    from: 0,
-    to: doc.length,
-    insert: nextDoc,
+    from: head,
+    to: doc.length - tail,
+    insert: nextDoc.slice(head, nextDoc.length - tail),
     ...mapSelection(lines, targetLines, 0, from, to),
   };
 }

@@ -67,6 +67,7 @@ import { useFileWatcher } from './composables/useFileWatcher';
 import { loadCustomTheme } from './lib/custom-theme';
 import { ensureCustomFontLoaded } from './lib/custom-font';
 import { isIOS, isMacOS, isAndroid, isMobile, isWindowsDesktop } from './lib/platform';
+import { systemInsetPadding, type SystemInsetsPx } from './lib/android-insets';
 import { useViewport, useTabletOverlay } from './composables/useViewport';
 import { toNativeSpec } from './lib/app-menu';
 import { themeFamily } from './lib/themes';
@@ -1266,6 +1267,24 @@ async function reconcileIosFolder() {
   }
 }
 
+// #479 — publish the system-bar padding, or zero when the OS already inset the
+// WebView. Split out of the launch code so a rotation can re-measure: whether
+// the bars overlap the content is a property of the *current* viewport, not of
+// the window that was open at launch.
+let androidInsetsCache: SystemInsetsPx = { top: 0, bottom: 0 };
+function applyAndroidInsets(insets: SystemInsetsPx = androidInsetsCache) {
+  androidInsetsCache = insets;
+  const pad = systemInsetPadding(
+    insets,
+    window.innerHeight,
+    window.screen?.height ?? 0,
+    window.devicePixelRatio || 1,
+  );
+  const root = document.documentElement;
+  root.style.setProperty('--android-safe-top', `${pad.top}px`);
+  root.style.setProperty('--android-safe-bottom', `${pad.bottom}px`);
+}
+
 onMounted(async () => {
   // Launch: put the keyboard in the editor once it has mounted (the
   // CodeMirror path never focused itself, so typing went nowhere until a
@@ -1286,13 +1305,18 @@ onMounted(async () => {
   // and was untappable. Read the real bar heights natively and inject them as
   // CSS vars (the .app padding uses max(env, var)). Physical px → CSS px via
   // devicePixelRatio. Runs only on Android; failures leave the vars unset (0).
+  // #479 — a device that already insets the activity (Android 10/12, no
+  // forced edge-to-edge) got the nav-bar height as an unusable blank strip at
+  // the bottom, in both orientations. `systemInsetPadding` compares the
+  // viewport with the screen height and pads only when the bars really do
+  // overlap, and the same measurement is redone on rotate / split-screen.
   if (isAndroid()) {
     try {
-      const insets = await invoke<{ top: number; bottom: number }>('android_system_insets');
-      const dpr = window.devicePixelRatio || 1;
-      const root = document.documentElement;
-      root.style.setProperty('--android-safe-top', `${Math.round((insets.top || 0) / dpr)}px`);
-      root.style.setProperty('--android-safe-bottom', `${Math.round((insets.bottom || 0) / dpr)}px`);
+      androidInsetsCache = await invoke<SystemInsetsPx>('android_system_insets');
+      applyAndroidInsets();
+      const reapply = () => applyAndroidInsets();
+      window.addEventListener('resize', reapply);
+      window.addEventListener('orientationchange', reapply);
     } catch (e) {
       console.warn('android_system_insets failed', e);
     }

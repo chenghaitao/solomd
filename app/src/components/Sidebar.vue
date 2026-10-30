@@ -554,7 +554,10 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  /* #495 — the file tree's rows grow to the longest name instead of cutting it
+     with an ellipsis, so this is the scroller that slides them sideways. The
+     other sections (pinned/recent/bases) stay fluid-width and never overflow. */
+  overflow-x: auto;
   display: flex;
   flex-direction: column;
   scrollbar-width: thin;

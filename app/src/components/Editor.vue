@@ -486,6 +486,16 @@ function syncEditorContentSoon(text: string) {
           view.dispatch({
             changes: { from: edit.from, to: edit.to, insert: edit.insert },
             selection: { anchor: edit.selFrom, head: edit.selTo },
+            // #489 — the numbering pass rewrites the heading line, which makes
+            // it longer than what the user is typing: `##### text` becomes
+            // `##### 1.1.1.1.1 text`. When that line is at the bottom of the
+            // viewport (the reported case: long note, caret far down), the
+            // extra prefix can push it past a soft-wrap boundary, the line
+            // grows while `scrollTop` stays, and the caret ends up below the
+            // fold — the user sees the editor "jump" while typing. A programmatic
+            // dispatch does not scroll on its own, so ask for it explicitly:
+            // `nearest` moves nothing unless the caret really is out of view.
+            effects: EditorView.scrollIntoView(edit.selTo, { y: 'nearest', yMargin: 16 }),
           });
           tabs.setContent(props.tab.id, edit.insert);
           return;
@@ -5206,12 +5216,43 @@ function focusFreshCodeMirror() {
 
 let cancelCmScrollRestore: (() => void) | null = null;
 
+/**
+ * #486 — how far the scroller still has to travel to put `line` back at the
+ * top. Measured against the live layout rather than against the saved pixel
+ * offset, so it stays correct when something above the anchor changed height
+ * while the tab was in the background (a lazily loaded image finally
+ * decoding, a table re-measuring, a fold opening). That drift is why the same
+ * saved `scrollTop` landed on a different line — and sometimes outside the
+ * viewport — on every switch.
+ *
+ * Returns null while CodeMirror has no usable metrics yet.
+ */
+function scrollDeltaForLine(v: EditorView, line: number): number | null {
+  const total = v.state.doc.lines;
+  if (!total) return null;
+  const safe = Math.max(1, Math.min(Math.floor(line), total));
+  const frac = Math.max(0, Math.min(line - safe, 0.999));
+  const block = v.lineBlockAt(v.state.doc.line(safe).from);
+  if (!block || !Number.isFinite(block.top) || !Number.isFinite(block.height)) return null;
+  // The same 8px top margin `scrollToLine` and the split-pane sync use, so a
+  // restored viewport matches one that was scrolled to by line.
+  const y = v.documentTop + block.top + frac * block.height;
+  return y - v.scrollDOM.getBoundingClientRect().top - 8;
+}
+
 function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   cancelCmScrollRestore?.();
   if (!view || !saved) return;
   const st = saved.scrollTop;
   view.scrollDOM.scrollTop = st;
-  if (st <= 0) return;
+  // #486 — re-pin on the line that was at the top, not on the pixel offset.
+  // `getViewLine()` already stored it (with the fraction scrolled into that
+  // line) for the preview pane; the editor never used it and relied on the
+  // pixel value alone.
+  const anchor = tabTopLineMemory.get(props.tab.id);
+  const anchorLine =
+    typeof anchor === 'number' && Number.isFinite(anchor) && anchor > 1 ? anchor : null;
+  if (st <= 0 && anchorLine === null) return;
   let cancelled = false;
   const dom = view.scrollDOM;
   const intentEvents = ['wheel', 'pointerdown', 'keydown', 'touchstart'] as const;
@@ -5225,6 +5266,14 @@ function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   for (const ev of intentEvents) dom.addEventListener(ev, stop, { passive: true });
   const reassert = () => {
     if (cancelled || !view) return;
+    if (anchorLine !== null) {
+      const delta = scrollDeltaForLine(view, anchorLine);
+      // delta === null means the layout is not measured yet: leave the pixel
+      // approximation in place and try again on the next tick.
+      if (delta === null) return;
+      if (Math.abs(delta) > 2) view.scrollDOM.scrollTop += delta;
+      return;
+    }
     if (Math.abs(view.scrollDOM.scrollTop - st) > 2) {
       view.scrollDOM.scrollTop = st;
     }

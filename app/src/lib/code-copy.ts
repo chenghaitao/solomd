@@ -30,19 +30,42 @@
 
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
+import { isWindowsDesktop } from './platform';
+
+/**
+ * #486 — Windows' legacy Win32 editors read the clipboard's `CF_UNICODETEXT`
+ * as CRLF-delimited and do not split on a bare LF, so a multi-line block
+ * pasted into 通达信 (or an older MFC dialog) collapses into one line. The
+ * WebView hands the string to the OS verbatim, so the conversion has to
+ * happen here.
+ *
+ * Existing CRLFs are normalised first: a caller that already built the text
+ * with `\r\n` must not end up with `\r\r\n`, which shows as a blank line in
+ * Notepad and a stray glyph in the code editor.
+ *
+ * Takes `windows` explicitly so the rule is unit-testable without a WebView.
+ */
+export function crlfForWindowsClipboard(text: string, windows: boolean): string {
+  if (!windows) return text;
+  return text.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+}
+
 /**
  * Write `text` to the system clipboard. Prefers the Tauri clipboard plugin
  * (works on every platform we ship, including the WebView2 build where
  * `navigator.clipboard` is gated on a secure context) and falls back to the
  * web API so the same code path is drivable from a plain browser during
  * self-tests.
+ *
+ * Newlines are normalised for the platform before either path writes (#486).
  */
 export async function copyPlainText(text: string): Promise<void> {
+  const payload = crlfForWindowsClipboard(text, isWindowsDesktop());
   try {
-    await writeText(text);
+    await writeText(payload);
   } catch (err) {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(payload);
       return;
     }
     throw err;

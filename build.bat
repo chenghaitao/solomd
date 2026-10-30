@@ -129,6 +129,17 @@ set "ARCH=x64"
 echo %HOSTTRIPLE% | findstr /C:"aarch64" >nul && set "ARCH=arm64"
 echo [1/5] host target: %HOSTTRIPLE%   arch=%ARCH%
 
+REM -- resolve the app version once; every artifact below is matched on it --
+REM   app\package.json is the version source that tauri.conf.json and Cargo.toml
+REM   are bumped in lockstep with (scripts\bump-version.js), so reading it here
+REM   keeps the MSI copy and the stale-artifact sweep pointing at this build.
+for /f "delims=" %%V in ('node -p "require('./app/package.json').version"') do set "APPVER=%%V"
+if not defined APPVER (
+  echo [ERROR] cannot read the version from app\package.json - is node on PATH?
+  exit /b 1
+)
+echo [0/5] app version: !APPVER!
+
 REM -- 2/5 prebuild the solomd-mcp sidecar binary ------------------------
 echo [2/5] building mcp-server - solomd-mcp - into app\src-tauri\binaries\ ...
 if defined GITBINDIR (
@@ -156,7 +167,15 @@ if errorlevel 1 (
 )
 
 REM -- 4/5 tauri build (release, msi only) -------------------------------
-echo [4/5] pnpm tauri build --bundles msi ...
+REM   tauri APPENDS to target\release\bundle\msi and never prunes it, so after a
+REM   few releases that folder accumulates every MSI ever built. Step 5 used to
+REM   copy *.msi out of it, which is why one build appeared to produce a pile of
+REM   4.14.x / 5.0.1 installers. Clear it first: the folder then holds exactly
+REM   this run's installer, and the copy below has nothing stale to pick up.
+if exist "%~dp0app\src-tauri\target\release\bundle\msi" (
+  del /Q "%~dp0app\src-tauri\target\release\bundle\msi\*.msi" >nul 2>&1
+)
+echo [4/5] pnpm tauri build --bundles msi  (version !APPVER!) ...
 REM   For the frameless Windows window style - caption bar hidden - append:
 REM     --config src-tauri/tauri.windows.conf.json
 call pnpm tauri build --bundles msi
@@ -171,10 +190,34 @@ cd /D "%~dp0"
 if not exist "local_build_output" mkdir "local_build_output"
 
 REM tauri always writes the MSI to target\release\bundle\msi, and its layout is
-REM fixed - copy it out so one folder holds everything a build produced.
-copy /Y "app\src-tauri\target\release\bundle\msi\*.msi" "local_build_output\" >nul
-if errorlevel 1 (
-  echo [WARN] MSI copy failed - it is still under app\src-tauri\target\release\bundle\msi
+REM fixed - copy it out so one folder holds everything a build produced. Match
+REM on the version instead of *.msi: the wildcard would drag along anything the
+REM bundle folder still had, which is how old installers kept reappearing here.
+if exist "%~dp0app\src-tauri\target\release\bundle\msi\SoloMD_!APPVER!_*.msi" (
+  copy /Y "%~dp0app\src-tauri\target\release\bundle\msi\SoloMD_!APPVER!_*.msi" "local_build_output\" >nul
+) else (
+  echo [WARN] no MSI for !APPVER! - look under app\src-tauri\target\release\bundle\msi
+)
+
+REM Keep local_build_output at one version. Anything that is not this build's
+REM !APPVER!_!ARCH! artifact is dropped: the folder is gitignored scratch space,
+REM and a stale MSI sitting next to a fresh one is the usual way the wrong build
+REM gets installed by accident.
+for %%F in ("local_build_output\SoloMD_*.msi" "local_build_output\SoloMD_*-portable.zip") do (
+  if exist "%%~fF" (
+    echo %%~nxF | findstr /C:"SoloMD_!APPVER!_!ARCH!" >nul
+    if errorlevel 1 (
+      echo   removing stale artifact: %%~nxF
+      del /Q "%%~fF"
+    )
+  )
+)
+for /d %%D in ("local_build_output\SoloMD_*-portable") do (
+  echo %%~nxD | findstr /C:"SoloMD_!APPVER!_!ARCH!" >nul
+  if errorlevel 1 (
+    echo   removing stale staging dir: %%~nxD
+    rmdir /S /Q "%%~fD"
+  )
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\package-portable-win.ps1" -Arch "%ARCH%"

@@ -19,6 +19,104 @@
 
 ---
 
+## [5.0.11] — 2026-10-30
+
+同步上游（`git fetch upstream --no-tags` 后无新增提交，基线仍是已合入的 5.0.9）后，修掉 6 个 issue：
+**#479**（Android 底部空白 / 设置弹框）、**#486**（滚动恢复 / 列表缩进 / 通达信换行）、
+**#489**（自动编号把光标顶出视口）、**#493**（Gitee 图片 403）、**#494**（右键菜单中文）、
+**#495**（文件树横向滚动）。
+另修 `build.bat`：一次构建曾产出多个版本的 MSI。
+
+### 1. 文件树长名字改为横向滚动（#495）
+
+不再把节点名截成 `…`。文件树面板保持原宽度，行按最长名字自然变宽，由滚动容器接管横向滚动；
+`Shift + 滚轮` 主动处理，而不是依赖 Chromium 的默认映射（WebKit 上根本没有）。
+
+| 位置 | 改动 |
+|---|---|
+| `FileTree.vue` | `.ftree__body` 加 `overflow-x: auto`；`.ftree:not(.ftree--fullnames)` 下 `.ftree__item` 用 `min-width: max-content`，`.ftree__name` 取消省略号（`text-overflow: clip`）；新增 `onTreeWheel`：从目标向上找第一个可横向滚动的祖先，`shiftKey` 时按 `deltaY` 推进 `scrollLeft`，真正滚动后 `preventDefault` 避免双重位移 |
+| `Sidebar.vue` | 文件树所在滚动块 `overflow-x: hidden` → `auto`；置顶/最近/基底三段仍是流式宽度，不会溢出 |
+| 保持原样 | `explorerFullNames`（完整名字/换行模式）下的旧省略号规则不变 |
+
+### 2. 右键菜单显示内部命令字（#494）
+
+`explorer.expandSubtree` / `collapseSubtree` / `clearRecentFolders` 三个 key 只在调用处写了中文兜底，
+i18n 表里没有，所以 `t()` 返回 key 本身，菜单直接显示内部命令字。
+
+- 19 个语言文件各补 3 条（英文与中文为正式文案，其余为英文占位）。
+- `FileTree.vue` 的三处兜底文案由中文改为英文 —— 兜底只在 key 缺失时才可能出现，留着中文会在
+  非中文界面下露出来。
+
+### 3. Gitee 图床图片 403（#493）
+
+Tauri 2 在 Windows 上给 WebView 的 origin 是 `http://tauri.localhost`，请求带出去的 `Referer` 被
+Gitee 防盗链判为非法（`40310014 invalid Referer header`）。同一 URL 在浏览器 / Typora 里正常，
+所以这不是网络问题。整页级 `<meta name="referrer">` 会顺带丢掉 OAuth 与分享链接的 referrer，
+因此按元素处理：
+
+| 渲染路径 | 改动 |
+|---|---|
+| `lib/markdown.ts` | `image` 渲染规则 `token.attrSet('referrerpolicy', 'no-referrer')`，`![](…)` 语法 |
+| `lib/sanitize-html.ts` | `afterSanitizeAttributes` 里对 `img` 补同一属性，覆盖笔记里手写的 `<img>` |
+| `lib/cm-live-blocks.ts` | `ImageWidget` 的 `img.referrerPolicy = 'no-referrer'`，实时编辑模式 |
+
+### 4. Android 底部空白行与设置弹框尺寸（#479）
+
+| 子问题 | 根因 | 处理 |
+|---|---|---|
+| 竖屏、横屏底部都有空白 | #153 为 Android 15 强制 edge-to-edge 加的系统栏 padding，在 Android 10/12 上被重复计算一次 —— 这些系统本来就把 Activity 排在系统栏之下 | 新增 `lib/android-insets.ts`：用 `window.innerHeight` 与 `screen.height` 比对判断系统栏是否真的压在 WebView 上，只有压上才 pad；`App.vue` 在 `resize` / `orientationchange` 时重测（旋转后横竖屏结论不同） |
+| 设置弹框在手机上 ✕ 被顶边裁掉 | `.ds-modal__panel` 只吃 `env(safe-area-inset-*)`，Android WebView 里它是 0 | padding 改 `max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px), 8px)`；窄屏下关闭按钮 28 → 36px |
+| 平板上弹框太小 | 面板固定 820px，在 820–1100px 视口里要么溢出要么缩在角落 | `601–1100px` 断点用 `width: min(94vw, 900px)` |
+
+该 issue 的第 2 条（Android 自定义字体输入字体名无效，需要枚举系统字体给用户选）不在本次范围，
+单独跟踪。
+
+### 5. 滚动恢复、列表缩进、代码块复制（#486）
+
+| 子问题 | 根因 | 处理 |
+|---|---|---|
+| 切回文档滚动位置不稳定，光标有时整个跑出视区 | 只按保存的 `scrollTop` 像素值恢复。离场期间上方内容一旦改变高度（图片解码完成、表格重测、折叠展开），同一像素值就落在别的行上，所以每次结果不同 | `Editor.vue` 改以「顶部行号」为锚点：`getViewLine()` 本来就存了 `tabTopLineMemory`（含行内偏移比例），恢复时用 `scrollDeltaForLine()` 按当前布局算出该行应在的位置，760ms 的稳定窗口内反复校正；像素值只作首帧近似 |
+| 有序列表续行比首行多缩进一点 | `#469` 的悬挂缩进用 em 估算（`markCols * 0.58`），与实际「marker + 一个空格」的宽度差零点几个字符 | `cm-live-render.ts` 改用 `ch`：等宽编辑区里 `padding-left / text-indent` 取 `(缩进 + marker 字符数 + 1)ch`，任何字号下都落在正文起始列 |
+| 代码块「复制」粘到通达信变成一行 | Windows 传统编辑器按 CRLF 解析 `CF_UNICODETEXT`，WebView 写进去的是纯 LF | `code-copy.ts` 新增 `crlfForWindowsClipboard()`：仅 Windows 桌面把 `\n` 归一成 `\r\n`（先并 `\r\n`，避免 `\r\r\n`），三条复制路径（预览、实时编辑、纯文本块）共用 |
+
+### 6. 自动编号把编辑位置顶出视口（#489）
+
+在长笔记下部用 `Ctrl+5` 插一个 5 级标题、开始输入标题文字时，编辑位置会突然跳到可视范围之外。
+
+| 环节 | 事实 |
+|---|---|
+| 触发点 | `Editor.vue` 的 350ms 内容同步里，`settings.autoNumberHeadings` 为真就调一次 `autoNumberHeadings(doc, …, 'add')` |
+| 原来的返回值 | `from: 0, to: doc.length, insert: 整篇文档` —— **全文替换** |
+| 为什么跳 | 新标题获得 `1.2.1.1.1 ` 前缀后变长，行在视口底部时跨过软换行边界、行高 +1，而 `scrollTop` 不变，光标被挤到视口下方；程序化 dispatch 不会自己滚动 |
+| 为什么卡 | 全文替换让 CodeMirror 丢掉全部 decoration、重测整篇（笔记里的大表格尤其明显），撤销历史也退化成"一步撤整篇" |
+
+修复两处：
+
+- `lib/editor-commands.ts`：`autoNumberHeadings` 返回**最小差异区间**（裁剪公共前缀/后缀）。给单个标题补前缀时变成一处 10 字符的纯插入，文档其余部分不产生变更。
+- `Editor.vue`：那次 dispatch 补 `EditorView.scrollIntoView(selTo, { y: 'nearest', yMargin: 16 })` —— 光标真被挤出视口时拉回，在视口内则不动。
+
+原先断言"`insert` 等于整篇文档"的 4 个单测改为对「应用 edit 后的文档」断言，新增一例专门覆盖 #489 的场景（编辑区间必须落在最后一行内）。
+
+### 7. 构建脚本产出多个版本的 MSI
+
+`tauri build` 只往 `bundle\msi` 追加、从不清理，第 5 步又用 `*.msi` 通配复制，于是历史安装包被
+一起搬进 `local_build_output`。
+
+- 读 `app/package.json` 得到 `APPVER`，构建前清空 `bundle\msi\*.msi`；
+- 只复制 `SoloMD_<APPVER>_*.msi`；
+- 复制后清扫 `local_build_output` 里版本或架构不匹配的 MSI / portable zip / 暂存目录。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `pnpm test` | 572 passed / 0 failed（新增 `code-copy.test.ts` 7 项、`android-insets.test.ts` 6 项、`image-referrer.test.ts` 3 项、#489 回归用例 1 项） |
+| `vue-tsc --noEmit` | 无错误 |
+| 版本一致性 | `package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock` 均为 5.0.11 |
+| MSI 构建 | `build.bat` 通过，产出 `SoloMD_5.0.11_x64_en-US.msi`（14.90 MiB）与 `SoloMD_5.0.11_x64-portable.zip`；构建过程中旧的 `5.0.10` MSI / zip 被自动清扫 |
+
+---
+
 ## [5.0.10] — 2026-10-27
 
 修 5.0.9 里的一个 P0：分栏模式下右侧预览正常、左边编辑区整块空白。根因是上游 5.0.7 批次带进来的

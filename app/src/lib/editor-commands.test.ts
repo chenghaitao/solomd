@@ -29,6 +29,13 @@ function edit(marked: string, fn: (d: string, f: number, t: number) => TextEdit 
   return show(out, e.selFrom, e.selTo);
 }
 
+/** Apply a TextEdit to `doc`. #489 made `autoNumberHeadings` return the
+ *  minimal changed range instead of the whole document, so tests assert the
+ *  resulting document rather than `edit.insert`. */
+function apply(doc: string, e: TextEdit): string {
+  return doc.slice(0, e.from) + e.insert + doc.slice(e.to);
+}
+
 test('select word: inside, at either edge, and nothing between spaces', () => {
   assert.equal(sel('one tw|o three', selectWord), 'one |two| three');
   assert.equal(sel('one |two three', selectWord), 'one |two| three');
@@ -98,16 +105,16 @@ test('heading commands leave lists, quotes, fences and blank lines alone', () =>
 
 test('autoNumberHeadings numbers hierarchically, skips fences, and toggles off when already numbered (#474)', () => {
   const doc = '# Intro\n## Part A\n### Detail\n## Part B\n```\n# Not a heading\n```\n# Outro';
+  const numbered = '# 1. Intro\n## 1.1 Part A\n### 1.1.1 Detail\n## 1.2 Part B\n```\n# Not a heading\n```\n# 2. Outro';
   const e1 = autoNumberHeadings(doc, 0, 0);
   assert.ok(e1);
-  assert.equal(
-    e1!.insert,
-    '# 1. Intro\n## 1.1 Part A\n### 1.1.1 Detail\n## 1.2 Part B\n```\n# Not a heading\n```\n# 2. Outro',
-  );
+  assert.equal(apply(doc, e1!), numbered);
+  // #489: only the changed span is rewritten, never the whole document.
+  assert.ok(e1!.to - e1!.from < doc.length, 'a full-document replacement would re-measure every block');
   // Running again when already accurately numbered removes the numbers cleanly.
-  const e2 = autoNumberHeadings(e1!.insert, 0, 0);
+  const e2 = autoNumberHeadings(numbered, 0, 0);
   assert.ok(e2);
-  assert.equal(e2!.insert, doc);
+  assert.equal(apply(numbered, e2!), doc);
 });
 
 test('autoNumberHeadings add-mode refreshes numbers when headings are added or cleared (#484)', () => {
@@ -116,14 +123,37 @@ test('autoNumberHeadings add-mode refreshes numbers when headings are added or c
   const eAdd = autoNumberHeadings(added, 0, 0, 'add');
   assert.ok(eAdd);
   assert.equal(
-    eAdd!.insert,
+    apply(added, eAdd!),
     '# 1. Intro\n## 1.1 Part A\n## 1.2 Inserted\n## 1.3 Part B',
   );
   // Deleting a heading's text leaving "## 1.1 " strips the orphan number and renumbers following headings
   const cleared = '# 1. Intro\n## 1.1 \n## 1.2 Part B';
   const eClear = autoNumberHeadings(cleared, 0, 0, 'add');
   assert.ok(eClear);
-  assert.equal(eClear!.insert, '# 1. Intro\n## \n## 1.1 Part B');
+  assert.equal(apply(cleared, eClear!), '# 1. Intro\n## \n## 1.1 Part B');
+});
+
+test('autoNumberHeadings returns a localised edit for a heading typed at the end (#489)', () => {
+  // The reported scenario: a long note, the caret is in a fresh 5th-level
+  // heading near the bottom, and typing the first character makes the
+  // auto-numbering pass add its prefix to that one line. Under `## 1.2 Part B`
+  // the counter is 1.2, so the fifth level reads 1.2.1.1.1.
+  const doc = '# 1. Intro\n## 1.1 Part A\n### 1.1.1 Detail\n## 1.2 Part B\n##### 标题';
+  const e = autoNumberHeadings(doc, doc.length, doc.length, 'add');
+  assert.ok(e);
+  assert.equal(
+    apply(doc, e!),
+    '# 1. Intro\n## 1.1 Part A\n### 1.1.1 Detail\n## 1.2 Part B\n##### 1.2.1.1.1 标题',
+  );
+  // The edit is confined to the last line: the editor can re-measure just
+  // that line instead of the whole document (which is what made the viewport
+  // jump while typing).
+  const lastLineStart = doc.lastIndexOf('\n') + 1;
+  assert.ok(e!.from >= lastLineStart, `edit starts at ${e!.from}, before the last line (${lastLineStart})`);
+  // Pure insertion of the prefix: nothing after it is rewritten.
+  assert.equal(e!.to, e!.from);
+  assert.equal(e!.insert, '1.2.1.1.1 ');
+  assert.equal(e!.selFrom, apply(doc, e!).length);
 });
 
 test('selectCodeBlockBody selects the code block body first and returns null when already selected', () => {

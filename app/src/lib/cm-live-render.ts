@@ -570,13 +570,21 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
           return;
         }
 
-        // ---- List markers (v4.7.1) + hanging indent (#469) ----
+        // ---- List markers (v4.7.1) + hanging indent (#469, #486) ----
         // Bullets (`-`/`*`/`+`) become a • glyph; ordered numbers stay; a
         // task item's dash is hidden so the checkbox widget leads. Revealed
         // (raw) on the caret line so the marker stays editable.
         // #469: apply a matched `padding-left: X; text-indent: -X` line
         // decoration so soft-wrapped continuation lines hang aligned with the
         // list item body instead of wrapping back under the number/bullet.
+        // #486: measure X in `ch`, not in em. The body starts exactly after
+        // the marker and the single space that separates it, i.e. a whole
+        // number of characters, and the editor is monospaced — so `ch` (the
+        // advance width of "0" in the active font) lands on that column for
+        // any font or font size. The old em estimate (`markCols * 0.58`)
+        // drifted by a fraction of a character, which is what pushed every
+        // wrapped continuation line slightly right of the first line and made
+        // the left edges of a numbered list look ragged.
         if (name === 'ListMark') {
           const lineObj = view.state.doc.lineAt(nFrom);
           const mark = view.state.doc.sliceString(nFrom, nTo);
@@ -585,10 +593,10 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
             seenListLines.add(lineObj.from);
             const leadSpaces = nFrom - lineObj.from;
             const markCols = nTo - nFrom + 1;
-            const indentEm = isBullet
-              ? Math.min(6, Math.max(1.15, leadSpaces * 0.55 + 1.15))
-              : Math.min(8, Math.max(1.65, leadSpaces * 0.55 + markCols * 0.58));
-            const indentStr = `${indentEm.toFixed(2)}em`;
+            // Marker + the space after it. Bounded so a pathological line
+            // (deep indentation, a 4-digit number) cannot swallow the pane.
+            const indentCols = Math.min(12, Math.max(2, leadSpaces + markCols + 1));
+            const indentStr = `${indentCols}ch`;
             ranges.push(
               Decoration.line({
                 class: 'cm-md-list-line',
