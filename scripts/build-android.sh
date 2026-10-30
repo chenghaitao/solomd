@@ -183,6 +183,17 @@ PYCHECK
 fi
 
 if [ "$DEBUG" -eq 0 ]; then
+  VERSION=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+  STAGE_DIR="../dist-android"
+  mkdir -p "$STAGE_DIR"
+  cp "$OUT_DIR/apk/universal/release/app-universal-universal-release.apk"   "$STAGE_DIR/SoloMD_${VERSION}_universal.apk"
+  cp "$OUT_DIR/apk/universal/release/app-universal-arm64-v8a-release.apk"   "$STAGE_DIR/SoloMD_${VERSION}_arm64-v8a.apk"
+  cp "$OUT_DIR/apk/universal/release/app-universal-armeabi-v7a-release.apk" "$STAGE_DIR/SoloMD_${VERSION}_armeabi-v7a.apk"
+  cp "$OUT_DIR/apk/universal/release/app-universal-x86_64-release.apk"      "$STAGE_DIR/SoloMD_${VERSION}_x86_64.apk"
+  cp "$OUT_DIR/bundle/universalRelease/app-universal-release.aab"           "$STAGE_DIR/SoloMD_${VERSION}.aab"
+  echo ""
+  echo "==> Staged canonical release files in dist-android/:"
+  ls -lh "$STAGE_DIR"/SoloMD_"${VERSION}"*
   echo ""
   echo "Next:"
   echo "  - Sideload: pick the per-ABI APK matching the user's phone (arm64-v8a covers ~all 2019+ devices)."

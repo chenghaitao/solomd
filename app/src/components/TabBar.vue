@@ -4,12 +4,15 @@ import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useTabsStore } from '../stores/tabs';
 import { useToastsStore } from '../stores/toasts';
+import { useSettingsStore } from '../stores/settings';
 import { useFiles } from '../composables/useFiles';
 import { useI18n } from '../i18n';
 import { revealLabelKey } from '../lib/platform';
+import { displayTabTitle, displayTabTooltip } from '../lib/tab-title';
 
 const tabs = useTabsStore();
 const toasts = useToastsStore();
+const settings = useSettingsStore();
 const files = useFiles();
 const { t } = useI18n();
 
@@ -149,9 +152,9 @@ function onTabsWheel(e: WheelEvent) {
         @click="tabs.activate(tab.id)"
         @mousedown.middle.prevent="files.closeTabSafe(tab.id)"
         @contextmenu="openMenu($event, tab.id)"
-        :title="tab.filePath || tab.fileName"
+        :title="displayTabTooltip(tab, settings.tabTitleFromFirstLine)"
       >
-        <span class="tab__name">{{ tab.fileName }}</span>
+        <span class="tab__name">{{ displayTabTitle(tab, settings.tabTitleFromFirstLine) }}</span>
         <button
           v-if="tab.language === 'markdown'"
           class="tab__outline"

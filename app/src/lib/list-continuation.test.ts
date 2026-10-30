@@ -4,7 +4,9 @@ import { test } from 'node:test';
 import {
   bumpNumberedToken,
   computeListContinuation,
+  computeListSoftBreak,
   insideFence,
+  repairIndentedFenceEdit,
   type ListContinuationOptions,
 } from './list-continuation.ts';
 
@@ -22,6 +24,15 @@ function enterWith(src: string, opts: ListContinuationOptions): string | null {
   const caret = src.indexOf('|');
   const text = src.slice(0, caret) + src.slice(caret + 1);
   const r = computeListContinuation(text, caret, caret, opts);
+  if (!r) return null;
+  return r.value.slice(0, r.caret) + '|' + r.value.slice(r.caret);
+}
+
+/** Run Shift+Enter at the `|` in `src`; returns the result with `|` at the caret. */
+function softEnter(src: string): string | null {
+  const caret = src.indexOf('|');
+  const text = src.slice(0, caret) + src.slice(caret + 1);
+  const r = computeListSoftBreak(text, caret, caret);
   if (!r) return null;
   return r.value.slice(0, r.caret) + '|' + r.value.slice(r.caret);
 }
@@ -153,4 +164,44 @@ test('an ordered item still ends the list with autoNumber off', () => {
 test('the toggles default to on', () => {
   assert.equal(enterWith('- one|', ON), '- one\n- |');
   assert.equal(enterWith('1.1 one|', ON), '1.1 one\n1.2 |');
+});
+
+test('Shift+Enter inside list items indents to the item content column', () => {
+  assert.equal(softEnter('1. 列表一|'), '1. 列表一\n   |');
+  assert.equal(softEnter('- 列表一|'), '- 列表一\n  |');
+  assert.equal(softEnter('- [ ] 任务一|'), '- [ ] 任务一\n  |');
+  assert.equal(softEnter('  1. 子列表|'), '  1. 子列表\n     |');
+  assert.equal(softEnter('1. 列表一\n   续行|'), '1. 列表一\n   续行\n   |');
+});
+
+test('Enter on an indented fence opener or inside an indented fence preserves fence indent', () => {
+  // Stepping from the opening fence line onto an existing blank body line:
+  assert.equal(
+    enter('1. 列表一\n   ```|\n   \n   ```'),
+    '1. 列表一\n   ```\n   |\n   ```',
+  );
+  // Stepping from the opening fence line onto an unindented blank body line repairs it:
+  assert.equal(
+    enter('1. 列表一\n   ```|\n\n   ```'),
+    '1. 列表一\n   ```\n   |\n   ```',
+  );
+  // Pressing Enter on an empty line inside an indented fence keeps the fence indent:
+  assert.equal(
+    enter('1. 列表一\n   ```\n|\n   ```'),
+    '1. 列表一\n   ```\n\n   |\n   ```',
+  );
+  // Pressing Enter after code inside an indented fence keeps the fence indent:
+  assert.equal(
+    enter('1. 列表一\n   ```\n   const a = 1;|\n   ```'),
+    '1. 列表一\n   ```\n   const a = 1;\n   |\n   ```',
+  );
+});
+
+test('repairIndentedFenceEdit restores missing list-fence indent when typing on an empty inner line', () => {
+  const doc = '1. 列表一\n   ```\nc\n   ```\n2. 列表二';
+  const cIdx = doc.indexOf('\nc\n') + 1;
+  const repaired = repairIndentedFenceEdit(doc, cIdx, cIdx + 1, cIdx + 1);
+  assert.ok(repaired);
+  assert.equal(repaired!.value, '1. 列表一\n   ```\n   c\n   ```\n2. 列表二');
+  assert.equal(repaired!.caret, cIdx + 4);
 });

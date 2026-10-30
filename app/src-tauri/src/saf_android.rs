@@ -184,6 +184,26 @@ pub fn saf_delete(tree_uri: String, doc_id: String) -> Result<(), String> {
     }
 }
 
+/// Write raw bytes to a standalone `content://` URI (e.g. returned by Android's
+/// SAF `ACTION_CREATE_DOCUMENT` save dialog) via `MainActivity.writeContentUriBase64`.
+#[cfg(target_os = "android")]
+pub fn write_content_uri_bytes(uri: &str, data: &[u8]) -> Result<(), String> {
+    imp::write_content_uri_bytes(uri, data)
+}
+
+/// Trigger Android's native `PrintManager` ("Save as PDF" / system print dialog)
+/// on the active WebView.
+#[cfg(target_os = "android")]
+pub fn android_print_webview(job_name: &str) -> Result<(), String> {
+    imp::print_webview(job_name)
+}
+
+/// Poll whether the Android `PrintDocumentAdapter.onFinish()` has fired.
+#[cfg(target_os = "android")]
+pub fn android_poll_print_finished() -> Result<bool, String> {
+    imp::poll_print_finished()
+}
+
 #[cfg(target_os = "android")]
 mod imp {
     use super::SafEntry;
@@ -393,5 +413,37 @@ mod imp {
             )?;
             unwrap_env(&json).map(|_| ())
         })
+    }
+
+    pub fn write_content_uri_bytes(uri: &str, data: &[u8]) -> Result<(), String> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let b64 = STANDARD.encode(data);
+        with_env(|env| {
+            let a = jstr(env, uri)?;
+            let b = jstr(env, &b64)?;
+            let json = call_str(
+                "writeContentUriBase64",
+                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&a), JValue::Object(&b)],
+            )?;
+            unwrap_env(&json).map(|_| ())
+        })
+    }
+
+    pub fn print_webview(job_name: &str) -> Result<(), String> {
+        with_env(|env| {
+            let a = jstr(env, job_name)?;
+            let json = call_str(
+                "printWebView",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&a)],
+            )?;
+            unwrap_env(&json).map(|_| ())
+        })
+    }
+
+    pub fn poll_print_finished() -> Result<bool, String> {
+        let s = call_str("pollPrintFinished", "()Ljava/lang/String;", &[])?;
+        Ok(s == "1")
     }
 }

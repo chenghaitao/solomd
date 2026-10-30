@@ -12,6 +12,7 @@ import { useFiles } from '../composables/useFiles';
 import { requestRevealInTree } from '../composables/useFileTreeReveal';
 import { shortcutLabel } from '../lib/keybindings';
 import { revealLabelKey, usesCommandKey } from '../lib/platform';
+import { displayTabTitle, displayTabTooltip } from '../lib/tab-title';
 import { useI18n } from '../i18n';
 import Icon from './Icons.vue';
 import type { SplitDirection, Tab } from '../types';
@@ -50,7 +51,12 @@ const tabsEl = ref<HTMLElement | null>(null);
  * so, in the user's words: the path, then "deleted".
  */
 function tabTitle(tab: Tab): string {
-  const base = tab.filePath || tab.fileName;
+  // Upstream's tooltip leads with the first-line title when
+  // `tabTitleFromFirstLine` is on (#…); the fork's missing-file note still
+  // applies on top, so a deleted file never reads as if it were still there.
+  const base = displayTabTooltip(tab, settings.tabTitleFromFirstLine)
+    || tab.filePath
+    || tab.fileName;
   return missingFiles.isMissing(tab.filePath)
     ? `${base} - ${t('tabMenu.fileMissing')}`
     : base;
@@ -383,7 +389,7 @@ onBeforeUnmount(() => {
   tabsMeasureRaf = 0;
 });
 watch(
-  () => tabs.tabs.map((x) => x.fileName).join('\u0000'),
+  () => tabs.tabs.map((x) => displayTabTitle(x, settings.tabTitleFromFirstLine)).join('\u0000'),
   () => nextTick(scheduleMeasureTabsOverflow),
 );
 
@@ -395,6 +401,7 @@ const filteredTabList = computed(() => {
   if (!q) return tabs.tabs;
   return tabs.tabs.filter(
     (tl) =>
+      displayTabTitle(tl, settings.tabTitleFromFirstLine).toLowerCase().includes(q) ||
       tl.fileName.toLowerCase().includes(q) ||
       (tl.filePath && tl.filePath.toLowerCase().includes(q)),
   );
@@ -522,7 +529,7 @@ onBeforeUnmount(() => {
         :title="tabTitle(tab)"
       >
         <span v-if="tab.pinned" class="tab__pin" aria-hidden="true">📌</span>
-        <span class="tab__name">{{ tab.fileName }}</span>
+        <span class="tab__name">{{ displayTabTitle(tab, settings.tabTitleFromFirstLine) }}</span>
         <!-- One 16px slot at the end: the unsaved dot sits in it until the
              pointer arrives, then the close button takes its place. -->
         <span class="tab__end">
@@ -616,7 +623,7 @@ onBeforeUnmount(() => {
           @click="pickFromTabList(tl.id)"
         >
           <span v-if="tl.pinned" class="tablist__pin" aria-hidden="true">📌</span>
-          <span class="tablist__name">{{ tl.fileName }}</span>
+          <span class="tablist__name">{{ displayTabTitle(tl, settings.tabTitleFromFirstLine) }}</span>
           <span v-if="tabs.isDirty(tl.id)" class="tablist__dot" aria-hidden="true"></span>
         </button>
       </div>

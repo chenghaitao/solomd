@@ -17,7 +17,7 @@ import { sanitizeModernColors } from './export-colors';
 import { renderMarkdown, extractImageRoot } from './markdown';
 import { loadRenderDeps } from './render-deps';
 import type { ResolvedPdfOptions } from './pdf-options';
-import { rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
+import { inlineLocalImages, rewriteImageUrls, rewriteLinkUrls } from './image-resolve';
 import { blobToPng, loadImageBlob } from './image-clipboard';
 import { renderPlantumlForExport } from './plantuml';
 import { buildPagedCanvas, searchWindowPx } from './pdf-paginate';
@@ -368,8 +368,9 @@ export async function capturePdfRaster(
   // v4.3.0 issue #77 — also rewrite link hrefs so local-file links
   // don't bake in `http://tauri.localhost/...` URLs.
   const imageRoot = extractImageRoot(source || '');
+  const withLocalImages = await inlineLocalImages(rawHtml, imageRoot, filePath);
   const html = rewriteLinkUrls(
-    rewriteImageUrls(rawHtml, imageRoot, filePath),
+    rewriteImageUrls(withLocalImages, imageRoot, filePath),
     imageRoot,
     filePath,
   );
@@ -550,15 +551,19 @@ export async function markdownToPdfBlob(
       // jsPDF slices the raster at a fixed page height, which shears whatever
       // line of text sits on the boundary. Re-lay the raster as whole pages
       // first, so every slice lands on a row with no ink in it.
-      const paged = capture.canvas
-        ? buildPagedCanvas(
+      if (capture.canvas) {
+        try {
+          const paged = buildPagedCanvas(
             capture.canvas,
             capture.pageHeightPx,
             capture.searchUpPx,
             capture.lineHeightPx,
-          )
-        : null;
-      if (paged) capture.useCanvas(paged.canvas);
+          );
+          if (paged) capture.useCanvas(paged.canvas);
+        } catch (e) {
+          console.warn('[pdf] pagination skipped', e);
+        }
+      }
       return await capture.finish();
     } finally {
       capture.dispose();

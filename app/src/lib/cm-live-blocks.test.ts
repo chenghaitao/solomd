@@ -101,6 +101,21 @@ test('a table outside a fence still collapses to TableWidget', () => {
   assert.equal(hits.length, 1);
 });
 
+test('a table inside a blockquote collapses to TableWidget in live edit (#480)', () => {
+  const doc = [
+    'intro',
+    '',
+    '> | Header | Header |',
+    '> | --- | --- |',
+    '> | cell | cell |',
+    '',
+  ].join('\n');
+  const hits = widgets(doc).filter((w) => w.widgetName === 'TableWidget');
+  assert.equal(hits.length, 1);
+  assert.equal(lineOf(doc, hits[0].from), 3);
+  assert.equal(lineOf(doc, hits[0].to), 5);
+});
+
 test('block math inside a fence is not replaced by MathWidget', () => {
   const doc = ['```text', '$$', 'E=mc^2', '$$', '```', ''].join('\n');
   const hits = widgets(doc).filter((w) => w.widgetName === 'MathWidget');
