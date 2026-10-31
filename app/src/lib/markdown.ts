@@ -1284,9 +1284,56 @@ export function normalizeLatexDelimiters(source: string): string {
  * source of truth. The numbered-section step is gated behind its opt-in
  * setting.
  */
+// Converts backslashes to forward slashes in markdown image destinations
+// so that Windows paths like `![x](E:\photos\a.png)` survive markdown-it's
+// CommonMark escape processing (which strips `\p` → `p`, `\i` → `i`, etc.).
+// LiveEdit mode reads the raw source and is unaffected; only the preview /
+// split / PDF / DOCX pipelines go through markdown-it and need this.
+function normalizeImageBackslashPaths(source: string): string {
+  if (!source.includes('\\')) return source;
+  const lines = source.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+  let fenceChar = '';
+  const fenceRe = /^(\s*)(```+|~~~+)/;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fm = fenceRe.exec(line);
+    if (fm) {
+      if (!inFence) {
+        inFence = true;
+        fenceChar = fm[2][0];
+        out.push(line);
+        continue;
+      }
+      if (fm[2][0] === fenceChar && fm[2].length >= 3) {
+        inFence = false;
+        fenceChar = '';
+      }
+      out.push(line);
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+    // Match ![alt](path) where path contains backslashes.
+    // The path is everything between ( and ) that is not ) or whitespace at the end.
+    out.push(
+      line.replace(
+        /(!\[[^\]]*\]\()([^)\n]+?)(\s*\))/g,
+        (_match, prefix: string, path: string, suffix: string) =>
+          prefix + path.replace(/\\/g, '/') + suffix,
+      ),
+    );
+  }
+  return out.join('\n');
+}
+
 export function preprocessMarkdown(source: string): string {
   let s = normalizeTableDelimiters(unwrapInlineHtmlBlocks(source || ''));
   s = normalizeLatexDelimiters(s);
+  s = normalizeImageBackslashPaths(s);
   if (autoNumberHeadings) s = numberedSectionHeadings(s);
   // `\label` / `\eqref` are LaTeX that KaTeX does not implement — resolve
   // them to `\tag` + anchors + links here so preview, PDF, Word and image
