@@ -388,6 +388,9 @@ export const ko: I18n = {
     closeFolder: 'Close folder',
     hideTree: "파일 트리 숨기기",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "최근 폴더 기록 지우기",
+    expandSubtree: "하위 폴더 모두 펼치기",
+    collapseSubtree: "하위 폴더 모두 접기",
   },
   statusbar: {
     ln: '행',

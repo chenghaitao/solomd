@@ -439,10 +439,28 @@ export function autoNumberHeadings(
 
   const nextDoc = targetLines.join('\n');
   if (nextDoc === doc) return null;
+  // #489 — compute the minimal changed span rather than replacing 0..doc.length
+  // so CodeMirror does not tear down and re-measure every line/widget in the
+  // document (which caused the viewport to jump when typing headings).
+  let diffStart = 0;
+  const minLen = Math.min(doc.length, nextDoc.length);
+  while (diffStart < minLen && doc.charCodeAt(diffStart) === nextDoc.charCodeAt(diffStart)) {
+    diffStart++;
+  }
+  let oldEnd = doc.length;
+  let newEnd = nextDoc.length;
+  while (
+    oldEnd > diffStart &&
+    newEnd > diffStart &&
+    doc.charCodeAt(oldEnd - 1) === nextDoc.charCodeAt(newEnd - 1)
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
   return {
-    from: 0,
-    to: doc.length,
-    insert: nextDoc,
+    from: diffStart,
+    to: oldEnd,
+    insert: nextDoc.slice(diffStart, newEnd),
     ...mapSelection(lines, targetLines, 0, from, to),
   };
 }

@@ -388,6 +388,9 @@ export const ja: I18n = {
     closeFolder: 'Close folder',
     hideTree: "ファイルツリーを隠す",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "最近開いたフォルダをクリア",
+    expandSubtree: "すべてのサブフォルダを展開",
+    collapseSubtree: "すべてのサブフォルダを折りたたむ",
   },
   statusbar: {
     ln: '行',

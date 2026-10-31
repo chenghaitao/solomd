@@ -388,6 +388,9 @@ export const sv: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Dölj filträd",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Rensa senaste mappar",
+    expandSubtree: "Expandera alla undermappar",
+    collapseSubtree: "Fäll ihop alla undermappar",
   },
   statusbar: {
     ln: 'Rad',

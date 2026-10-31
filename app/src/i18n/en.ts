@@ -391,6 +391,9 @@ export const en = {
     hideTree: "Hide file tree",
     recentFolders: 'Recent folders',
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Clear recent folders",
+    expandSubtree: "Expand all subfolders",
+    collapseSubtree: "Collapse all subfolders",
   },
   statusbar: {
     ln: 'Ln',

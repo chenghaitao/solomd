@@ -100,30 +100,36 @@ test('autoNumberHeadings numbers hierarchically, skips fences, and toggles off w
   const doc = '# Intro\n## Part A\n### Detail\n## Part B\n```\n# Not a heading\n```\n# Outro';
   const e1 = autoNumberHeadings(doc, 0, 0);
   assert.ok(e1);
+  const numberedDoc = doc.slice(0, e1!.from) + e1!.insert + doc.slice(e1!.to);
   assert.equal(
-    e1!.insert,
+    numberedDoc,
     '# 1. Intro\n## 1.1 Part A\n### 1.1.1 Detail\n## 1.2 Part B\n```\n# Not a heading\n```\n# 2. Outro',
   );
   // Running again when already accurately numbered removes the numbers cleanly.
-  const e2 = autoNumberHeadings(e1!.insert, 0, 0);
+  const e2 = autoNumberHeadings(numberedDoc, 0, 0);
   assert.ok(e2);
-  assert.equal(e2!.insert, doc);
+  const unnumberedDoc = numberedDoc.slice(0, e2!.from) + e2!.insert + numberedDoc.slice(e2!.to);
+  assert.equal(unnumberedDoc, doc);
 });
 
-test('autoNumberHeadings add-mode refreshes numbers when headings are added or cleared (#484)', () => {
-  // Adding a new heading between 1.1 and 1.2 renumbers 1.2 -> 1.3
+test('autoNumberHeadings add-mode refreshes numbers with a minimal diff range (#484, #489)', () => {
+  // Adding a new heading between 1.1 and 1.2 renumbers 1.2 -> 1.3 and leaves
+  // the unchanged prefix (# 1. Intro\n## 1.1 Part A\n## ) outside [from, to].
   const added = '# 1. Intro\n## 1.1 Part A\n## Inserted\n## 1.2 Part B';
   const eAdd = autoNumberHeadings(added, 0, 0, 'add');
   assert.ok(eAdd);
+  assert.ok(eAdd!.from > '# 1. Intro\n## 1.1 Part A\n'.length, 'unchanged prefix is excluded from diff');
+  const afterAdd = added.slice(0, eAdd!.from) + eAdd!.insert + added.slice(eAdd!.to);
   assert.equal(
-    eAdd!.insert,
+    afterAdd,
     '# 1. Intro\n## 1.1 Part A\n## 1.2 Inserted\n## 1.3 Part B',
   );
   // Deleting a heading's text leaving "## 1.1 " strips the orphan number and renumbers following headings
   const cleared = '# 1. Intro\n## 1.1 \n## 1.2 Part B';
   const eClear = autoNumberHeadings(cleared, 0, 0, 'add');
   assert.ok(eClear);
-  assert.equal(eClear!.insert, '# 1. Intro\n## \n## 1.1 Part B');
+  const afterClear = cleared.slice(0, eClear!.from) + eClear!.insert + cleared.slice(eClear!.to);
+  assert.equal(afterClear, '# 1. Intro\n## \n## 1.1 Part B');
 });
 
 test('selectCodeBlockBody selects the code block body first and returns null when already selected', () => {

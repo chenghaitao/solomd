@@ -468,6 +468,12 @@ mod imp {
                     // UIScrollViewContentInsetAdjustmentNever = 2
                     let _: () = msg_send![sv, setContentInsetAdjustmentBehavior: 2isize];
                 }
+                // #498 — NEVER recurse into WKWebView's internal subviews
+                // (WKScrollView / WKContentView / iPadOS 26 transparent gesture
+                // & highlight overlay subviews). Painting those internal overlay
+                // subviews with an opaque UIColor covers the rendered web page
+                // with a solid black/dark-grey layer.
+                return;
             }
         }
         let subviews: *mut AnyObject = msg_send![view, subviews];

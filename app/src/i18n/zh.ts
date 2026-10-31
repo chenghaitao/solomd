@@ -390,6 +390,9 @@ export const zh: I18n = {
     hideTree: "隐藏文件树",
     recentFolders: '最近打开的文件夹',
     noRecentFolders: '还没有其它文件夹 —— 打开一个之后这里就能直接切换。',
+    clearRecentFolders: "清除最近打开的文件夹",
+    expandSubtree: "展开全部子文件夹",
+    collapseSubtree: "折叠全部子文件夹",
   },
   statusbar: {
     ln: '行',

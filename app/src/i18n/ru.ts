@@ -388,6 +388,9 @@ export const ru: I18n = {
     hideTree: "Скрыть дерево файлов",
     recentFolders: 'Недавние папки',
     noRecentFolders: 'Других папок пока нет — откройте папку, чтобы потом переключаться.',
+    clearRecentFolders: "Очистить недавние папки",
+    expandSubtree: "Развернуть все подпапки",
+    collapseSubtree: "Свернуть все подпапки",
   },
   statusbar: {
     ln: 'Стр',

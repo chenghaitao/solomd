@@ -388,6 +388,9 @@ export const de: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Dateibaum ausblenden",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Zuletzt geöffnete Ordner löschen",
+    expandSubtree: "Alle Unterordner ausklappen",
+    collapseSubtree: "Alle Unterordner einklappen",
   },
   statusbar: {
     ln: 'Z',

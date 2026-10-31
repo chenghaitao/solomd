@@ -388,6 +388,9 @@ export const fr: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Masquer l’arborescence",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Effacer les dossiers récents",
+    expandSubtree: "Développer tous les sous-dossiers",
+    collapseSubtree: "Réduire tous les sous-dossiers",
   },
   statusbar: {
     ln: 'Lg',

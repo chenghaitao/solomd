@@ -179,6 +179,40 @@ class Client:
         )["data"]
         return data[0] if data else None
 
+    def find_editable_version(self, app: str, platform: str):
+        """Find an existing unsubmitted / rejected version on this platform that
+        blocks `create_version` (Apple allows only one editable version per
+        platform at a time) so we can rename its `versionString` in place."""
+        editable_states = (
+            "PREPARE_FOR_SUBMISSION",
+            "DEVELOPER_REJECTED",
+            "REJECTED",
+            "METADATA_REJECTED",
+            "INVALID_BINARY",
+        )
+        data = self.get(
+            f"/v1/apps/{app}/appStoreVersions",
+            **{
+                "filter[platform]": platform,
+                "filter[appStoreState]": ",".join(editable_states),
+                "limit": 10,
+            },
+        )["data"]
+        return data[0] if data else None
+
+    def update_version_string(self, version_id: str, version_string: str):
+        """Rename an existing editable `appStoreVersion` to `version_string`."""
+        return self.patch(
+            f"/v1/appStoreVersions/{version_id}",
+            {
+                "data": {
+                    "type": "appStoreVersions",
+                    "id": version_id,
+                    "attributes": {"versionString": version_string},
+                }
+            },
+        )["data"]
+
     def create_version(self, app: str, platform: str, version_string: str,
                        release_type: str = "AFTER_APPROVAL"):
         return self.post(

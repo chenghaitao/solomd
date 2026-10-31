@@ -212,11 +212,12 @@ export function activeLineExtension(on: boolean): Extension {
   return EditorView.theme({
     '.cm-content .cm-line.cm-activeLine': {
       backgroundColor:
-        'color-mix(in srgb, #f48fb1 16%, color-mix(in srgb, var(--accent) 8%, transparent))',
+        'color-mix(in srgb, #f48fb1 22%, color-mix(in srgb, var(--accent) 8%, transparent))',
       borderRadius: '3px',
     },
     '&.cm-dark .cm-content .cm-line.cm-activeLine': {
-      backgroundColor: 'color-mix(in srgb, var(--accent) 11%, transparent)',
+      backgroundColor:
+        'color-mix(in srgb, #f48fb1 14%, color-mix(in srgb, var(--accent) 11%, transparent))',
       borderRadius: '3px',
     },
   });

@@ -388,6 +388,9 @@ export const pl: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Ukryj drzewo plików",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Wyczyść ostatnie foldery",
+    expandSubtree: "Rozwiń wszystkie podfoldery",
+    collapseSubtree: "Zwiń wszystkie podfoldery",
   },
   statusbar: {
     ln: 'Wrs',

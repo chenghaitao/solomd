@@ -17,6 +17,10 @@ export interface TabCaretSnapshot {
   activeBlock?: number;
   /** Caret offset inside the active block in the Windows plain-live editor. */
   blockCaret?: number;
+  /** #486 — Document offset of the visual anchor line (caret line if in view, else top visible line). */
+  anchorPos?: number;
+  /** #486 — Visual Y offset (`block.top - scrollTop`) of `anchorPos` relative to the viewport top. */
+  anchorViewportTop?: number;
 }
 
 export const tabCaretMemory = new Map<string, TabCaretSnapshot>();

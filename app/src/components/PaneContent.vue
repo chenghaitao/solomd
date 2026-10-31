@@ -89,7 +89,7 @@ function restoreLaunchCursor() {
     if (!ed || props.tab?.id !== tabId) return;
     const c = tabs.takeLaunchCursor(tabId);
     if (!c) return;
-    if (c.line <= 1 && c.col <= 1 && (tabCaretMemory.has(tabId) || tabTopLineMemory.has(tabId))) {
+    if ((c.line <= 1 && c.col <= 1) || tabCaretMemory.has(tabId) || tabTopLineMemory.has(tabId)) {
       return;
     }
     if (ed.setCaret) ed.setCaret(c.line, c.col);

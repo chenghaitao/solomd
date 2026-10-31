@@ -119,6 +119,13 @@ export const md = new MarkdownIt({
   .use(mark)
   .use(cjkFriendly);
 
+// #504 — Disable schemeless fuzzy domain auto-linking so stock ticker codes
+// like `00700.HK`, `600519.SH`, `000001.SZ`, or filenames like `README.md` are
+// not falsely turned into `http://00700.HK` links just because `.hk`/`.sh`/`.sz`/`.md`
+// happen to be valid country TLDs. Explicit `http(s)://...` URLs and `<...>`
+// autolinks continue to linkify as expected.
+md.linkify.set({ fuzzyLink: false });
+
 // #464 — Allow GFM tables to interrupt blockquotes and lists without requiring
 // a blank line, matching CodeMirror's GFM parser in Live mode (`> quote\n| a | b |`).
 const tableBlockRule = (md.block.ruler as any).__rules__?.find((r: any) => r.name === 'table');
@@ -214,6 +221,9 @@ md.inline.ruler.before('image', 'image_spaced_path', (state, silent) => {
 const defaultImageRenderer = md.renderer.rules.image;
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx];
+  if (!token.attrGet('referrerpolicy')) {
+    token.attrSet('referrerpolicy', 'no-referrer');
+  }
   const rawAlt = token.children
     ? self.renderInlineAsText(token.children, options, env)
     : (token.content || token.attrGet('alt') || '');

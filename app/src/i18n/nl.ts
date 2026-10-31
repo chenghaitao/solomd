@@ -388,6 +388,9 @@ export const nl: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Bestandsboom verbergen",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Recente mappen wissen",
+    expandSubtree: "Alle submappen uitvouwen",
+    collapseSubtree: "Alle submappen samenvouwen",
   },
   statusbar: {
     ln: 'Rg',

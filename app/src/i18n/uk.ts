@@ -388,6 +388,9 @@ export const uk: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Сховати дерево файлів",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Очистити нещодавні папки",
+    expandSubtree: "Розгорнути всі підпапки",
+    collapseSubtree: "Згорнути всі підпапки",
   },
   statusbar: {
     ln: 'Ряд',

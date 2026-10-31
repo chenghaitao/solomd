@@ -229,6 +229,8 @@ pub fn run() {
             saf_android::saf_read,
             saf_android::saf_read_base64,
             saf_android::saf_write,
+            saf_android::saf_write_base64,
+            saf_android::saf_read_content_uri_base64,
             saf_android::saf_create,
             saf_android::saf_delete,
             image_upload::upload_image,

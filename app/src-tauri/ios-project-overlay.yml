@@ -46,7 +46,10 @@ merge:
           # does not).
           UIApplicationSceneManifest:
             UIApplicationSupportsMultipleScenes: false
-            UISceneConfigurations: {}
+            UISceneConfigurations:
+              UIWindowSceneSessionRoleApplication:
+                - UISceneConfigurationName: Default Configuration
+                  UISceneDelegateClassName: TaoSceneDelegate
 
           # iPhone Duo (Cassatt / Veery) & iPad multitasking: allow dynamic
           # window/posture resizing between outer (466×678 pt, compact) and

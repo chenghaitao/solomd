@@ -465,6 +465,38 @@ class MainActivity : TauriActivity() {
       envelope { put("v", true) }
     } catch (e: Exception) { err(e) } }
 
+    /** #502 — Overwrite a SAF document with binary Base64 bytes (e.g. pasted/inserted image in _assets). */
+    @JvmStatic
+    fun writeBase64(treeUri: String, docId: String, b64: String): String { return try {
+      val uri = DocumentsContract.buildDocumentUriUsingTree(Uri.parse(treeUri), docId)
+      val r = resolver() ?: return err2("no resolver")
+      val bytes = Base64.decode(b64, Base64.DEFAULT)
+      val stream = try {
+        r.openOutputStream(uri, "wt")
+      } catch (_: Exception) {
+        try {
+          r.openOutputStream(uri, "w")
+        } catch (_: Exception) {
+          r.openOutputStream(uri)
+        }
+      }
+      stream?.use {
+        it.write(bytes)
+        it.flush()
+      } ?: return err2("openOutputStream null")
+      envelope { put("v", true) }
+    } catch (e: Exception) { err(e) } }
+
+    /** #502 — Read binary bytes from a standalone content:// URI (e.g. Android photo picker). */
+    @JvmStatic
+    fun readContentUriBase64(uriStr: String): String { return try {
+      val uri = Uri.parse(uriStr)
+      val r = resolver() ?: return err2("no resolver")
+      val bytes = r.openInputStream(uri)?.use { it.readBytes() }
+        ?: return err2("openInputStream null")
+      envelope { put("v", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
+    } catch (e: Exception) { err(e) } }
+
     /** Create a new document under parentDocId; returns its documentId. */
     @JvmStatic
     fun createDoc(treeUri: String, parentDocId: String, mime: String, name: String): String { return try {

@@ -390,6 +390,9 @@ export const pt: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Ocultar árvore de arquivos",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Limpar pastas recentes",
+    expandSubtree: "Expandir todas as subpastas",
+    collapseSubtree: "Recolher todas as subpastas",
   },
   statusbar: {
     ln: 'Lin',

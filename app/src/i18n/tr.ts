@@ -388,6 +388,9 @@ export const tr: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Dosya ağacını gizle",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Son klasörleri temizle",
+    expandSubtree: "Tüm alt klasörleri genişlet",
+    collapseSubtree: "Tüm alt klasörleri daralt",
   },
   statusbar: {
     ln: 'Sat',

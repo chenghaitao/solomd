@@ -388,6 +388,9 @@ export const it: I18n = {
     closeFolder: 'Close folder',
     hideTree: "Nascondi albero dei file",
     noRecentFolders: 'No other folders yet — open one to switch later.',
+    clearRecentFolders: "Cancella cartelle recenti",
+    expandSubtree: "Espandi tutte le sottocartelle",
+    collapseSubtree: "Comprimi tutte le sottocartelle",
   },
   statusbar: {
     ln: 'R',
