@@ -589,14 +589,26 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
           const lineObj = view.state.doc.lineAt(nFrom);
           const mark = view.state.doc.sliceString(nFrom, nTo);
           const isBullet = mark === '-' || mark === '*' || mark === '+';
+          const isTask = isBullet && listItemHasTask(node.node as unknown as MdSyntaxNode);
+          const after = view.state.doc.sliceString(
+            nTo,
+            Math.min(nTo + 1, view.state.doc.length),
+          );
+          const prefixTo = after === ' ' ? nTo + 1 : nTo;
           if (!seenListLines.has(lineObj.from)) {
             seenListLines.add(lineObj.from);
             const leadSpaces = nFrom - lineObj.from;
-            const markCols = nTo - nFrom + 1;
-            // Marker + the space after it. Bounded so a pathological line
-            // (deep indentation, a 4-digit number) cannot swallow the pane.
-            const indentCols = Math.min(12, Math.max(2, leadSpaces + markCols + 1));
-            const indentStr = `${indentCols}ch`;
+            const markLen = nTo - nFrom;
+            // #486 — Use a uniform column width (1.65em) for 1–2 digit ordered
+            // list markers (`1.`..`99.`) so single- and double-digit items in
+            // the same list share the exact same body text start X coordinate.
+            const markEm = isBullet
+              ? 1.25
+              : markLen <= 3
+                ? 1.65
+                : Math.min(5, markLen * 0.55 + 0.35);
+            const indentEm = Math.min(8, leadSpaces * 0.55 + markEm);
+            const indentStr = `${indentEm.toFixed(2)}em`;
             ranges.push(
               Decoration.line({
                 class: 'cm-md-list-line',
@@ -605,16 +617,37 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
                 },
               }).range(lineObj.from),
             );
+            // #486 — Wrap the list prefix (leading spaces + marker + trailing
+            // space) in an inline-block span of width `indentStr` (`text-indent: 0`)
+            // so the first line's body text starts at the exact same X offset
+            // (`indentStr`) as soft-wrapped continuation lines (`padding-left`).
+            if (!isTask && after === ' ') {
+              let leadFrom = nFrom;
+              while (
+                leadFrom > lineObj.from &&
+                view.state.doc.sliceString(leadFrom - 1, leadFrom) === ' '
+              ) {
+                leadFrom--;
+              }
+              const prefixWidthEm =
+                leadFrom === lineObj.from
+                  ? indentEm
+                  : Math.min(8, (nFrom - leadFrom) * 0.55 + markEm);
+              ranges.push(
+                Decoration.mark({
+                  class: 'cm-md-list-prefix',
+                  attributes: {
+                    style: `display: inline-block; width: ${prefixWidthEm.toFixed(2)}em; text-indent: 0; font-variant-numeric: tabular-nums;`,
+                  },
+                }).range(leadFrom, prefixTo),
+              );
+            }
           }
           if (showMarkers || caretTouches || nTo <= nFrom) return;
           if (!isBullet) return; // ordered list ("1.", "2)") keeps its number
-          if (listItemHasTask(node.node as unknown as MdSyntaxNode)) {
+          if (isTask) {
             // Hide "- " (dash + trailing space) — the checkbox renders the item.
-            const after = view.state.doc.sliceString(
-              nTo,
-              Math.min(nTo + 1, view.state.doc.length),
-            );
-            ranges.push(hideDeco.range(nFrom, after === ' ' ? nTo + 1 : nTo));
+            ranges.push(hideDeco.range(nFrom, prefixTo));
           } else {
             ranges.push(bulletDeco.range(nFrom, nTo));
           }

@@ -483,6 +483,7 @@ function syncEditorContentSoon(text: string) {
         const edit = autoNumberHeadings(curDoc, sel.from, sel.to, 'add');
         if (edit) {
           skipNextAutoNumber = true;
+          const prevScrollTop = view.scrollDOM.scrollTop;
           view.dispatch({
             changes: { from: edit.from, to: edit.to, insert: edit.insert },
             selection: { anchor: edit.selFrom, head: edit.selTo },
@@ -497,7 +498,10 @@ function syncEditorContentSoon(text: string) {
             // `nearest` moves nothing unless the caret really is out of view.
             effects: EditorView.scrollIntoView(edit.selTo, { y: 'nearest', yMargin: 16 }),
           });
-          tabs.setContent(props.tab.id, edit.insert);
+          if (Math.abs(view.scrollDOM.scrollTop - prevScrollTop) > 1) {
+            view.scrollDOM.scrollTop = prevScrollTop;
+          }
+          tabs.setContent(props.tab.id, view.state.doc.toString());
           return;
         }
       }
@@ -519,11 +523,15 @@ watch(
       const edit = autoNumberHeadings(curDoc, sel.from, sel.to, enabled ? 'add' : 'remove');
       if (edit) {
         skipNextAutoNumber = true;
+        const prevScrollTop = view.scrollDOM.scrollTop;
         view.dispatch({
           changes: { from: edit.from, to: edit.to, insert: edit.insert },
           selection: { anchor: edit.selFrom, head: edit.selTo },
         });
-        tabs.setContent(props.tab.id, edit.insert);
+        if (Math.abs(view.scrollDOM.scrollTop - prevScrollTop) > 1) {
+          view.scrollDOM.scrollTop = prevScrollTop;
+        }
+        tabs.setContent(props.tab.id, view.state.doc.toString());
       }
     }
   },
@@ -5132,11 +5140,23 @@ function saveCurrentTabCaret(tabId: string) {
       const el = plainBlockEditors.value[idx];
       const blockCaret = el?.selectionStart ?? 0;
       const absCaret = block ? block.start + blockCaret : 0;
+      const hostEl = plainLiveHost.value;
+      const scrollTop = hostEl?.scrollTop ?? 0;
+      const blockNode = hostEl?.querySelector<HTMLElement>(`[data-plain-block-index="${idx}"]`);
+      let anchorViewportTop: number | undefined;
+      if (hostEl && blockNode) {
+        const hostRect = hostEl.getBoundingClientRect();
+        const blockRect = blockNode.getBoundingClientRect();
+        if (blockRect.bottom > hostRect.top + 4 && blockRect.top < hostRect.bottom - 4) {
+          anchorViewportTop = blockRect.top - hostRect.top;
+        }
+      }
       tabCaretMemory.set(tabId, {
         caret: absCaret,
-        scrollTop: plainLiveHost.value?.scrollTop ?? 0,
+        scrollTop,
         activeBlock: idx,
         blockCaret,
+        anchorViewportTop,
       });
     } else if (plainEditor.value) {
       tabCaretMemory.set(tabId, {
@@ -5145,9 +5165,33 @@ function saveCurrentTabCaret(tabId: string) {
       });
     }
   } else if (view) {
+    const head = view.state.selection.main.head;
+    const scrollTop = view.scrollDOM.scrollTop;
+    const clientHeight = view.scrollDOM.clientHeight;
+    let anchorPos = head;
+    let anchorViewportTop: number | undefined;
+    try {
+      const caretBlock = view.lineBlockAt(head);
+      const caretInView =
+        clientHeight > 0 &&
+        caretBlock.bottom > scrollTop + 4 &&
+        caretBlock.top < scrollTop + clientHeight - 4;
+      if (caretInView) {
+        anchorPos = head;
+        anchorViewportTop = caretBlock.top - scrollTop;
+      } else if (scrollTop > 0) {
+        const topBlock = view.lineBlockAtHeight(scrollTop + 4);
+        anchorPos = topBlock.from;
+        anchorViewportTop = topBlock.top - scrollTop;
+      } else {
+        anchorViewportTop = caretBlock.top;
+      }
+    } catch {}
     tabCaretMemory.set(tabId, {
-      caret: view.state.selection.main.head,
-      scrollTop: view.scrollDOM.scrollTop,
+      caret: head,
+      scrollTop,
+      anchorPos,
+      anchorViewportTop,
     });
   }
 }
@@ -5217,66 +5261,74 @@ function focusFreshCodeMirror() {
 let cancelCmScrollRestore: (() => void) | null = null;
 
 /**
- * #486 — how far the scroller still has to travel to put `line` back at the
- * top. Measured against the live layout rather than against the saved pixel
- * offset, so it stays correct when something above the anchor changed height
- * while the tab was in the background (a lazily loaded image finally
- * decoding, a table re-measuring, a fold opening). That drift is why the same
- * saved `scrollTop` landed on a different line — and sometimes outside the
- * viewport — on every switch.
- *
- * Returns null while CodeMirror has no usable metrics yet.
+ * #486 — restore by document anchor, not by pixel offset. The snapshot stores
+ * the anchor position plus its offset from the viewport top (written in
+ * `saveCurrentTabCaret`), so the viewport lands on the same line even when
+ * something above it changed height while the tab was in the background (a
+ * lazily decoded image, a re-measured table, a fold opening). The plain pixel
+ * value is only the fallback for snapshots taken before the anchor existed.
  */
-function scrollDeltaForLine(v: EditorView, line: number): number | null {
-  const total = v.state.doc.lines;
-  if (!total) return null;
-  const safe = Math.max(1, Math.min(Math.floor(line), total));
-  const frac = Math.max(0, Math.min(line - safe, 0.999));
-  const block = v.lineBlockAt(v.state.doc.line(safe).from);
-  if (!block || !Number.isFinite(block.top) || !Number.isFinite(block.height)) return null;
-  // The same 8px top margin `scrollToLine` and the split-pane sync use, so a
-  // restored viewport matches one that was scrolled to by line.
-  const y = v.documentTop + block.top + frac * block.height;
-  return y - v.scrollDOM.getBoundingClientRect().top - 8;
-}
-
 function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   cancelCmScrollRestore?.();
   if (!view || !saved) return;
   const st = saved.scrollTop;
-  view.scrollDOM.scrollTop = st;
-  // #486 — re-pin on the line that was at the top, not on the pixel offset.
-  // `getViewLine()` already stored it (with the fraction scrolled into that
-  // line) for the preview pane; the editor never used it and relied on the
-  // pixel value alone.
-  const anchor = tabTopLineMemory.get(props.tab.id);
-  const anchorLine =
-    typeof anchor === 'number' && Number.isFinite(anchor) && anchor > 1 ? anchor : null;
-  if (st <= 0 && anchorLine === null) return;
-  let cancelled = false;
-  const dom = view.scrollDOM;
-  const intentEvents = ['wheel', 'pointerdown', 'keydown', 'touchstart'] as const;
-  const stop = () => {
-    if (cancelled) return;
-    cancelled = true;
-    for (const ev of intentEvents) dom.removeEventListener(ev, stop);
-    if (cancelCmScrollRestore === stop) cancelCmScrollRestore = null;
-  };
-  cancelCmScrollRestore = stop;
-  for (const ev of intentEvents) dom.addEventListener(ev, stop, { passive: true });
-  const reassert = () => {
-    if (cancelled || !view) return;
-    if (anchorLine !== null) {
-      const delta = scrollDeltaForLine(view, anchorLine);
-      // delta === null means the layout is not measured yet: leave the pixel
-      // approximation in place and try again on the next tick.
-      if (delta === null) return;
-      if (Math.abs(delta) > 2) view.scrollDOM.scrollTop += delta;
-      return;
+  const hasAnchor =
+    typeof saved.anchorPos === 'number' &&
+    typeof saved.anchorViewportTop === 'number' &&
+    (st > 0 || saved.anchorPos > 0);
+  if (hasAnchor) {
+    try {
+      const pos = Math.min(saved.anchorPos!, view.state.doc.length);
+      const margin = Math.max(
+        0,
+        Math.min(
+          Math.max(40, (view.scrollDOM.clientHeight || 400) - 32),
+          saved.anchorViewportTop!,
+        ),
+      );
+      view.dispatch({
+        effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: margin }),
+      });
+    } catch {}
+  }
+  const applyTargetScroll = () => {
+    if (!view) return;
+    if (hasAnchor) {
+      try {
+        const pos = Math.min(saved.anchorPos!, view.state.doc.length);
+        const block = view.lineBlockAt(pos);
+        const desired = Math.max(0, block.top - saved.anchorViewportTop!);
+        if (Math.abs(view.scrollDOM.scrollTop - desired) > 2) {
+          view.scrollDOM.scrollTop = desired;
+        }
+        return;
+      } catch {}
     }
     if (Math.abs(view.scrollDOM.scrollTop - st) > 2) {
       view.scrollDOM.scrollTop = st;
     }
+  };
+  applyTargetScroll();
+  if (st <= 0 && !hasAnchor) return;
+  let cancelled = false;
+  const dom = view.scrollDOM;
+  const intentEvents = ['wheel', 'pointerdown', 'keydown', 'touchstart'] as const;
+  const onRelayout = () => {
+    requestAnimationFrame(reassert);
+  };
+  const stop = () => {
+    if (cancelled) return;
+    cancelled = true;
+    for (const ev of intentEvents) dom.removeEventListener(ev, stop);
+    window.removeEventListener('solomd:cm-relayout', onRelayout);
+    if (cancelCmScrollRestore === stop) cancelCmScrollRestore = null;
+  };
+  cancelCmScrollRestore = stop;
+  for (const ev of intentEvents) dom.addEventListener(ev, stop, { passive: true });
+  window.addEventListener('solomd:cm-relayout', onRelayout);
+  const reassert = () => {
+    if (cancelled || !view) return;
+    applyTargetScroll();
   };
   nextTick(() => requestAnimationFrame(reassert));
   setTimeout(reassert, 60);
@@ -5311,6 +5363,7 @@ function restorePlainScroll(saved?: TabCaretSnapshot) {
         const pos = Math.min(saved?.blockCaret ?? 0, bEl.value.length);
         bEl.setSelectionRange(pos, pos);
       }
+      emitPlainCursorAndSelection();
     });
   }
   const st = saved?.scrollTop ?? 0;
@@ -5323,7 +5376,25 @@ function restorePlainScroll(saved?: TabCaretSnapshot) {
   for (const ev of intentEvents) el.addEventListener(ev, cancel, { passive: true });
   const reassert = () => {
     const cur = scroller();
-    if (!cancelled && cur && Math.abs(cur.scrollTop - st) > 1) cur.scrollTop = st;
+    if (cancelled || !cur) return;
+    if (
+      plainLiveEnabled.value &&
+      typeof saved?.anchorViewportTop === 'number' &&
+      typeof saved?.activeBlock === 'number'
+    ) {
+      const blockNode = cur.querySelector<HTMLElement>(
+        `[data-plain-block-index="${plainActiveBlock.value}"]`,
+      );
+      if (blockNode) {
+        const hostRect = cur.getBoundingClientRect();
+        const blockRect = blockNode.getBoundingClientRect();
+        const currentRelTop = blockRect.top - hostRect.top;
+        const desired = Math.max(0, cur.scrollTop + (currentRelTop - saved.anchorViewportTop));
+        if (Math.abs(cur.scrollTop - desired) > 1) cur.scrollTop = desired;
+        return;
+      }
+    }
+    if (Math.abs(cur.scrollTop - st) > 1) cur.scrollTop = st;
   };
   nextTick(() => requestAnimationFrame(reassert));
   setTimeout(reassert, 120);
@@ -6466,15 +6537,15 @@ const cls = computed(() => ({
 .plain-block--active {
   background: var(--bg);
 }
-/* #467 — active editing line/block tint in non-dark and dark modes. */
+/* #467 / #486 — active editing line/block tint in non-dark and dark modes. */
 .plain-block-editor--hl-line .plain-block--active,
 .plain-block-editor--hl-line .plain-block--active .plain-block__textarea {
-  background: color-mix(in srgb, #f48fb1 16%, color-mix(in srgb, var(--accent) 8%, var(--bg)));
+  background: color-mix(in srgb, #f48fb1 22%, color-mix(in srgb, var(--accent) 8%, var(--bg)));
   border-radius: 3px;
 }
 .cm-host--dark.plain-block-editor--hl-line .plain-block--active,
 .cm-host--dark.plain-block-editor--hl-line .plain-block--active .plain-block__textarea {
-  background: color-mix(in srgb, var(--accent) 11%, var(--bg));
+  background: color-mix(in srgb, #f48fb1 14%, color-mix(in srgb, var(--accent) 11%, var(--bg)));
   border-radius: 3px;
 }
 /* #316 — focus mode in the block live editor: one element per paragraph

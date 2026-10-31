@@ -245,6 +245,7 @@ class ImageWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'cm-live-block cm-live-block--image';
     const img = document.createElement('img');
+    img.referrerPolicy = 'no-referrer';
     img.src = this.src;
     img.alt = this.cleanAlt;
     img.loading = 'lazy';
@@ -629,6 +630,7 @@ class PlantumlWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'cm-live-block cm-live-block--plantuml';
     const img = document.createElement('img');
+    img.referrerPolicy = 'no-referrer';
     img.alt = 'PlantUML diagram';
     img.src = this.url;
     img.addEventListener('load', () => {

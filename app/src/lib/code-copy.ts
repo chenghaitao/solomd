@@ -29,7 +29,6 @@
  */
 
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-
 import { isWindowsDesktop } from './platform';
 
 /**

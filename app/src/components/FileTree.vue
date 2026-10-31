@@ -15,7 +15,7 @@ import { useTabsStore } from '../stores/tabs';
 import { useI18n } from '../i18n';
 import { isIOS, isMobile, revealLabelKey, usesCommandKey } from '../lib/platform';
 import { usePendingDeletes, isDeletePending, UNDO_WINDOW_MS } from '../composables/usePendingDeletes';
-import { isSafPath, fromSafPath, safList, safCreate } from '../lib/saf-fs';
+import { isSafPath, fromSafPath, safList, safCreate, safCreateDir } from '../lib/saf-fs';
 import {
   revealRequest,
   revealedPath,
@@ -1537,6 +1537,12 @@ async function commitEdit() {
       scheduleRefresh();
       await files.openPath(target, { bypassNewWindow: true });
     } else if (e.kind === 'new-dir') {
+      if (isSafPath(e.parent) && workspace.safTreeUri) {
+        await safCreateDir(workspace.safTreeUri, fromSafPath(e.parent), name);
+        editing.value = null;
+        scheduleRefresh();
+        return;
+      }
       await pendingDeletes.flushUnder(joinPath(e.parent, name));
       await invoke('fs_create_dir', { path: joinPath(e.parent, name) });
       editing.value = null;

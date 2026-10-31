@@ -151,6 +151,36 @@ pub fn saf_write(tree_uri: String, doc_id: String, content: String) -> Result<()
     }
 }
 
+/// #502 — Overwrite a SAF document with Base64-encoded binary bytes (used for
+/// saving pasted/picked images into `_assets` inside an Android SAF vault).
+#[tauri::command]
+pub fn saf_write_base64(tree_uri: String, doc_id: String, base64: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        imp::write_base64(&tree_uri, &doc_id, &base64)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (tree_uri, doc_id, base64);
+        Err("SAF is Android-only".into())
+    }
+}
+
+/// #502 — Read a standalone `content://` URI (e.g. from Android photo picker)
+/// as Base64-encoded bytes via `MainActivity.readContentUriBase64`.
+#[tauri::command]
+pub fn saf_read_content_uri_base64(uri: String) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        imp::read_content_uri_base64(&uri)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = uri;
+        Err("SAF is Android-only".into())
+    }
+}
+
 /// Create a new document under `parent_doc_id`; returns the new documentId.
 #[tauri::command]
 pub fn saf_create(
@@ -376,6 +406,35 @@ mod imp {
                 &[JValue::Object(&a), JValue::Object(&b), JValue::Object(&c)],
             )?;
             unwrap_env(&json).map(|_| ())
+        })
+    }
+
+    pub fn write_base64(tree: &str, doc: &str, b64: &str) -> Result<(), String> {
+        with_env(|env| {
+            let a = jstr(env, tree)?;
+            let b = jstr(env, doc)?;
+            let c = jstr(env, b64)?;
+            let json = call_str(
+                "writeBase64",
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&a), JValue::Object(&b), JValue::Object(&c)],
+            )?;
+            unwrap_env(&json).map(|_| ())
+        })
+    }
+
+    pub fn read_content_uri_base64(uri: &str) -> Result<String, String> {
+        with_env(|env| {
+            let a = jstr(env, uri)?;
+            let json = call_str(
+                "readContentUriBase64",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&a)],
+            )?;
+            unwrap_env(&json)?
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "readContentUriBase64: not a string".into())
         })
     }
 

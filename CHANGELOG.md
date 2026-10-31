@@ -19,6 +19,73 @@
 
 ---
 
+## [5.0.12] — 2026-10-31
+
+同步上游 `v5.0.10`（4 个提交：`f12bc98c` Windows 反斜杠图片路径、`4983ff5a` 合并 PR #496、
+`834b3c01` 上游的 8 个 issue 修复、`341f5d00` 版本号）。上游在 10-31 21:00 发的这一版，
+覆盖的 issue 与本仓库 5.0.11 有 4 个重叠（#486 / #489 / #493 / #494），两边是各自独立写的实现，
+所以这次同步的实质工作是**在重叠项上做取舍**，而不是简单合并。
+
+### 1. 上游新吸收的部分（本仓库此前没有）
+
+| issue | 内容 | 落点 |
+|---|---|---|
+| #498 | iPadOS 26 / iOS 启动黑屏：不再递归处理内部 `WKWebView` 子视图的窗口背景色，`Info.plist` 显式补 `TaoSceneDelegate` 场景配置 | `gen/android/.../MainActivity.kt`、`src-tauri/ios-project-overlay.yml`、`src-tauri/src/ios_folder.rs`、`src-tauri/src/lib.rs` |
+| #502 / #488 | Android SAF 库内的四件事：文件树建文件夹、打开 Daily Notes、把图片粘贴/插入到 `_assets/`、外部同步（Syncthing）后聚焦自动重载 | `src-tauri/src/saf_android.rs`（原生 ContentResolver 写入）、`lib/saf-fs.ts`、`lib/cm-image-paste.ts`、`composables/useDailyNotes.ts`、`composables/useFileWatcher.ts` |
+| #504 | 关闭 schemeless 模糊域名自动链接，`00700.HK` / `600519.SH` / `000001.SZ` 不再被当域名加 `http://` | `lib/markdown.ts`：`md.linkify.set({ fuzzyLink: false })` |
+| #496 | Markdown 里 Windows 反斜杠图片路径不再被 CommonMark 转义吃掉（`E:\photos\a.png` → `E:/photos/a.png`） | `lib/markdown.ts`：`normalizeImageBackslashPaths()`，跳过围栏代码块 |
+
+`#504` 与 `#380`（放行 `file:` 链接）改的是同一处，两者同时保留：先关模糊链接、再挂
+`validateLink` 覆写，互不影响。
+
+### 2. 重叠 issue 的取舍
+
+| issue | 5.0.11（本仓库） | 5.0.10（上游） | 5.0.12 采用 |
+|---|---|---|---|
+| #486 切 tab 滚动 | 顶部行号 `tabTopLineMemory` + `scrollDeltaForLine()` | 快照里存 `anchorPos`（文档偏移）+ `anchorViewportTop`（像素偏移） | **上游**：比行号多一层行内像素精度，且快照写入端本就存了这两个字段（自动合并后已在），本仓库的 `scrollDeltaForLine()` 成为死代码，删除。行号记忆继续保留 —— 预览面板仍在用 |
+| #486 列表悬挂缩进 | `ch` 单位（marker 字符数 × `1ch`） | `em` 单位 + `cm-md-list-prefix` 内联块（`tabular-nums`） | **上游**：首行正文与续行落在同一 X 坐标，`1.`–`99.` 等宽对齐；本仓库的 `ch` 版本只能近似。外围的 prefix-span 代码在上游一侧，选 `ch` 会与其不自洽 |
+| #486 复制换行 | `crlfForWindowsClipboard(text, windows)`，先并 `\r\n` 再转，`windows` 显式传参可单测 | `formatClipboardCodeText(text, windows = isWindowsDesktop())` | **本仓库**：三处调用点与本仓库单测都依赖这个名字；删掉上游那版，避免 `code-copy.ts` 里出现两份重复实现（自动合并后已重复，`isWindowsDesktop` 也被 import 两次） |
+| #489 自动编号 | head/tail 双向扫描求最小区间 | 同思路的 `charCodeAt` 版本 | **本仓库**（行为等价，注释与单测更全）；上游那次 dispatch 里的 `scrollIntoView` 保光标一并吸收 |
+| #493 Gitee 图片 403 | renderer + sanitizer DOM 遍历 + live-edit 三处，删掉 sanitizer 的字符串级正则兜底 | renderer 加守卫 + sanitizer 正则/DOM 两处 | **本仓库**：多覆盖实时编辑模式的 `ImageWidget`，正则兜底属于重复保险 |
+| #494 右键菜单 i18n | 19 个语言文件补 key，`FileTree.vue` 兜底文案改英文 | 15 个语言补 3 个 key | **本仓库**（19 个，含本仓库独有的文案） |
+
+### 3. 合并副作用与清理
+
+- **i18n 重复键**：两边都在 `explorer` 里补了 `clearRecentFolders` / `expandSubtree` /
+  `collapseSubtree`，自动合并后 15 个语言文件各出现 3 个重复键（`vue-tsc` 报 TS1117）。
+  每个文件删掉后出现的那一份，保留本仓库 5.0.11 的文案，共删 45 行。
+- **`code-copy.ts`**：删掉上游的 `formatClipboardCodeText` 与重复的 `isWindowsDesktop` import，
+  只留 `crlfForWindowsClipboard`。
+- **版本号**：`package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock` = **5.0.12**
+  （本仓库 5.0.11 已发，叠加上游 5.0.10 的内容后顺延一格）。
+- **MCP 同步到 5.0.12**：`mcp-server/Cargo.toml`、`mcp-server/Cargo.lock`、
+  `mcp-server/mcpb/manifest.json` 三处一起改，避免 mcpb 清单与 `--version` 输出对不上。
+  MCP 服务端源码本次上游没有功能改动（只有版本号），`[lints.rust] linker_messages = "allow"`
+  这条本仓库的静音配置保留。
+
+### 4. 本仓库仍然保持的差异（本次合并未回流）
+
+| 项 | 状态 |
+|---|---|
+| 去匿名遥测 | `app/src`、`src-tauri/src`、`web/src` 中无 `telemetry` / `posthog` / `plausible` / `umami` 引用 |
+| 去推广 / 赞助 / 商店分发 | `web/` 只作源码同步、不发布；`app-store/`、MAS 脚本不参与本仓库 CI |
+| 入口包拆分 | `vite.config.ts` 的 `manualChunks` 未改动；入口 `index-*.js` 967 kB（gzip 308 kB）。比 5.0.11 的 873 kB 大 94 kB，来自 #502 的 SAF 与图片粘贴新代码，不是分包退化 |
+| 放行 `file:` 链接（#380） | `markdown.ts` 的 `validateLink` 覆写仍在，并新增回归用例 |
+| 自有 CHANGELOG | 即本文件 |
+| `node:test` 直接跑 `.ts` | `app/scripts/run-tests.sh` 仍是 `--experimental-strip-types` + `test-register.mjs` |
+| Gitee 镜像 / nightly 统计 | 相关 workflow 与脚本仍是移除状态 |
+
+### 5. 验证
+
+| 项 | 结果 |
+|---|---|
+| `pnpm test`（node:test） | **577 passed / 0 failed**（新增 `upstream-sync.test.ts` 5 项：#504 ×2、#496、#380、#494） |
+| `vue-tsc --noEmit` | 无错误（修掉 i18n 重复键后） |
+| `vite build` | 成功，1m20s；入口 967 kB / gzip 308 kB，最大的懒加载块是 `chinese-convert` 与 `html2pdf` |
+| Rust / 原生 | **未构建**：本机无 cargo，`src-tauri` 的 #498 / #502 原生改动（`saf_android.rs`、`ios_folder.rs`、`MainActivity.kt`）没有编译验证，需在 Windows / macOS 上跑 `pnpm tauri build` 与 Android/iOS 真机构建 |
+
+---
+
 ## [5.0.11] — 2026-10-30
 
 同步上游（`git fetch upstream --no-tags` 后无新增提交，基线仍是已合入的 5.0.9）后，修掉 6 个 issue：
