@@ -2389,6 +2389,8 @@ export const en = {
     tab: {
       prev: "Previous Tab",
       next: "Next Tab",
+      mru: "Switch to Recent Tab",
+      mruPrev: "Switch to Previous Recent Tab",
       reopenClosed: "Reopen Closed Tab",
     },
     settings: {

@@ -2377,6 +2377,8 @@ export const tr: I18n = {
     tab: {
       prev: "Önceki sekme",
       next: "Sonraki sekme",
+      mru: "Son kullanılan sekmeye geç",
+      mruPrev: "Önceki son kullanılan sekmeye geç",
       reopenClosed: "Kapatılan sekmeyi yeniden aç",
     },
     settings: {

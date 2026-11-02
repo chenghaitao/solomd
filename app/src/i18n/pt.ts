@@ -2362,6 +2362,8 @@ export const pt: I18n = {
     tab: {
       prev: "Separador anterior",
       next: "Separador seguinte",
+      mru: "Mudar para separador recente",
+      mruPrev: "Mudar para separador recente anterior",
       reopenClosed: "Reabrir aba fechada",
     },
     settings: {

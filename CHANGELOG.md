@@ -19,6 +19,55 @@
 
 ---
 
+## [5.0.13] — 2026-11-02
+
+同步上游 `v5.0.11`（2 个提交：`f3163a67` 5 个 issue 修复、`e9d797ad` 版本号）。
+这次没有重叠实现冲突——上游的 5 个修复本仓库都没有动过相关代码，全部直接吸收。
+
+### 1. 吸收的上游修复
+
+| issue | 内容 | 主要落点 |
+|---|---|---|
+| #509 | iPadOS 冷启动黑屏（上一轮 #498 的补充修复） | `ios_folder.rs`、`ios-project-overlay.yml` |
+| #506 | Live 模式网络图片渲染：抽出 `md-image-url.ts` 统一处理图片 URL 解析 | `app/src/lib/md-image-url.ts`（新文件 + 单测） |
+| #504（上游编号） | 表格单元格点击定位 | `cm-live-blocks.ts`（+ 单测） |
+| #507 | Debian 13 + KDE 文件对话框冻结：`tauri-plugin-dialog` 改用 `xdg-portal` feature，走 `org.freedesktop.portal.FileChooser` 出进程选文件，绕开 AppImage 内置 gdk-pixbuf 里 Breeze SVG 的崩溃 | `app/src-tauri/Cargo.toml` + `Cargo.lock` |
+| #508 | Ctrl+Tab 按最近使用（MRU）顺序切换标签页 | `keybindings.ts`（+ 单测）、`useShortcuts.ts`、`stores/tabs.ts`、`stores/tiles.ts` |
+
+### 2. 冲突处理（10 个文件，全部为策略性冲突）
+
+- 版本号 5 处（`package.json` / `tauri.conf.json` / 两个 `Cargo.toml` / `mcpb manifest`）
+  + 两个 `Cargo.lock`：统一到 **5.0.13**（继续跑在上游 v5.0.11 前面一个号）。
+- `README.md` / `README.zh.md`：上游重新加回「100% 永久免费与支持者徽章」推广段、
+  应用内打赏三档与贡献者表格——**按本仓库去推广/赞助策略保持删除**。
+- `web/public/sponsors.json`：上游新增 `promoters` / `testers` 段，保留本仓库精简版。
+
+### 3. 新增：本地一键编译脚本
+
+- `scripts/build-local.sh`：按 `uname` 自动选择目标——macOS 出 Intel 版 `.dmg`
+  （`x86_64-apple-darwin`，Apple Silicon 上自动 `rustup target add` 交叉编译；
+  `SOLOMD_MAC_TARGET=aarch64-apple-darwin` 可改出 ARM 版）、Windows（Git Bash/MSYS）
+  出 x64 `.msi`、Linux 兜底出 `.deb/.AppImage`。
+  与 CI 相同的两个关键点已写进脚本注释：sidecar 必须在 cargo build 前按目标三元组
+  预构建（Tauri 的 build.rs 在编译期校验 externalBin）；`beforeBundleCommand` 只写
+  host 命名文件、不会覆盖预构建产物。产物路径在结束时打印。
+- `scripts/build-local.cmd`：Windows CMD/PowerShell 入口，转调 Git Bash 执行上述脚本。
+
+### 4. web 站点文案
+
+吸收上游的 Hero/FactPack/whats-new 更新，并把 44 处 `5.0.11` 版本字样统一改为 `5.0.13`。
+
+### 5. 验证
+
+- `node:test`：**584 passed / 0 failed**（上游新增 `md-image-url`、`cm-live-blocks`、
+  `keybindings` 三组单测）。
+- `vue-tsc --noEmit`：无错误。
+- 遥测关键词全仓复核：仅剩删除守卫注释与 CSS 选择器，无实际调用；`manualChunks`、
+  `file:` 链接放行（#380）、node:test 跑 `.ts` 均未受影响。
+- Rust 侧未本地编译（本机无 cargo），`#507` 的 `xdg-portal` 依赖变更待 CI 构建验证。
+
+---
+
 ## [5.0.12] — 2026-10-31
 
 同步上游 `v5.0.10`（4 个提交：`f12bc98c` Windows 反斜杠图片路径、`4983ff5a` 合并 PR #496、

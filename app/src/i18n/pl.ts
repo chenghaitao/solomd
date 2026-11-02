@@ -2377,6 +2377,8 @@ export const pl: I18n = {
     tab: {
       prev: "Poprzednia karta",
       next: "Następna karta",
+      mru: "Przełącz na ostatnią kartę",
+      mruPrev: "Przełącz na poprzednią ostatnią kartę",
       reopenClosed: "Przywróć zamkniętą kartę",
     },
     settings: {

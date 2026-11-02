@@ -2377,6 +2377,8 @@ export const nl: I18n = {
     tab: {
       prev: "Vorig tabblad",
       next: "Volgend tabblad",
+      mru: "Wisselen naar recent tabblad",
+      mruPrev: "Wisselen naar vorig recent tabblad",
       reopenClosed: "Gesloten tabblad heropenen",
     },
     settings: {

@@ -2360,6 +2360,8 @@ export const es: I18n = {
     tab: {
       prev: "Pestaña anterior",
       next: "Pestaña siguiente",
+      mru: "Cambiar a la pestaña reciente",
+      mruPrev: "Cambiar a la pestaña reciente anterior",
       reopenClosed: "Reabrir pestaña cerrada",
     },
     settings: {

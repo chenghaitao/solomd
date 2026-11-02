@@ -2360,6 +2360,8 @@ export const ja: I18n = {
     tab: {
       prev: "前のタブ",
       next: "次のタブ",
+      mru: "最近使ったタブに切り替え",
+      mruPrev: "前の最近使ったタブに切り替え",
       reopenClosed: "閉じたタブを再度開く",
     },
     settings: {
