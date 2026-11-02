@@ -1,6 +1,6 @@
 [package]
 name = "solomd"
-version = "5.0.13"
+version = "5.0.14"
 description = "SoloMD — a lightweight, cross-platform Markdown + plain text editor"
 authors = ["zhitong"]
 edition = "2021"
@@ -195,6 +195,13 @@ core-foundation = "0.10"
 core-foundation-sys = "0.8"
 objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSArray", "NSString", "NSUserDefaults", "NSURL", "NSGeometry"] }
+
+# App Store rating sheet (src/store_review.rs) on iOS; macOS uses the
+# objc2 already listed above. Kept from upstream even though this fork drops
+# the rating prompt itself: the dependency is what makes the iOS target
+# compile when any of the other objc2 modules is touched.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.5"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = [

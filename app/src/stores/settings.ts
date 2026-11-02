@@ -76,6 +76,10 @@ interface Settings {
    *  on-disk filename (off by default). Useful when a 3rd-party tool opens
    *  temporary/UUID-named files in SoloMD. */
   tabTitleFromFirstLine: boolean;
+  /** Before saving an existing file path, check whether the file still exists
+   *  on disk; if missing (e.g. a 3rd-party app cleaned up its temporary file),
+   *  prompt the user to confirm creating a new file at that path (off by default). */
+  confirmSaveMissingFile: boolean;
   /** #484 — automatically maintain hierarchical 1–6 heading numbers (`1.`, `1.1`, `1.1.1`)
    *  when headings are added, deleted, or modified (off by default). */
   autoNumberHeadings: boolean;
@@ -291,6 +295,21 @@ interface Settings {
   webdavUsername: string;
   webdavPassword: string;
   webdavRemotePath: string;
+  webdavEncrypted: boolean;
+  webdavPassphrase: string;
+  webdavAutoSync: boolean;
+  // Local personal cloud drive encrypted backup & sync directory (百度网盘 / 阿里云盘 / 夸克网盘 / OneDrive / iCloud / 坚果云).
+  cloudVaultDir: string;
+  cloudVaultPassphrase: string;
+  cloudVaultAutoSync: boolean;
+  // Direct Personal Cloud Drive OpenAPI encrypted backup & sync (百度网盘 OpenAPI / 阿里云盘 OpenAPI / OneDrive / Dropbox).
+  cloudApiProvider: 'baidu' | 'alipan' | 'onedrive' | 'dropbox';
+  cloudApiToken: string;
+  cloudApiClientId: string;
+  cloudApiClientSecret: string;
+  cloudApiRemotePath: string;
+  cloudApiPassphrase: string;
+  cloudApiAutoSync: boolean;
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
   // status bar. Off-by-default-ish: the pill stays inert unless the doc's
   // YAML front matter sets a `goal:` key, so this toggle is a hard kill
@@ -652,6 +671,7 @@ function defaults(): Settings {
     alwaysShowMarkers: false,
     highlightCurrentLine: true,
     tabTitleFromFirstLine: false,
+    confirmSaveMissingFile: false,
     autoNumberHeadings: false,
     v507HighlightLineMigrated: true,
     codeFontFamily: '',
@@ -766,6 +786,19 @@ function defaults(): Settings {
     webdavUsername: '',
     webdavPassword: '',
     webdavRemotePath: '/SoloMD',
+    webdavEncrypted: false,
+    webdavPassphrase: '',
+    webdavAutoSync: false,
+    cloudVaultDir: '',
+    cloudVaultPassphrase: '',
+    cloudVaultAutoSync: false,
+    cloudApiProvider: 'baidu',
+    cloudApiToken: '',
+    cloudApiClientId: '',
+    cloudApiClientSecret: '',
+    cloudApiRemotePath: '/apps/SoloMD',
+    cloudApiPassphrase: '',
+    cloudApiAutoSync: false,
     showWritingStats: true,
     showWorkspaceDailyTotal: false,
     pdfDefaults: defaultPdfDefaults(),
@@ -1213,6 +1246,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleTabTitleFromFirstLine() {
       this.tabTitleFromFirstLine = !this.tabTitleFromFirstLine;
+      this.persist();
+    },
+    toggleConfirmSaveMissingFile() {
+      this.confirmSaveMissingFile = !this.confirmSaveMissingFile;
       this.persist();
     },
     toggleAutoNumberHeadings() {

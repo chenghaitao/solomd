@@ -57,7 +57,7 @@ async function loadSponsors() {
     sponsors.value = names(data?.sponsors);
     testers.value = names(data?.testers);
   } catch {
-    /* offline or blocked — nothing to show */
+    /* offline or blocked — keep seeded list */
   }
 }
 watch(() => props.open, (o) => {

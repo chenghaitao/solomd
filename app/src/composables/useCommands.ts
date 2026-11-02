@@ -763,6 +763,8 @@ export function useCommands(): Command[] {
             username: settings.webdavUsername,
             password: settings.webdavPassword,
             remotePath: settings.webdavRemotePath,
+            encrypted: settings.webdavEncrypted,
+            passphrase: settings.webdavPassphrase,
           });
           toasts.success(
             settings.language === 'zh'
@@ -796,6 +798,8 @@ export function useCommands(): Command[] {
             username: settings.webdavUsername,
             password: settings.webdavPassword,
             remotePath: settings.webdavRemotePath,
+            encrypted: settings.webdavEncrypted,
+            passphrase: settings.webdavPassphrase,
           });
           window.dispatchEvent(new CustomEvent('solomd:remote-pulled'));
           toasts.success(

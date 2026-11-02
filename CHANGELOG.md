@@ -19,6 +19,58 @@
 
 ---
 
+## [5.0.14] — 2026-11-02
+
+同步上游 `v5.0.12`（7 个提交：`9a0c0fdd` 云盘加密同步与一键更新、`bb671dbb` 版本号、`4be40e4f`/`05ee99bf` 站点版本、`eaa98dca` 保存前检查原文件、`8ece1fc3` 有序列表 10+ 防折行与拖选防回跳、`649b6a42` 安卓商店素材）。
+
+### 1. 吸收的上游新功能
+
+| 功能 | 内容 | 落点 |
+|---|---|---|
+| 个人网盘端到端加密备份与多端同步 | `Argon2id + XChaCha20-Poly1305` 零知识加密，三种模式：WebDAV E2EE（坚果云/Nextcloud/群晖/AList）、本地网盘同步目录加密保险库（`.enc` 密文）、网盘开放平台 API 直连（整库 `solomd-vault.enc`，连文件名都隐藏） | `stores/cloudSync.ts`、`src-tauri/crypto.rs`、`cloud_folder.rs`、`webdav_sync.rs` |
+| 应用内一键下载安装更新 | 应用内直接下载本平台安装包并拉起安装向导；中国大陆自动切 Gitee 镜像并互为回退 | `lib/check-update.ts` 等 |
+| 保存前检查原文件是否存在（#9） | 设置 › 基础新增开关（默认关），原文件被清理时拦下保存 | `stores/settings.ts`、`useFiles.ts` |
+| 两位数有序列表防折行 | 一级列表 `10.` 以上序号前缀盒加宽 + `white-space: pre`，正文不再被挤到下一行 | `cm-live-render.ts` / 样式 |
+| 大文件拖选防回跳 | 拖选期间冻结块级装饰重建、保留最后有效拖拽端点 | `Editor.vue`、`cm-live-render.ts` |
+| 编辑器打磨 | 列表整组转有序、缩进代码块复制/粘贴去/补对齐空格、三击选行不含换行、`\#` 转义隐藏、`Ctrl+Click` 开链接、折叠快捷键改绑不残留 | `lib/md-format.ts`、`list-renumber.ts`、`keybindings.ts` |
+
+### 2. 冲突处理（22 个文件）
+
+| 类别 | 文件 | 处理 |
+|---|---|---|
+| 版本号 | `package.json` / `tauri.conf.json` / `Cargo.toml` ×2 / `Cargo.lock` ×2 / `mcpb/manifest.json` | 统一到 **5.0.14**（本仓库继续跑在上游 v5.0.12 前面一个号） |
+| `server.json` | MCP registry 描述 | 取上游：指向真实存在的 release 资产与 sha256，本地没有可对应的 `.mcpb` |
+| 代码 | `runner.rs` | 两边各注册一个命令：本地 `fs_files_exist`（SAF 批量存在性）+ 上游 `fs_file_exists`，**两个都保留** |
+| 代码 | `md-format.ts` | 合入上游的 `mapPos`（选择区跟随重编号），保留本仓库的 `.ts` 显式后缀（node:test 直接跑 TS） |
+| 代码 | `AboutDialog.vue` | 取本地：不加内建的赞助者/推广者名单，保持「去推广」策略，赞助与测试者仍从远端 `sponsors.json` 读 |
+| 站点 | `Download.astro` / `FactPack.astro` / `Hero.astro` / `Layout.astro` / `translations.ts` | 逐块取本地（版本号），其余上游内容照常合入；共 23 处版本字样改为 5.0.14 |
+| 站点 | `web/data/whats-new/*.ts` | 取上游：5.0.12 的功能条目即本次发布内容，版本标记改为 5.0.14 |
+| 站点 | `web/public/sponsors.json` | 取上游（补上 `github` 字段与 promoters 段；本仓库 UI 不展示 promoters） |
+
+### 3. 按本仓库策略继续排除的上游新增内容
+
+上游 5.0.12 新增的 20 个文件属于推广 / 遥测 / 商店分发，本仓库继续不引入：
+
+| 类别 | 文件 |
+|---|---|
+| 推广 | `.gitee/ISSUE_TEMPLATE/promotion.md`、`.github/ISSUE_TEMPLATE/promotion.yml`、`web/src/components/Promote.astro`、`web/src/pages/promote.astro`、`web/src/pages/zh/promote.astro`、`scripts/add-supporter.py` |
+| 遥测 | `app/src/lib/telemetry.ts`、`app/src/components/TelemetryBanner.vue`、`web/functions/api/track.ts`、`web/functions/api/admin/stats.ts`、`web/ANALYTICS.md`、`scripts/regress/checks/K05-telemetry-setting.js` |
+| 评分提示 | `app/src/lib/star-prompt.ts`（+ 单测）、`app/src-tauri/src/store_review.rs` |
+| 镜像 / 商店分发 | `.github/workflows/mirror-gitee.yml`、`scripts/release-to-gitee.sh`、`scripts/asc-*.py`、`scripts/verify-mac-signed-interactive.py` |
+
+上游把遥测从 `tauri-plugin-aptabase` 改成前端直接 POST 到 `solomd.app/api/track`（见 `Cargo.toml` 注释），本仓库既没有该 POST 也没有 `track.ts` 端点，合并后全仓复核无残留引用。
+
+`Cargo.toml` 里上游为 `store_review.rs` 加的 `[target.'cfg(target_os = "ios")'.dependencies] objc2` **保留**：评分弹窗本身不要，但依赖留着，iOS 目标上其他 objc2 模块改动时不会缺依赖。
+
+### 4. 验证
+
+- `node:test`：**591 passed / 0 failed**（上游新增 7 例）。
+- `vue-tsc --noEmit`：无错误。
+- Rust：`cargo check` 通过（详见发布记录）。
+- 全仓复核：`TelemetryBanner` / `lib/telemetry` / `star-prompt` / `store_review` / `api/track` 无残留引用。
+
+---
+
 ## [5.0.13] — 2026-11-02
 
 同步上游 `v5.0.11`（2 个提交：`f3163a67` 5 个 issue 修复、`e9d797ad` 版本号）。
