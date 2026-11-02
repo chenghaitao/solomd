@@ -66,7 +66,8 @@
 
 - `node:test`：**591 passed / 0 failed**（上游新增 7 例）。
 - `vue-tsc --noEmit`：无错误。
-- Rust：`cargo check` 通过（详见发布记录）。
+- `cargo check`：通过（仅 6 个 dead-code 警告，均为上游函数在非目标平台未使用）。
+- `build.bat` 本地构建：`SoloMD_5.0.14_x64_en-US.msi`（14.92 MiB）+ `SoloMD_5.0.14_x64-portable.zip`（12.64 MiB），5.0.13 旧产物被自动清扫。
 - 全仓复核：`TelemetryBanner` / `lib/telemetry` / `star-prompt` / `store_review` / `api/track` 无残留引用。
 
 ---
