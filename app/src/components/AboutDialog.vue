@@ -69,11 +69,10 @@ watch(() => props.open, (o) => {
 
 const links = {
   website: 'https://solomd.app',
-  github: 'https://github.com/zhitongblog/solomd',
-  // Update/version-history surfaces point at solomd.app, not GitHub: the
-  // site serves mainland users (Cloudflare edge + Gitee mirror links) where
-  // github.com often doesn't resolve. Same policy as the update toast (#154).
-  releases: 'https://solomd.app/whats-new',
+  github: 'https://github.com/chenghaitao/solomd',
+  // This fork ships its own builds, so update / version-history surfaces
+  // point at the fork's GitHub releases rather than upstream's site.
+  releases: 'https://github.com/chenghaitao/solomd/releases',
   sponsor: 'https://solomd.app/#sponsor',
 };
 
@@ -141,7 +140,7 @@ async function visit(url: string) {
           <Icons class="about__link-icon" name="star" :size="16" />
           <div>
             <div class="about__link-title">GitHub</div>
-            <div class="about__link-url">zhitongblog/solomd</div>
+            <div class="about__link-url">chenghaitao/solomd</div>
           </div>
           <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>
@@ -149,7 +148,7 @@ async function visit(url: string) {
           <Icons class="about__link-icon" name="sparkle" :size="16" />
           <div>
             <div class="about__link-title">What's New / 更新日志</div>
-            <div class="about__link-url">solomd.app/whats-new</div>
+            <div class="about__link-url">github.com/chenghaitao/solomd/releases</div>
           </div>
           <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>

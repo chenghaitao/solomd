@@ -51,7 +51,7 @@ export function useUpdateCheck() {
     try {
       const r = await checkForUpdate();
       if (r.error) {
-        // Both solomd.app proxy + GitHub/Gitee direct failed (offline / DNS / etc).
+        // GitHub direct failed (offline / DNS / rate limit / etc).
         // Don't lie to the user with "up to date" — show a real error.
         toasts.error(t('settings.updateCheckFailed'));
       } else if (r.hasUpdate && r.latest) {

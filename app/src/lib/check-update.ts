@@ -6,23 +6,17 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 /**
  * Update check & direct installer download protocol.
  *
- * Three metadata sources, in priority order:
+ * This fork (chenghaitao/solomd) resolves update metadata and installers
+ * exclusively from its own GitHub releases. Upstream's solomd.app proxy and
+ * the Gitee mirror are intentionally NOT used — they would report upstream
+ * version numbers and hand out upstream binaries.
  *
- *   1. solomd.app /api/stats — Cloudflare Pages Function that proxies the
- *      GitHub releases API server-side, edge-cached for 5 min. Clients hit
- *      our own domain so they're never rate-limited (regardless of how many
- *      SoloMD installs share the same NAT IP).
- *   2. Gitee Releases API (prioritized in mainland China) / GitHub API
- *      fallback — used if #1 is unreachable.
- *
- * If all fail, we surface a `null` latest with `error: true` so the UI
- * shows "couldn't check, retry" instead of silently lying with "up to date"
- * (which was the v2.4.x bug that prompted this rewrite).
+ * If GitHub is unreachable we surface `null` latest with `error: true` so the
+ * UI shows "couldn't check, retry" instead of silently claiming "up to date".
  */
 
-const STATS_URL = 'https://solomd.app/api/stats';
-const GITHUB_FALLBACK_URL = 'https://api.github.com/repos/zhitongblog/solomd/releases/latest';
-const GITEE_FALLBACK_URL = 'https://gitee.com/api/v5/repos/zhitong45/solomd/releases/latest';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/chenghaitao/solomd/releases/latest';
+const RELEASES_PAGE = 'https://github.com/chenghaitao/solomd/releases';
 
 export interface UpdateResult {
   current: string;
@@ -60,102 +54,14 @@ const MAS_BUILD = import.meta.env.VITE_MAS_BUILD === '1';
 
 export const isMasBuild = (): boolean => MAS_BUILD;
 
-const RELEASES_PAGE = 'https://github.com/zhitongblog/solomd/releases';
-const GITEE_RELEASES_PAGE = 'https://gitee.com/zhitong45/solomd/releases';
-
-let cachedIsChina: boolean | null = null;
-
-function isChinaByLocaleOrTimezone(): boolean {
+async function fetchLatestFromGitHub(): Promise<{ tag: string; url: string } | null> {
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    if (
-      tz === 'Asia/Shanghai' ||
-      tz === 'Asia/Chongqing' ||
-      tz === 'Asia/Urumqi' ||
-      tz === 'Asia/Harbin'
-    ) {
-      return true;
-    }
-  } catch {}
-  try {
-    if (typeof navigator !== 'undefined' && /^zh[-_]?cn$/i.test(navigator.language || '')) {
-      return true;
-    }
-  } catch {}
-  return false;
-}
-
-/**
- * Detect whether the current visitor is in mainland China (CN).
- * Checks Cloudflare edge trace (`loc=CN`) first, falling back to
- * system timezone (`Asia/Shanghai`) and locale (`zh-CN`).
- */
-export async function detectVisitorIsChina(): Promise<boolean> {
-  if (cachedIsChina !== null) return cachedIsChina;
-  for (const traceUrl of [
-    'https://solomd.app/cdn-cgi/trace',
-    'https://www.cloudflare.com/cdn-cgi/trace',
-  ]) {
-    try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 2500);
-      const res = await fetch(traceUrl, { cache: 'no-store', signal: ctl.signal });
-      clearTimeout(timer);
-      if (res.ok) {
-        const text = await res.text();
-        const locLine = text
-          .split('\n')
-          .map((l) => l.trim())
-          .find((l) => l.startsWith('loc='));
-        if (locLine) {
-          cachedIsChina = locLine === 'loc=CN';
-          return cachedIsChina;
-        }
-      }
-    } catch {
-      /* try next */
-    }
-  }
-  cachedIsChina = isChinaByLocaleOrTimezone();
-  return cachedIsChina;
-}
-
-async function fetchFromStatsProxy(): Promise<{ tag: string; url: string } | null> {
-  try {
-    const res = await fetch(STATS_URL, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { latest_tag?: string | null; latest_url?: string | null };
-    if (!data.latest_tag) return null;
-    return {
-      tag: data.latest_tag.replace(/^v/, ''),
-      url: data.latest_url || RELEASES_PAGE,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchFromGitHubDirect(): Promise<{ tag: string; url: string } | null> {
-  try {
-    const res = await fetch(GITHUB_FALLBACK_URL, { cache: 'no-store' });
+    const res = await fetch(GITHUB_RELEASES_API, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = (await res.json()) as { tag_name?: string; html_url?: string };
     const tag = (data.tag_name || '').replace(/^v/, '');
     if (!tag) return null;
     return { tag, url: data.html_url || RELEASES_PAGE };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchFromGiteeDirect(): Promise<{ tag: string; url: string } | null> {
-  try {
-    const res = await fetch(GITEE_FALLBACK_URL, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { tag_name?: string };
-    const tag = (data.tag_name || '').replace(/^v/, '');
-    if (!tag) return null;
-    return { tag, url: `${GITEE_RELEASES_PAGE}/tag/v${tag}` };
   } catch {
     return null;
   }
@@ -167,17 +73,7 @@ export async function checkForUpdate(): Promise<UpdateResult> {
     return { current, latest: null, hasUpdate: false, url: '', error: false };
   }
 
-  // Try our own proxy first (no rate limit, edge-cached).
-  let info = await fetchFromStatsProxy();
-  if (!info) {
-    const isCn = isChinaByLocaleOrTimezone();
-    if (isCn) {
-      info = (await fetchFromGiteeDirect()) || (await fetchFromGitHubDirect());
-    } else {
-      info = (await fetchFromGitHubDirect()) || (await fetchFromGiteeDirect());
-    }
-  }
-
+  const info = await fetchLatestFromGitHub();
   if (!info) {
     return {
       current,
@@ -200,24 +96,13 @@ export async function checkForUpdate(): Promise<UpdateResult> {
 
 /**
  * Fallback browser opener when direct installer download fails or on mobile.
- * Automatically routes mainland China (`CN`) visitors to the Gitee release
- * mirror and international visitors to GitHub / solomd.app.
+ * Always opens this fork's GitHub releases page.
  */
 export async function openReleaseUrl(_url: string, version?: string | null): Promise<void> {
   try {
-    const isCn = await detectVisitorIsChina();
     const cleanVer = (version || '').trim().replace(/^v/, '');
-    if (isCn) {
-      const target = cleanVer
-        ? `${GITEE_RELEASES_PAGE}/tag/v${cleanVer}`
-        : GITEE_RELEASES_PAGE;
-      await openUrl(target);
-    } else {
-      const target = cleanVer
-        ? `${RELEASES_PAGE}/tag/v${cleanVer}`
-        : 'https://solomd.app/#download';
-      await openUrl(target);
-    }
+    const target = cleanVer ? `${RELEASES_PAGE}/tag/v${cleanVer}` : RELEASES_PAGE;
+    await openUrl(target);
   } catch {
     /* ignore */
   }
@@ -227,8 +112,8 @@ let activeUpdateDownload = false;
 
 /**
  * Directly download the platform installer (`.msi` on Windows, `.dmg` on macOS,
- * `.AppImage` on Linux) from Gitee (when in China) or GitHub (with automatic
- * cross-mirror fallback) and launch the installer immediately.
+ * `.AppImage` on Linux) from this fork's GitHub releases and launch the
+ * installer immediately.
  */
 export async function downloadAndInstallUpdate(
   version: string,
@@ -238,16 +123,12 @@ export async function downloadAndInstallUpdate(
   activeUpdateDownload = true;
   let unlisten: (() => void) | null = null;
   try {
-    const preferCn = await detectVisitorIsChina();
     if (onProgress) {
       unlisten = await listen<UpdateProgressPayload>('solomd://update-progress', (ev) => {
         onProgress(ev.payload);
       });
     }
-    await invoke<string>('download_and_install_update', {
-      version,
-      preferCn,
-    });
+    await invoke<string>('download_and_install_update', { version });
     return true;
   } catch {
     await openReleaseUrl('', version);
