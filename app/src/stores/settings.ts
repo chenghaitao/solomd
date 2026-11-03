@@ -148,6 +148,12 @@ interface Settings {
   uiFontSize: number;
   language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru';
   autoCheckUpdate: boolean;
+  /** Which update source the update centre talks to. `fork` (default) is this
+   *  repository's releases; `official` is upstream's, resolved through the
+   *  solomd.app proxy and the Gitee mirror. */
+  updateChannel: 'fork' | 'official';
+  /** Version the user asked to stop being nagged about ('' = none). */
+  ignoredUpdateVersion: string;
   // Preview layout
   previewFitWidth: boolean;
   /** v4.10 issue #165 — preview/reading content column width in px (was a
@@ -705,6 +711,8 @@ function defaults(): Settings {
     windowsEditorEngineExplicit: false,
     uiFontSize: 13,
     autoCheckUpdate: true,
+    updateChannel: 'fork',
+    ignoredUpdateVersion: '',
     language: (() => {
       // Detect browser language on first run. Maps navigator BCP-47 tag
       // to one of the 15 shipped UI locales; everything else → 'en'.

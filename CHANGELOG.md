@@ -19,6 +19,56 @@
 
 ---
 
+## [5.0.15] — 2026-11-03
+
+重构升级流程：把原来「检查更新 → toast 提示 → 直接下载」的三步，换成一个完整的更新中心对话框。
+
+### 1. 双更新源
+
+| 源 | 解析方式 | 默认 |
+|---|---|---|
+| Fork 分支版 | `api.github.com/repos/chenghaitao/solomd/releases`（无 Gitee 镜像） | ✅ |
+| 官方版 | 原有链路：`solomd.app/api/stats` → GitHub(`zhitongblog/solomd`) → Gitee(`zhitong45/solomd`) 镜像 | |
+
+选择存在 `settings.updateChannel` 并持久化。更新日志、历史版本列表、打开下载页、安装包下载四处**同时**跟随所选源，不会出现「日志说的是官方版、装的却是 fork 版」。
+
+### 2. 更新中心界面
+
+| 区块 | 内容 |
+|---|---|
+| 标题 | 「更新中心」+ `N 项可用更新` 徽章 |
+| 版本行 | `SoloMD 5.0.15 已发布，当前版本为 5.0.14。` |
+| 更新日志 | 卡片内滚动，按 **新功能 / 改进 / 修复** 三段，每条一句话 |
+| 历史版本 | 折叠区，每个版本一张卡片（版本号 + 发布日期 + 打开下载页） |
+| 底部 | 更新源下拉 + 打开下载页 + 下载并安装 / 取消下载（带进度）/ 忽略此版本 + 重启并更新 |
+
+更新日志不再直接展示 CHANGELOG 的长文（表格、文件路径、根因段落），改为 `app/src/data/release-notes.ts` 里按「渠道 + 版本」维护的一句话文案（中英双语，其余 13 种语言暂用英文，缺 key 时自动回退）。未收录的版本回退到 release body 的前 8 行。
+
+### 3. 行为变化
+
+| 项 | 之前 | 现在 |
+|---|---|---|
+| 检查更新（设置 / 帮助菜单） | 直接开始下载 | 打开更新中心，先看日志再决定 |
+| 启动时发现新版本 | toast 提示「立即升级」 | 直接打开更新中心（被忽略的版本不再弹） |
+| 忽略此版本 | 无 | `settings.ignoredUpdateVersion`，启动检查与徽章都跳过 |
+| 取消下载 | 无 | Rust 侧 `cancel_update_download` + 逐块检查的取消标志，落一半的临时文件会删掉 |
+| 下载安装包地址 | 硬编码上游 | `download_and_install_update` 增加 `channel` 参数，fork 源只走 GitHub |
+
+### 4. 涉及文件
+
+- 新增：`lib/release-channels.ts`（渠道与 releases 列表）、`data/release-notes.ts`（一句话日志）、`components/UpdateCenter.vue`（对话框）、`composables/useUpdateCenter.ts`（共享打开状态）
+- 修改：`lib/check-update.ts`（下载支持渠道与取消、导出 `compareSemver`）、`composables/useUpdateCheck.ts`、`App.vue`（挂载 + 启动检查）、`stores/settings.ts`（两个新字段）、`src-tauri/src/commands.rs`、`src-tauri/src/lib.rs`、`src/i18n/*.ts`（新增 `updateCenter` 命名空间）
+
+### 5. 验证
+
+- `node:test`：**602 passed / 0 failed**（新增 `release-channels.test.ts` 6 例、`release-notes.test.ts` 5 例）。
+- `vue-tsc --noEmit`：无错误。
+- `cargo check`：通过。
+- `build.bat`：产出 `SoloMD_5.0.15_x64_en-US.msi`。
+- 界面实拍：`?updateCenter` QA 钩子打开对话框，在 headless 浏览器里核对布局（版本行 / 三段日志 / 历史卡片 / 底部工具栏）。
+
+---
+
 ## [5.0.14] — 2026-11-02
 
 同步上游 `v5.0.12`（7 个提交：`9a0c0fdd` 云盘加密同步与一键更新、`bb671dbb` 版本号、`4be40e4f`/`05ee99bf` 站点版本、`eaa98dca` 保存前检查原文件、`8ece1fc3` 有序列表 10+ 防折行与拖选防回跳、`649b6a42` 安卓商店素材）。

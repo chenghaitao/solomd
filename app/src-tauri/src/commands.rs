@@ -2110,18 +2110,38 @@ async fn resolve_gitee_asset_url(
     None
 }
 
+/// Set by `cancel_update_download` while a download is in flight. Reset at the
+/// start of every download, so a cancelled run never poisons the next one.
+static UPDATE_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Stop the in-flight installer download. The partial file is discarded and
+/// `download_and_install_update` resolves with an `Err("cancelled …")` the
+/// frontend recognises instead of falling back to the release page.
+#[tauri::command]
+pub fn cancel_update_download() {
+    UPDATE_CANCELLED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// Download the platform installer for `version` (switching to Gitee automatically
 /// when the visitor is in China, with cross-mirror fallback between Gitee and GitHub)
 /// and launch the installer directly.
+///
+/// `channel` selects where the installer comes from: `"fork"` downloads from
+/// this repository's releases (no mirror exists for it), anything else keeps
+/// the upstream GitHub + Gitee routing unchanged.
 #[tauri::command]
 pub async fn download_and_install_update(
     version: String,
     prefer_cn: bool,
+    channel: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     use futures_util::StreamExt;
     use std::io::Write;
+    use std::sync::atomic::Ordering;
     use tauri::Emitter;
+
+    UPDATE_CANCELLED.store(false, Ordering::SeqCst);
 
     let clean_ver = version.trim().trim_start_matches('v').to_string();
     if clean_ver.is_empty() {
@@ -2137,32 +2157,43 @@ pub async fn download_and_install_update(
         .build()
         .map_err(|e| format!("http client build failed: {e}"))?;
 
-    let is_cn = if prefer_cn {
+    let fork_channel = channel.as_deref() == Some("fork");
+    let is_cn = if fork_channel {
+        false
+    } else if prefer_cn {
         true
     } else {
         probe_is_china_network(&client).await
     };
 
     let mut candidates: Vec<(&'static str, String)> = Vec::new();
-    let github_url = format!(
-        "https://github.com/zhitongblog/solomd/releases/download/{tag}/{asset_name}"
-    );
-    let gitee_direct_url = format!(
-        "https://gitee.com/zhitong45/solomd/releases/download/{tag}/{asset_name}"
-    );
-
-    if is_cn {
-        if let Some(api_dl) = resolve_gitee_asset_url(&client, &tag, &asset_name).await {
-            candidates.push(("Gitee", api_dl));
-        }
-        candidates.push(("Gitee", gitee_direct_url));
-        candidates.push(("GitHub", github_url));
+    if fork_channel {
+        // The fork has no Gitee mirror; GitHub Releases is the only source.
+        candidates.push((
+            "GitHub",
+            format!("https://github.com/chenghaitao/solomd/releases/download/{tag}/{asset_name}"),
+        ));
     } else {
-        candidates.push(("GitHub", github_url));
-        if let Some(api_dl) = resolve_gitee_asset_url(&client, &tag, &asset_name).await {
-            candidates.push(("Gitee", api_dl));
+        let github_url = format!(
+            "https://github.com/zhitongblog/solomd/releases/download/{tag}/{asset_name}"
+        );
+        let gitee_direct_url = format!(
+            "https://gitee.com/zhitong45/solomd/releases/download/{tag}/{asset_name}"
+        );
+
+        if is_cn {
+            if let Some(api_dl) = resolve_gitee_asset_url(&client, &tag, &asset_name).await {
+                candidates.push(("Gitee", api_dl));
+            }
+            candidates.push(("Gitee", gitee_direct_url));
+            candidates.push(("GitHub", github_url));
+        } else {
+            candidates.push(("GitHub", github_url));
+            if let Some(api_dl) = resolve_gitee_asset_url(&client, &tag, &asset_name).await {
+                candidates.push(("Gitee", api_dl));
+            }
+            candidates.push(("Gitee", gitee_direct_url));
         }
-        candidates.push(("Gitee", gitee_direct_url));
     }
     candidates.dedup_by(|a, b| a.1 == b.1);
 
@@ -2174,6 +2205,9 @@ pub async fn download_and_install_update(
     let mut downloaded_ok = false;
 
     for (source, url) in candidates {
+        if UPDATE_CANCELLED.load(Ordering::SeqCst) {
+            return Err("cancelled".to_string());
+        }
         let resp = match client.get(&url).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -2208,8 +2242,15 @@ pub async fn download_and_install_update(
             .unwrap_or_else(std::time::Instant::now);
         let mut stream = resp.bytes_stream();
         let mut stream_err: Option<String> = None;
+        let mut cancelled_here = false;
 
         while let Some(chunk_res) = stream.next().await {
+            // Checked per chunk: the whole point of the cancel button is that
+            // a slow mirror can be abandoned without waiting for it to finish.
+            if UPDATE_CANCELLED.load(Ordering::SeqCst) {
+                cancelled_here = true;
+                break;
+            }
             match chunk_res {
                 Ok(chunk) => {
                     if let Err(e) = file.write_all(&chunk) {
@@ -2243,6 +2284,11 @@ pub async fn download_and_install_update(
                     break;
                 }
             }
+        }
+
+        if cancelled_here {
+            let _ = fs::remove_file(&part_path);
+            return Err("cancelled".to_string());
         }
 
         if let Some(err) = stream_err {

@@ -215,6 +215,7 @@ pub fn run() {
             commands::print_webview_to_pdf,
             commands::copy_file,
             commands::download_and_install_update,
+            commands::cancel_update_download,
             storage_android::android_has_all_files_access,
             storage_android::android_request_all_files_access,
             storage_android::android_system_insets,

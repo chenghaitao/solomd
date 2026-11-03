@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
+import { DEFAULT_CHANNEL, type UpdateChannel } from './release-channels';
+
 /**
  * Update check & direct installer download protocol.
  *
@@ -43,7 +45,7 @@ export interface UpdateProgressPayload {
 }
 
 /** Returns semver comparison: 1 if a > b, -1 if a < b, 0 if equal */
-function compareSemver(a: string, b: string): number {
+export function compareSemver(a: string, b: string): number {
   const pa = a.replace(/^v/, '').split('.').map(Number);
   const pb = b.replace(/^v/, '').split('.').map(Number);
   const len = Math.max(pa.length, pb.length);
@@ -230,26 +232,36 @@ let activeUpdateDownload = false;
  * `.AppImage` on Linux) from Gitee (when in China) or GitHub (with automatic
  * cross-mirror fallback) and launch the installer immediately.
  */
+export interface DownloadUpdateOptions {
+  /** Where the installer comes from; the fork has no Gitee mirror. */
+  channel?: UpdateChannel;
+  onProgress?: (p: UpdateProgressPayload) => void;
+}
+
 export async function downloadAndInstallUpdate(
   version: string,
-  onProgress?: (p: UpdateProgressPayload) => void,
+  opts: DownloadUpdateOptions = {},
 ): Promise<boolean> {
   if (activeUpdateDownload) return false;
   activeUpdateDownload = true;
   let unlisten: (() => void) | null = null;
   try {
     const preferCn = await detectVisitorIsChina();
-    if (onProgress) {
+    if (opts.onProgress) {
+      const cb = opts.onProgress;
       unlisten = await listen<UpdateProgressPayload>('solomd://update-progress', (ev) => {
-        onProgress(ev.payload);
+        cb(ev.payload);
       });
     }
     await invoke<string>('download_and_install_update', {
       version,
       preferCn,
+      channel: opts.channel ?? DEFAULT_CHANNEL,
     });
     return true;
-  } catch {
+  } catch (e) {
+    // A user-initiated cancel is not a failure: no release page, no error.
+    if (String(e).toLowerCase().includes('cancelled')) return false;
     await openReleaseUrl('', version);
     return false;
   } finally {
@@ -259,6 +271,15 @@ export async function downloadAndInstallUpdate(
       } catch {}
     }
     activeUpdateDownload = false;
+  }
+}
+
+/** Stop the in-flight installer download (the partial file is discarded). */
+export async function cancelUpdateDownload(): Promise<void> {
+  try {
+    await invoke('cancel_update_download');
+  } catch {
+    /* nothing to cancel, or the command is unavailable in this build */
   }
 }
 

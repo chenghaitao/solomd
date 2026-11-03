@@ -74,6 +74,7 @@ import { themeFamily } from './lib/themes';
 import type { Theme, ViewMode } from './types';
 import { useAppMenu } from './composables/useAppMenu';
 import { useUpdateCheck } from './composables/useUpdateCheck';
+import { updateCenterOpen, openUpdateCenter } from './composables/useUpdateCenter';
 import { useCommands } from './composables/useCommands';
 import { useI18n } from './i18n';
 import { quickCaptureError } from './lib/quick-capture-status';
@@ -343,6 +344,8 @@ const { component: CjkProofreadC, open: cjkProofreadLazyOpen } = useLazyComponen
   () => import('./components/CjkProofread.vue'), () => cjkProofreadOpen.value);
 const { component: AboutDialogC, open: aboutLazyOpen } = useLazyComponent(
   () => import('./components/AboutDialog.vue'), () => aboutOpen.value);
+const { component: UpdateCenterC, open: updateCenterLazyOpen } = useLazyComponent(
+  () => import('./components/UpdateCenter.vue'), () => updateCenterOpen.value);
 const { component: AgentSetupWizardC, open: wizardLazyOpen } = useLazyComponent(
   () => import('./components/AgentSetupWizard.vue'), () => wizardOpen.value);
 const { component: ImageUrlDialogC, open: imageUrlLazyOpen } = useLazyComponent(
@@ -1628,27 +1631,28 @@ onMounted(async () => {
   // Auto-check for updates — once startup has settled; nobody waits on it,
   // and it shouldn't share the main thread with the first keystrokes.
   if (!isIOS() && settings.autoCheckUpdate) runWhenIdle(() => void checkForUpdatesNow());
+
+  // QA hook: `?updateCenter` opens the dialog straight away so the layout can
+  // be driven from a plain browser build (same idea as `?forcePlain` /
+  // `?forceWinChrome`). Purely a dev affordance — it reads a URL flag.
+  if (typeof location !== 'undefined' && location.search.includes('updateCenter')) {
+    openUpdateCenter();
+  }
 });
 
 async function checkForUpdatesNow(): Promise<void> {
   try {
-    const { checkForUpdateOnStartup } = await import('./lib/check-update');
-    const { runDirectUpdateInstall } = await import('./composables/useUpdateCheck');
-    const result = await checkForUpdateOnStartup();
-    if (result && result.hasUpdate && result.latest) {
-      const toastsStore = (await import('./stores/toasts')).useToastsStore();
-      const { useI18n } = await import('./i18n');
-      const { t: tr, lang } = useI18n();
-      const actionLabel = lang.value === 'zh' ? '立即升级' : 'Update';
-      toastsStore.push(
-        tr('settings.updateAvailable', { version: result.latest || '' }),
-        'success',
-        15000,
-        () => { void runDirectUpdateInstall(result.latest!); },
-        { actionLabel },
-      );
-    }
-  } catch { /* silent */ }
+    const { getVersion } = await import('@tauri-apps/api/app');
+    const { checkChannelUpdate } = await import('./lib/release-channels');
+    const { openUpdateCenter } = await import('./composables/useUpdateCenter');
+    const current = await getVersion();
+    const result = await checkChannelUpdate(settings.updateChannel, current);
+    if (!result.hasUpdate || !result.latest) return;
+    // "Ignore this version" must also silence the startup check, otherwise the
+    // user dismisses the dialog and it comes straight back on the next launch.
+    if (result.latest.version === settings.ignoredUpdateVersion) return;
+    openUpdateCenter();
+  } catch { /* silent — the startup check never interrupts work */ }
 }
 
 function onAIRewriteAccept(e: Event) {
@@ -2630,6 +2634,12 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
     />
     <component :is="CjkProofreadC" v-if="CjkProofreadC" :open="cjkProofreadLazyOpen" @close="cjkProofreadOpen = false" />
     <component :is="AboutDialogC" v-if="AboutDialogC" :open="aboutLazyOpen" @close="aboutOpen = false" />
+    <component
+      :is="UpdateCenterC"
+      v-if="UpdateCenterC"
+      :model-value="updateCenterLazyOpen"
+      @update:model-value="updateCenterOpen = $event"
+    />
     <component :is="AgentSetupWizardC" v-if="!IS_APP_STORE_BUILD && AgentSetupWizardC" :open="wizardLazyOpen" @close="wizardOpen = false" />
     <UnsavedDialog
       :open="unsavedOpen"
