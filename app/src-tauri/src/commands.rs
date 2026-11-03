@@ -2056,11 +2056,67 @@ fn installer_asset_name(clean_ver: &str) -> Option<String> {
     None
 }
 
-/// Download the platform installer for `version` from this fork's GitHub
-/// releases and launch the installer directly.
+async fn probe_is_china_network(client: &reqwest::Client) -> bool {
+    for trace_url in [
+        "https://solomd.app/cdn-cgi/trace",
+        "https://www.cloudflare.com/cdn-cgi/trace",
+    ] {
+        if let Ok(resp) = client
+            .get(trace_url)
+            .timeout(std::time::Duration::from_millis(2500))
+            .send()
+            .await
+        {
+            if let Ok(text) = resp.text().await {
+                if text.lines().any(|line| line.trim() == "loc=CN") {
+                    return true;
+                }
+                if text.lines().any(|line| line.starts_with("loc=")) {
+                    return false;
+                }
+            }
+        }
+    }
+    false
+}
+
+async fn resolve_gitee_asset_url(
+    client: &reqwest::Client,
+    tag: &str,
+    asset_name: &str,
+) -> Option<String> {
+    let api_url = format!("https://gitee.com/api/v5/repos/zhitong45/solomd/releases/tags/{tag}");
+    let resp = client
+        .get(&api_url)
+        .timeout(std::time::Duration::from_secs(6))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let assets = json.get("assets")?.as_array()?;
+    for asset in assets {
+        let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        if name == asset_name {
+            if let Some(url) = asset.get("browser_download_url").and_then(|v| v.as_str()) {
+                if !url.is_empty() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Download the platform installer for `version` (switching to Gitee automatically
+/// when the visitor is in China, with cross-mirror fallback between Gitee and GitHub)
+/// and launch the installer directly.
 #[tauri::command]
 pub async fn download_and_install_update(
     version: String,
+    prefer_cn: bool,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     use futures_util::StreamExt;
@@ -2081,10 +2137,34 @@ pub async fn download_and_install_update(
         .build()
         .map_err(|e| format!("http client build failed: {e}"))?;
 
+    let is_cn = if prefer_cn {
+        true
+    } else {
+        probe_is_china_network(&client).await
+    };
+
+    let mut candidates: Vec<(&'static str, String)> = Vec::new();
     let github_url = format!(
-        "https://github.com/chenghaitao/solomd/releases/download/{tag}/{asset_name}"
+        "https://github.com/zhitongblog/solomd/releases/download/{tag}/{asset_name}"
     );
-    let candidates: Vec<(&'static str, String)> = vec![("GitHub", github_url)];
+    let gitee_direct_url = format!(
+        "https://gitee.com/zhitong45/solomd/releases/download/{tag}/{asset_name}"
+    );
+
+    if is_cn {
+        if let Some(api_dl) = resolve_gitee_asset_url(&client, &tag, &asset_name).await {
+            candidates.push(("Gitee", api_dl));
+        }
+        candidates.push(("Gitee", gitee_direct_url));
+        candidates.push(("GitHub", github_url));
+    } else {
+        candidates.push(("GitHub", github_url));
+        if let Some(api_dl) = resolve_gitee_asset_url(&client, &tag, &asset_name).await {
+            candidates.push(("Gitee", api_dl));
+        }
+        candidates.push(("Gitee", gitee_direct_url));
+    }
+    candidates.dedup_by(|a, b| a.1 == b.1);
 
     let dest_dir = std::env::temp_dir();
     let part_path = dest_dir.join(format!("{asset_name}.part"));
