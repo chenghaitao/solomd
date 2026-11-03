@@ -742,6 +742,7 @@ export const en = {
     cancel: 'Cancel download',
     ignore: 'Ignore this version',
     restart: 'Restart & upgrade',
+    retry: 'Retry',
   },
 
   tabMenu: {

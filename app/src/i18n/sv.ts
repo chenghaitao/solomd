@@ -739,6 +739,7 @@ export const sv: I18n = {
     cancel: 'Cancel download',
     ignore: 'Ignore this version',
     restart: 'Restart & upgrade',
+    retry: 'Retry',
   },
 
   tabMenu: {

@@ -19,6 +19,44 @@
 
 ---
 
+## [5.0.16] — 2026-11-03
+
+修 5.0.15 的一个 P1：点「检查更新」直接提示「无法连接更新源，请检查网络后重试」。
+
+### 根因
+
+`api.github.com` 未认证请求限流 **60 次/小时/IP**，而更新中心每次打开都拉一次 releases 列表，
+没有任何缓存或退路：
+
+| 环节 | 事实 |
+|---|---|
+| 出错接口 | `GET https://api.github.com/repos/chenghaitao/solomd/releases?per_page=12` |
+| 实际返回 | `HTTP 403 {"message":"API rate limit exceeded for …"}` |
+| 为什么必然触发 | 每打开一次对话框消耗 1 次；同一出口 IP 下（家庭/公司 NAT）多个客户端共享这 60 次；点「重试」再消耗一次 |
+| 为什么没有兜底 | 5.0.15 的 fork 渠道只写了 GitHub API 一条路，没有镜像、没有 Atom、没有缓存 |
+| 为什么上游渠道不受影响 | 官方渠道原本就有 `solomd.app/api/stats` 代理 + Gitee 镜像 |
+
+不是网络问题，也不是 CSP —— `tauri.conf.json` 没有 CSP 限制，同时刻 `curl` 访问同一接口也是 403。
+
+### 修复
+
+| 层 | 改动 |
+|---|---|
+| 数据源 | `fetchChannelReleases` 改为三级链：GitHub API → **`github.com/{repo}/releases.atom`** → Gitee（仅官方渠道）。Atom 由 github.com 主站提供，**没有 API 配额**，同样带 tag / 发布日期 / 下载链接 / 正文 |
+| 解析 | 新增 `parseReleasesAtom()`：用正则解析（不依赖 `DOMParser`，node:test 可直接覆盖），正文按 HTML 转义还原后再剥标签成纯文本 |
+| 缓存 | 成功结果按渠道缓存 **10 分钟**，连开两次对话框只花一次配额；`clearChannelCache()` 供重试用 |
+| 超时 | 两处 fetch 都加 `AbortSignal.timeout(12000)` —— 之前网络卡住会一直停在「正在检查」，永远等不到失败 |
+| 交互 | 失败文案后面加「重试」链接：先清缓存再请求，避免重试拿到刚缓存的空结果 |
+
+### 验证
+
+- `node:test`：**607 passed / 0 failed**（渠道用例从 6 增到 11，新增 Atom 回退、缓存命中、Atom 解析三组）。
+- 实测：在本机 `api.github.com` 已被限流（`remaining=0`、接口 403）的状态下直接跑 `fetchChannelReleases('fork')`，
+  经 Atom 回退拿到 5 个版本（v5.0.15 … v5.0.11），日期、链接、正文齐全。
+- `vue-tsc --noEmit`：无错误。
+
+---
+
 ## [5.0.15] — 2026-11-03
 
 重构升级流程：把原来「检查更新 → toast 提示 → 直接下载」的三步，换成一个完整的更新中心对话框。

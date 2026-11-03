@@ -22,6 +22,7 @@ import { useSettingsStore } from '../stores/settings';
 import { cancelUpdateDownload, compareSemver, downloadAndInstallUpdate } from '../lib/check-update';
 import {
   channelPage,
+  clearChannelCache,
   fetchChannelReleases,
   type ChannelRelease,
   type UpdateChannel,
@@ -126,6 +127,13 @@ async function load(): Promise<void> {
   }
 }
 
+/** Drop the memoised lists first: a retry means "ask again", not "show me
+ *  the empty result you just cached". */
+async function retry(): Promise<void> {
+  clearChannelCache();
+  await load();
+}
+
 async function ensureVersion(): Promise<void> {
   if (currentVersion.value) return;
   try {
@@ -211,7 +219,10 @@ function ignoreVersion(): void {
 
     <div class="uc__lead">
       <template v-if="loading">{{ t('updateCenter.checking') }}</template>
-      <template v-else-if="failed">{{ t('updateCenter.checkFailed') }}</template>
+      <template v-else-if="failed">
+        <span>{{ t('updateCenter.checkFailed') }}</span>
+        <button type="button" class="uc__link" @click="retry">{{ t('updateCenter.retry') }}</button>
+      </template>
       <template v-else-if="latest">
         {{ t('updateCenter.headline', { latest: latest.version, current: currentVersion || '—' }) }}
       </template>
@@ -332,6 +343,16 @@ function ignoreVersion(): void {
   margin: 0 0 var(--sp-3);
   font-size: 13px;
   color: var(--text-2);
+}
+.uc__link {
+  margin-left: 6px;
+  padding: 0;
+  font-size: 13px;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  cursor: default;
 }
 .uc__notes {
   max-height: 260px;

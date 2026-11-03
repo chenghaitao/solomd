@@ -740,6 +740,7 @@ export const zh: I18n = {
     cancel: '取消下载',
     ignore: '忽略此版本',
     restart: '重启并更新',
+    retry: '重试',
   },
 
   tabMenu: {
