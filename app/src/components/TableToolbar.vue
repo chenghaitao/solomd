@@ -25,6 +25,7 @@ import { useI18n } from '../i18n';
 import { isMobile } from '../lib/platform';
 import { placeBubble, type Box } from '../lib/selection-bubble';
 import { tableActionEnabled, type TableAction, type TableToolbarState } from '../lib/table-toolbar';
+import { tableIconPaths, type TableIcon } from '../lib/table-toolbar-icons';
 
 const props = defineProps<{
   /** The editor's root element: events are read from it, the bar stays near it. */
@@ -237,30 +238,30 @@ const align = computed(() => state.value?.model.aligns[state.value.col] ?? null)
 
 interface PrimaryButton {
   action: TableAction;
-  glyph: string;
+  icon: TableIcon;
   label: string;
   danger?: boolean;
 }
 const rowButtons: PrimaryButton[] = [
-  { action: 'row-above', glyph: '↑+', label: 'tableToolbar.rowAbove' },
-  { action: 'row-below', glyph: '↓+', label: 'tableToolbar.rowBelow' },
-  { action: 'row-delete', glyph: '✕', label: 'tableToolbar.rowDelete', danger: true },
+  { action: 'row-above', icon: 'row-above', label: 'tableToolbar.rowAbove' },
+  { action: 'row-below', icon: 'row-below', label: 'tableToolbar.rowBelow' },
+  { action: 'row-delete', icon: 'row-delete', label: 'tableToolbar.rowDelete', danger: true },
 ];
 const colButtons: PrimaryButton[] = [
-  { action: 'col-left', glyph: '+←', label: 'tableToolbar.colLeft' },
-  { action: 'col-right', glyph: '+→', label: 'tableToolbar.colRight' },
-  { action: 'col-delete', glyph: '✕', label: 'tableToolbar.colDelete', danger: true },
+  { action: 'col-left', icon: 'col-left', label: 'tableToolbar.colLeft' },
+  { action: 'col-right', icon: 'col-right', label: 'tableToolbar.colRight' },
+  { action: 'col-delete', icon: 'col-delete', label: 'tableToolbar.colDelete', danger: true },
 ];
 const alignButtons: Array<PrimaryButton & { value: 'left' | 'center' | 'right' }> = [
-  { action: 'align-left', value: 'left', glyph: '⟵', label: 'tableToolbar.alignLeft' },
-  { action: 'align-center', value: 'center', glyph: '↔', label: 'tableToolbar.alignCenter' },
-  { action: 'align-right', value: 'right', glyph: '⟶', label: 'tableToolbar.alignRight' },
+  { action: 'align-left', value: 'left', icon: 'align-left', label: 'tableToolbar.alignLeft' },
+  { action: 'align-center', value: 'center', icon: 'align-center', label: 'tableToolbar.alignCenter' },
+  { action: 'align-right', value: 'right', icon: 'align-right', label: 'tableToolbar.alignRight' },
 ];
 const moreButtons: PrimaryButton[] = [
-  { action: 'row-up', glyph: '⤒', label: 'tableToolbar.rowUp' },
-  { action: 'row-down', glyph: '⤓', label: 'tableToolbar.rowDown' },
-  { action: 'col-move-left', glyph: '⇤', label: 'tableToolbar.colMoveLeft' },
-  { action: 'col-move-right', glyph: '⇥', label: 'tableToolbar.colMoveRight' },
+  { action: 'row-up', icon: 'move-row-up', label: 'tableToolbar.rowUp' },
+  { action: 'row-down', icon: 'move-row-down', label: 'tableToolbar.rowDown' },
+  { action: 'col-move-left', icon: 'move-col-left', label: 'tableToolbar.colMoveLeft' },
+  { action: 'col-move-right', icon: 'move-col-right', label: 'tableToolbar.colMoveRight' },
 ];
 
 const style = computed(() =>
@@ -295,7 +296,16 @@ defineExpose({ hide, refresh });
         :disabled="!enabled(b.action)"
         :data-action="b.action"
         @click="run(b.action)"
-      >{{ b.glyph }}</button>
+      >
+        <svg class="tbl-bar__icon" viewBox="0 0 30 30" aria-hidden="true" focusable="false">
+          <path
+            v-for="(p, i) in tableIconPaths(b.icon)"
+            :key="i"
+            :d="p.d"
+            :class="p.tone ? `tbl-ic tbl-ic--${p.tone}` : undefined"
+          />
+        </svg>
+      </button>
 
       <span class="tbl-bar__sep" aria-hidden="true" />
 
@@ -309,7 +319,16 @@ defineExpose({ hide, refresh });
         :disabled="!enabled(b.action)"
         :data-action="b.action"
         @click="run(b.action)"
-      >{{ b.glyph }}</button>
+      >
+        <svg class="tbl-bar__icon" viewBox="0 0 30 30" aria-hidden="true" focusable="false">
+          <path
+            v-for="(p, i) in tableIconPaths(b.icon)"
+            :key="i"
+            :d="p.d"
+            :class="p.tone ? `tbl-ic tbl-ic--${p.tone}` : undefined"
+          />
+        </svg>
+      </button>
 
       <span class="tbl-bar__sep" aria-hidden="true" />
 
@@ -324,7 +343,16 @@ defineExpose({ hide, refresh });
         :disabled="!enabled(b.action)"
         :data-action="b.action"
         @click="run(b.action)"
-      >{{ b.glyph }}</button>
+      >
+        <svg class="tbl-bar__icon" viewBox="0 0 30 30" aria-hidden="true" focusable="false">
+          <path
+            v-for="(p, i) in tableIconPaths(b.icon)"
+            :key="i"
+            :d="p.d"
+            :class="p.tone ? `tbl-ic tbl-ic--${p.tone}` : undefined"
+          />
+        </svg>
+      </button>
 
       <span class="tbl-bar__sep" aria-hidden="true" />
 
@@ -349,7 +377,14 @@ defineExpose({ hide, refresh });
             :data-action="b.action"
             @click="run(b.action)"
           >
-            <span class="tbl-bar__glyph" aria-hidden="true">{{ b.glyph }}</span>
+            <svg class="tbl-bar__icon tbl-bar__icon--menu" viewBox="0 0 30 30" aria-hidden="true" focusable="false">
+              <path
+                v-for="(p, i) in tableIconPaths(b.icon)"
+                :key="i"
+                :d="p.d"
+                    :class="p.tone ? `tbl-ic tbl-ic--${p.tone}` : undefined"
+              />
+            </svg>
             <span class="tbl-bar__name">{{ t(b.label) }}</span>
           </button>
         </div>
@@ -489,7 +524,92 @@ defineExpose({ hide, refresh });
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* One `<svg>` per button, in a 30x30 grid so the reference bitmaps' 1px steps
+   can be reproduced. The align / move glyphs stay `currentColor`; the six
+   row/column glyphs are painted per path from the palette below. */
+.tbl-bar__icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tbl-bar__icon--menu {
+  width: 15px;
+  height: 15px;
+  color: var(--text-3);
+  stroke-width: 2.6;
+}
 .tbl-bar__name {
   flex: 1;
+}
+
+/* ── icon palette ──────────────────────────────────────────────────────────
+   Measured off the supplied light and dark menu screenshots: the band is a
+   light blue with a dark-blue edge in light mode and the exact inverse in dark
+   mode, the grid/arrow take the foreground colour, and the X is a thin red
+   stroke. A single blue for both themes reads as mud on one of them. */
+/* Both palettes live on :root, never on .tbl-bar: a declaration on .tbl-bar
+   itself would outrank anything inherited from a dark :root and silently pin
+   the light colours in dark mode. */
+:global(:root) {
+  --tbl-ic-line: #3f3e3a;
+  --tbl-ic-band: #9dc3e6;
+  --tbl-ic-edge: #1f6fc0;
+  --tbl-ic-arrow: #4a4843;
+  --tbl-ic-cross: #e23c2f;
+  --tbl-ic-halo: var(--bg-pop);
+}
+:global(:root:is(
+  [data-theme="dark"],
+  [data-theme="nord"],
+  [data-theme="solarized-dark"],
+  [data-theme="monokai"],
+  [data-theme="dracula"]
+)) {
+  --tbl-ic-line: #dcdad5;
+  --tbl-ic-band: #0b5fa5;
+  --tbl-ic-edge: #6cb4f0;
+  --tbl-ic-arrow: #eceae6;
+  --tbl-ic-cross: #f0524c;
+}
+
+.tbl-ic--line {
+  stroke: var(--tbl-ic-line);
+  stroke-width: 2.6;
+}
+.tbl-ic--grid {
+  stroke: var(--tbl-ic-line);
+  stroke-width: 1.6;
+  opacity: 0.55;
+}
+/* The band keeps its own edge: a lighter band with a darker rule on light,
+   a deeper band with a lighter rule on dark. */
+.tbl-ic--band {
+  fill: var(--tbl-ic-band);
+  stroke: var(--tbl-ic-edge);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+/* Halo in the popover's own colour cuts the grid/outline where the arrow
+   passes through, the way the spreadsheet glyphs do. */
+.tbl-ic--arrow {
+  fill: var(--tbl-ic-arrow);
+  stroke: var(--tbl-ic-halo);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+/* Thin crossing strokes — a plain X, not a filled star or a bold multiplication
+   sign. Two separate paths keep the ends square-free and legible at 16px. */
+.tbl-ic--cross {
+  stroke: var(--tbl-ic-cross);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  fill: none;
 }
 </style>

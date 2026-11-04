@@ -75,7 +75,8 @@
       },
       "wix": {
         "bannerPath": "windows/banner.bmp",
-        "dialogImagePath": "windows/dialog.bmp"
+        "dialogImagePath": "windows/dialog.bmp",
+        "template": "wix/main.wxs"
       }
     },
     "resources": [

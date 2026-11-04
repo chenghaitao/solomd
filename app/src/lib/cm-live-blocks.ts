@@ -45,6 +45,13 @@ import {
   rewriteImageUrls,
 } from './image-resolve';
 import { renderMarkdown, extractImageRoot } from './markdown';
+import { parseTable } from './markdown-table';
+import {
+  HEADER_ROW,
+  applyCellEdit,
+  cellText,
+  stepCell,
+} from './table-cell-edit';
 import { findHtmlBlockEnd } from './html-live-render';
 import { openRenderedLink } from './link-open';
 import {
@@ -351,6 +358,16 @@ export function findTableCellOffsetInLine(
   return contentStart + Math.round((contentEnd - contentStart) * ratio);
 }
 
+/**
+ * The cell a rebuilt table widget should re-open after a write-back.
+ *
+ * Committing a cell replaces the whole widget, so the DOM holding the caret is
+ * destroyed and cannot be focused again. The replacement reads this at build
+ * time and puts the caret back — which is why it is module state and not a
+ * field on the widget being thrown away.
+ */
+let pendingCellFocus: { from: number; row: number; col: number; at: number } | null = null;
+
 class TableWidget extends WidgetType {
   // Cells can hold math / code: a widget built before KaTeX or highlight.js
   // arrived must not count as equal to the one built after (render-deps.ts).
@@ -359,18 +376,26 @@ class TableWidget extends WidgetType {
   private readonly imageRoot: string | null;
   private readonly filePath?: string;
   private readonly startLine: number;
+  // Document range this widget replaces. Cell editing writes back through it;
+  // -1 means "unknown" (a widget built without one simply stays read-only).
+  private readonly from: number;
+  private readonly to: number;
 
   constructor(
     source: string,
     imageRoot: string | null = null,
     filePath?: string,
     startLine: number = 0,
+    from: number = -1,
+    to: number = -1,
   ) {
     super();
     this.source = source;
     this.imageRoot = imageRoot;
     this.filePath = filePath;
     this.startLine = startLine;
+    this.from = from;
+    this.to = to;
   }
 
   eq(other: TableWidget): boolean {
@@ -379,6 +404,8 @@ class TableWidget extends WidgetType {
       other.imageRoot === this.imageRoot &&
       other.filePath === this.filePath &&
       other.startLine === this.startLine &&
+      other.from === this.from &&
+      other.to === this.to &&
       other.deps === this.deps
     );
   }
@@ -393,6 +420,7 @@ class TableWidget extends WidgetType {
     wrap.innerHTML = rewriteImageUrls(rawHtml, this.imageRoot, this.filePath);
     installSvgImageFallbacks(wrap);
     trackImageHeights(wrap);
+    const cellEditor = this.createCellEditor(wrap, view);
 
     // #504 — Clicking a rendered table cell in Live mode places the caret at
     // the exact Markdown table row (header or body row) and column cell offset,
@@ -405,6 +433,16 @@ class TableWidget extends WidgetType {
       const cell = target?.closest?.('th, td') as HTMLTableCellElement | null;
       const tr = target?.closest?.('tr') as HTMLTableRowElement | null;
       if (!cell && !tr) return;
+
+      // #500 — a click on a cell edits that cell in place. The caret mapping
+      // below is what used to turn the table back into source lines the moment
+      // anything needed changing; it stays as the fallback for read-only panes
+      // and for clicks that land on a row but not on a cell.
+      if (cell && cellEditor?.begin(ev, cell)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        return;
+      }
 
       let targetLineNum = this.startLine;
       const sectionTag = tr?.parentElement?.tagName;
@@ -462,18 +500,235 @@ class TableWidget extends WidgetType {
     return wrap;
   }
 
-  ignoreEvent(event: Event): boolean {
-    if (
-      event.type === 'mousedown' &&
-      event instanceof MouseEvent &&
-      event.button === 0 &&
-      !(event.target as Element | null)?.closest?.('a') &&
-      !!(event.target as Element | null)?.closest?.('th, td, tr')
-    ) {
-      return true;
+  /**
+   * #500 — edit a table cell where it is, instead of falling back to the source.
+   *
+   * The rendered cell shows formatted HTML, which cannot be written back as
+   * Markdown without an HTML→Markdown conversion that would quietly drop or
+   * mangle what was in there. So a focused cell swaps its formatted content for
+   * the cell's Markdown *source*; typing stays local to the DOM (no transaction
+   * per keystroke, no decoration rebuild under the caret), and the write-back
+   * happens once on Enter / Tab / blur — one edit, one undo step.
+   *
+   * Returns null when there is nothing to write to (read-only pane, or a widget
+   * built without a document range): the caller then keeps the old
+   * "click → caret in the source line" behaviour.
+   */
+  private createCellEditor(
+    wrap: HTMLElement,
+    view?: EditorView,
+  ): { begin: (ev: MouseEvent, cell: HTMLTableCellElement) => boolean } | null {
+    const table = wrap.querySelector('table');
+    if (!table || !view || this.from < 0 || this.to < 0) return null;
+
+    // Coordinates ride on the DOM: the write-back throws this widget away and
+    // rebuilds it, so the *new* DOM has to be findable by the same numbers.
+    const head = table.tHead;
+    let bodyRow = 0;
+    for (const row of Array.from(table.rows)) {
+      const r = head && row.parentElement === head ? HEADER_ROW : bodyRow++;
+      for (const cell of Array.from(row.cells)) {
+        cell.dataset.row = String(r);
+        cell.dataset.col = String(cell.cellIndex);
+      }
     }
-    return false;
+
+    let active: { cell: HTMLTableCellElement; row: number; col: number; html: string } | null = null;
+    // Set once a write-back has been dispatched: this DOM is on its way out.
+    let written = false;
+
+    const model = () => parseTable(this.source) ?? null;
+
+    const caretToEnd = (cell: HTMLElement) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    };
+
+    /** Leave edit mode and put the formatted content back. */
+    const leave = (): { row: number; col: number; text: string } | null => {
+      const a = active;
+      if (!a) return null;
+      active = null;
+      const text = a.cell.textContent ?? '';
+      a.cell.classList.remove('cm-live-table__cell--editing');
+      a.cell.removeAttribute('contenteditable');
+      a.cell.removeAttribute('spellcheck');
+      a.cell.innerHTML = a.html;
+      return { row: a.row, col: a.col, text };
+    };
+
+    /**
+     * Write the cell back. `focus` names the cell the rebuilt widget should
+     * re-open — the DOM that is being replaced has no cells left to focus.
+     */
+    const commit = (focus: { row: number; col: number } | null): boolean => {
+      const done = leave();
+      if (!done || written) return false;
+      const markdown = applyCellEdit(this.source, done.row, done.col, done.text);
+      if (!markdown) return false;
+      written = true;
+      if (focus) {
+        pendingCellFocus = { from: this.from, row: focus.row, col: focus.col, at: Date.now() };
+      }
+      view.dispatch({
+        changes: { from: this.from, to: this.to, insert: markdown },
+        userEvent: 'input.table-cell',
+      });
+      return true;
+    };
+
+    /** Turn one rendered cell into an editor. False when the cell is off-model. */
+    const start = (cell: HTMLTableCellElement): boolean => {
+      const m = model();
+      if (!m) return false;
+      const row = Number(cell.dataset.row ?? HEADER_ROW);
+      const col = Number(cell.dataset.col ?? cell.cellIndex);
+      if (col < 0 || col >= m.header.length) return false;
+      if (row !== HEADER_ROW && (row < 0 || row >= m.rows.length)) return false;
+      active = { cell, row, col, html: cell.innerHTML };
+      cell.textContent = cellText(m, row, col);
+      cell.classList.add('cm-live-table__cell--editing');
+      cell.setAttribute('contenteditable', 'true');
+      cell.setAttribute('spellcheck', 'false');
+      cell.focus({ preventScroll: true });
+      return true;
+    };
+
+    const focusCell = (row: number, col: number): boolean => {
+      const cell = wrap.querySelector<HTMLTableCellElement>(
+        `[data-row="${row}"][data-col="${col}"]`,
+      );
+      if (!cell || !start(cell)) return false;
+      caretToEnd(cell);
+      return true;
+    };
+
+    const begin = (ev: MouseEvent, cell: HTMLTableCellElement): boolean => {
+      if (view.state.readOnly) return false;
+      const row = Number(cell.dataset.row ?? HEADER_ROW);
+      const col = Number(cell.dataset.col ?? cell.cellIndex);
+      // Clicking a different cell while one is open commits the first one; that
+      // rebuild arrives before this handler returns, hence the early exit.
+      if (active) commit({ row, col });
+      if (written) return true;
+      if (!start(cell)) return false;
+
+      const range = caretRangeAt(ev.clientX, ev.clientY);
+      const sel = window.getSelection();
+      if (range && cell.contains(range.startContainer)) {
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      } else {
+        caretToEnd(cell);
+      }
+      return true;
+    };
+
+    wrap.addEventListener(
+      'keydown',
+      (ev: KeyboardEvent) => {
+        if (!active) return;
+        const here = { row: active.row, col: active.col };
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          leave();
+          view.focus();
+          return;
+        }
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          // Commit and stay in the cell: Enter ending the edit *and* dropping
+          // the caret somewhere else reads as "my table vanished".
+          commit(here);
+          return;
+        }
+        if (ev.key === 'Tab') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const m = model();
+          const next = m ? stepCell(m, here.row, here.col, ev.shiftKey ? -1 : 1) : null;
+          if (commit(next)) return;
+          // Nothing changed, so this DOM survived — move within it.
+          if (next && focusCell(next.row, next.col)) return;
+          leave();
+          view.focus();
+        }
+      },
+      true,
+    );
+
+    wrap.addEventListener('focusout', (ev: FocusEvent) => {
+      if (!active) return;
+      // Focus moving from one cell to the next fires a focusout on the *old*
+      // cell after `begin` has already opened the new one — committing then
+      // would immediately close the editor the click just opened.
+      if (ev.target !== active.cell) return;
+      const next = ev.relatedTarget as Node | null;
+      if (next && wrap.contains(next)) return;
+      // Moving between cells never lands here (mousedown is prevented and the
+      // next cell is focused explicitly), so this means "left the table".
+      commit(null);
+    });
+
+    // A widget rebuilt by the previous commit may owe the caret to a cell.
+    if (pendingCellFocus && pendingCellFocus.from === this.from) {
+      const pending = pendingCellFocus;
+      pendingCellFocus = null;
+      // Stale markers would otherwise grab the caret on some unrelated rebuild.
+      if (Date.now() - pending.at < 1000) {
+        requestAnimationFrame(() => {
+          if (wrap.isConnected) focusCell(pending.row, pending.col);
+        });
+      }
+    }
+
+    return { begin };
   }
+
+  ignoreEvent(event: Event): boolean {
+    const target = event.target as Element | null;
+    // Everything that happens inside a cell belongs to the cell editor: the
+    // caret, the IME, typing, and the write-back. Letting CodeMirror see those
+    // events would make it treat typing in a contenteditable widget as editor
+    // input. Links stay visible to the editor so clicking one still opens it.
+    if (target?.closest?.('a')) return false;
+    return !!target?.closest?.('th, td');
+  }
+
+  // The editor must not interpret the widget's own DOM writes as a document
+  // change — the cell editor dispatches an explicit transaction instead.
+  ignoreMutation(): boolean {
+    return true;
+  }
+}
+
+/**
+ * Pointer position → collapsed range, across engines.
+ *
+ * WebKit/Blink ship `caretRangeFromPoint`, Gecko ships `caretPositionFromPoint`
+ * and no `caretRangeFromPoint`, so a click in a table cell would otherwise put
+ * the caret at the end on Firefox.
+ */
+function caretRangeAt(x: number, y: number): Range | null {
+  const doc = document as Document & {
+    caretRangeFromPoint?: (px: number, py: number) => Range | null;
+    caretPositionFromPoint?: (px: number, py: number) => { offsetNode: Node; offset: number } | null;
+  };
+  if (typeof doc.caretRangeFromPoint === 'function') {
+    return doc.caretRangeFromPoint(x, y);
+  }
+  const pos = doc.caretPositionFromPoint?.(x, y);
+  if (!pos) return null;
+  const range = document.createRange();
+  range.setStart(pos.offsetNode, pos.offset);
+  range.collapse(true);
+  return range;
 }
 
 /** Raw block HTML rendered with the same markdown-it pipeline as Preview.vue. */
@@ -1424,6 +1679,8 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                         opts.getImageRoot?.() ?? null,
                         opts.getFilePath?.(),
                         i,
+                        blockFrom,
+                        blockTo,
                       ),
                       block: true,
                     }),
@@ -1739,6 +1996,16 @@ export const liveBlocksTheme = EditorView.theme({
   '.cm-live-block--table thead th': {
     background: 'var(--bg-elev)',
     fontWeight: '600',
+  },
+  // #500 — the cell currently being edited in place. The ring is drawn inside
+  // the cell (negative offset) so the row does not shift by 2px when it appears,
+  // and pre-wrap keeps a long value on one line while it is being typed.
+  '.cm-live-block--table .cm-live-table__cell--editing': {
+    outline: '2px solid var(--accent)',
+    outlineOffset: '-2px',
+    background: 'var(--bg)',
+    whiteSpace: 'pre-wrap',
+    cursor: 'text',
   },
   // v4.3.0 issue #57a — paddings fold in the 0.6em that used to come from the
   // shared margin (see #155 note above) so the visual rhythm is unchanged.

@@ -482,6 +482,10 @@ interface Settings {
   /** #347 — one-time: a saved `pdfDefaults.pageSize` of `A4` from before
    *  `Auto` existed was the untouched default, not a choice. */
   pdfPageSizeAutoMigrated: boolean;
+  /** #515 — one-time: the table of contents used to be off unless the user
+   *  found the switch, so an exported PDF silently had no outline. The
+   *  default is on now; this marker flips existing installs once. */
+  pdfTocDefaultOnMigrated: boolean;
   // Promote plain numbered-section lines (`6.2 出口许可证管理目录`,
   // `6.2.1 …`) to headings whose level tracks the numbering depth. Off by
   // default — the promotion is heuristic (a line opening with a decimal like
@@ -623,7 +627,11 @@ export function defaultPdfDefaults(): PdfDefaults {
     fontSize: 11,
     footer: true,
     codeTheme: 'preview',
-    toc: false,
+    // #515 — a shared PDF without an outline is the complaint that opened the
+    // issue: notes are written for oneself, but read by someone else. On by
+    // default; Settings → PDF and a `pdf: toc: false` front-matter block both
+    // still turn it off per document.
+    toc: true,
   };
 }
 
@@ -857,6 +865,7 @@ function defaults(): Settings {
     keybindings: {},
     smartQuotesOptInMigrated: true,
     pdfPageSizeAutoMigrated: true,
+    pdfTocDefaultOnMigrated: true,
     markdownAutoNumberHeadings: false,
     rsPaneOrder: ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'neighborhood', 'types', 'history', 'inspector', 'agent'],
     previewFontSize: 16,
@@ -1017,6 +1026,14 @@ function load(): Settings {
           merged.pdfDefaults = { ...merged.pdfDefaults, pageSize: 'Auto' };
         }
         merged.pdfPageSizeAutoMigrated = true;
+      }
+      // #515 — the TOC switch shipped off, so a stored `false` is the old
+      // default rather than a decision. Turn it on once; anyone who really
+      // doesn't want an outline can switch it back off and that sticks,
+      // because the marker is written here either way.
+      if (!parsed.pdfTocDefaultOnMigrated) {
+        merged.pdfDefaults = { ...merged.pdfDefaults, toc: true };
+        merged.pdfTocDefaultOnMigrated = true;
       }
       if (!parsed.smartQuotesOptInMigrated) {
         merged.smartQuotes = false;

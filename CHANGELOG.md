@@ -63,6 +63,7 @@
 - **两种编辑器同一套逻辑**：与选区浮条同构，`Editor.vue` 只提供 `read`（哪张表、哪个单元格）与 `rect`（它在屏幕上的位置）两个读取器，工具条本身不含表格逻辑。Windows 默认的 textarea 编辑器与 CodeMirror 都有这套工具条，不存在「只在其中一个引擎里生效」的问题。
 - **落点与判定**：整表按列宽重新序列化写回，光标落回同一单元格（新增行则落在新行），避免替换矩形后光标被映射到表尾；代码围栏内的竖线文本不会被误判为表格；表头行的「删除行 / 上移 / 下移」按钮置灰（无法确定删哪一行）。
 - **i18n**：`tableEditor` 段收敛为 `tableToolbar`，只留工具条用到的 15 个键（14 种语言同步）。
+- **图标最终版：照 Excel 行列菜单重绘（彩色）**：上一版矢量图标虽方向可辨，但仍是黑白 2×2 表格 + 加号，与用户给的参考截图不一致。现按截图的 30×30 像素网格重建：3×3 表格，**中间行/列**用蓝色高亮带（浅色=浅蓝填充+深蓝边，暗色=深蓝填充+浅蓝边），实心箭头从蓝带穿出表格外框指向新增方向；删除行列改为「断开的括号 + 蓝色行列箭头 + 细线条红色 `×`」，红叉不再用填充星形。颜色走 `--tbl-ic-*` 调色板，浅色/深色两套独立取值（含 nord / solarized-dark / monokai / dracula）；对齐与移动图标保持 `currentColor` 单色，避免与这六个抢视觉。几何数据全部在 `lib/table-toolbar-icons.ts`，组件按 path 的 `tone` 分槽上色。
 
 ### 5. 更新弹窗：历史版本默认折叠
 
@@ -77,6 +78,42 @@
 - **修复**：`runner.rs` 的 `generate_handler!` 里补 `commands::cancel_update_download`，紧跟在 `download_and_install_update` 之后。
 - **另一条告警** `constant TIP_PRODUCT_IDS is never used` 属于良性：该常量只在 `#[cfg(macos | ios)]` 的 Apple 后端与 `#[cfg(android)]` 的 Google Play 后端里被读取，桌面构建两个后端都编不进来；因为 `iap.rs` 在 bin 里是私有模块，`pub` 常量才被判成死代码。加 `#[cfg_attr(not(any(macos, ios, android)), allow(dead_code))]` 精确消警，不掩盖其他平台的真实未使用。
 - **验证**：`cargo check`（bin + lib）EXIT 0，`never used` 告警消失。
+
+### 7. 页内单元格直接编辑（#500 最后一项）
+
+- **点击单元格即可就地编辑**：Live 模式下表格渲染成真正的表格，点任意格（含表头）直接在格子里出现光标并输入，Enter 提交并留在原格，Tab / Shift+Tab 提交后跳到下一格 / 上一格，Esc 放弃，点到表格外面自动提交。
+- **不做 HTML→Markdown 反向转换**：cell 拿到焦点时把「格式化后的 HTML」换成该格的 **Markdown 源码**（`**bold**`、`[链接](url)`、`\|` 原样可见），提交时把这行源码写回表格模型再序列化。这样加粗、链接、行内代码、转义竖线都不会在往返中丢失或被拍平。
+- **每次提交一个事务**：输入期间只改 DOM，不产生 document 事务、不重建 widget（否则光标会在每次按键后消失）；提交时才发一次 `changes`，因此「一次编辑 = 一步撤销」。
+- **表格始终是表格**：编辑器里的 selection 从不进表格源码行，所以整个编辑过程 widget 都不会塌回源码。
+- **落点与保留**：提交会整表重新序列化（列宽对齐），落点按 `row/col` 在新 widget 里恢复——旧 DOM 已被替换，靠模块级 `pendingCellFocus` 交接；表格若嵌在列表项里带缩进，写回时按公共缩进原样补回，不会被顶到行首。
+- **不做的**：引号表格（`> | a |`）与源码围栏内的管道文本不进就地编辑（`parseTable` 解析不到就回落到原来的「点一下跳回源码行」）；只读面板同理。
+- 新增 `lib/table-cell-edit.ts`（纯逻辑，10 例单测）+ `TableWidget` 内的 cell editor。
+
+### 8. MSI「Launch SoloMD」勾了不启动
+
+- **现象**：安装向导最后一页「Launch SoloMD」默认勾选，点 Finish 后应用不启动，也没有任何报错。
+- **根因**（读 MSI 的 `ControlEvent` / `CustomAction` 表确认，不是猜）：Tauri 官方 WiX 模板把启动条件写成 `WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed`。`Installed` 是「这个 ProductCode 已装过」——重跑同一个 MSI（修复/覆盖安装）时为真，于是勾选框照常显示、照常默认勾选，DoAction 却被静默跳过。首次安装能启动、重复安装不启动，正是这个条件造成的。
+- **修复**：改用自定义 WiX 模板 `app/src-tauri/wix/main.wxs`（`bundle.wix.template` 指向它），条件改为 `WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT REMOVE`，并显式 `Order="1"`（WixUI 的 EndDialog 是 999，确保先启动再关窗）。
+  - `NOT Installed` → `NOT REMOVE`：安装 / 修复 / 升级都启动，卸载不启动（卸载成功也会走同一个 ExitDialog，删完再拉起没有意义）。
+  - 模板取自本机 tauri-cli 2.12.1 二进制里内嵌的那一份（与 bundler 版本严格一致），只改这一行加注释，其余原样保留。
+  - 验证：重新打包后读新 MSI 的 `ControlEvent` 表，条件已是 `WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT REMOVE`，`Ordering=1`（EndDialog 为 999）。
+
+### 9. #517 窗口尺寸/位置记不住
+
+- **根因**：`clamp_window_to_monitor`（启动时把窗口拉回屏幕内）用的是 `monitor.size()` —— **整个屏幕，含任务栏**。于是「底部压在任务栏下面」被判为合法，窗口被接受并按这个几何继续保存；用户看到的正是「记不住大小、底部超出任务栏」。另外，只要位置越界（哪怕只是边框宽度的几像素），原逻辑就会**改尺寸 + 居中**，把用户摆好的布局整个重置。
+- **修复**（`runner.rs`）：
+  - 改用 `monitor.work_area()`（Windows 上是 `GetMonitorInfoW` 的 `rcWork`，已扣掉任务栏与 Dock）作为上界与越界判据。
+  - **尺寸合法、只是位置越界时只平移**，不再居中、不再改尺寸；只有尺寸确实超出工作区才缩小并居中。
+  - 越界判定加 8px 容差：插件保存的是 `inner_size`，而 `outer_size` 含被裁掉的调整边框，没有容差的话贴边窗口每次启动都会被往内推几个像素。
+  - 顺带去掉 macOS 的 40px 手工预留 —— `work_area` 已经排除了菜单栏，再减一次会把窗口无端缩小。
+
+### 10. #515 导出 PDF 默认带目录
+
+- **现象**：导出的 PDF 没有按标题生成目录，用户要手动在设置里找开关。
+- **原因**：目录功能（`[TOC]` → `<nav class="md-toc">`，含页码）早就实现了，但 `pdfDefaults.toc` 默认是 `false`，等于默认关闭。
+- **修复**：默认改为开启，并加一次性迁移 `pdfTocDefaultOnMigrated` —— 老配置里的 `false` 是「当年的默认值」而不是用户的选择，升级后统一打开一次；真的不想要可以在「设置 → PDF」关掉，之后不再被改回。
+- 自定义样式（含标题编号）在导出时本就保留：打印覆盖层会注入当前自定义 CSS（`buildExportCustomCss` 把 `:root/html/body` 规则镜像到打印容器，#439），标题自动编号也走同一条渲染管线。这一点在 CHANGELOG 里说明，避免被误认为新功能。
+- 单文档可用 front matter `pdf: toc: false` 单独关掉。
 
 ---
 

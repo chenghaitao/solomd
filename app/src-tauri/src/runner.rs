@@ -399,25 +399,30 @@ fn fit_main_window_once(win: &tauri::WebviewWindow) {
     let _ = win.set_focus();
 }
 
-/// Re-fit the main window into its current monitor's work area before show.
+/// Re-fit the main window into its current monitor's **work area** before show.
 ///
 /// Two failure modes from `tauri-plugin-window-state` we have to defend
 /// against on every launch:
 /// 1. **Oversize restore** — a saved 2880×1740 from a 5K display, restored
 ///    on a 1440p laptop, leaves the bottom edge off-screen.
 /// 2. **Out-of-bounds position** — saved coordinates from a now-disconnected
-///    secondary monitor, or a saved Y that tucks the title bar behind the
-///    macOS menu bar.
+///    secondary monitor, or a saved Y that tucks the title bar off the top.
 ///
 /// Behavior:
-/// - If size or position is still valid for the current monitor, the user's
-///   chosen layout is preserved (we don't fight intentional positioning).
-/// - If anything was out of bounds, the window is clamped to a sensible
-///   size and **recentered on the current monitor**. Centering > pinning to
-///   an edge: a left-edge-pinned window after a display change reads as
-///   "broken layout," whereas centered reads as "fresh start, sane state."
+/// - If size and position are still valid, the user's chosen layout is
+///   preserved untouched (we don't fight intentional positioning).
+/// - If the size had to shrink, re-center it — a resize we made ourselves is
+///   a "fresh start", and centering reads that way.
+/// - If only the position is out of bounds, **slide** the window back just
+///   far enough to be fully visible. Recentering here would throw away a
+///   layout the user had deliberately chosen.
 ///
-/// 40px is reserved at the top of the work area for the macOS menu bar.
+/// #517 — this used to measure against `monitor.size()` / `monitor.position()`,
+/// the *raw* screen, which on Windows includes the taskbar. A restored window
+/// could therefore be accepted (and re-saved) at a height whose bottom edge sat
+/// under the taskbar, and it looked like the app kept forgetting the size the
+/// user had just set. `work_area()` is `GetMonitorInfoW`'s `rcWork` — the screen
+/// minus taskbar/dock — so "fully visible" now means what the user means.
 fn clamp_window_to_monitor(win: &tauri::WebviewWindow) {
     // A maximized or fullscreen window is already sized to the monitor by the
     // OS — clamping it would call set_size(), which un-maximizes and shrinks
@@ -428,54 +433,58 @@ fn clamp_window_to_monitor(win: &tauri::WebviewWindow) {
         return;
     }
 
-    // The macOS global menu bar overlays the top of the screen, so reserve a
-    // strip for it. Windows / Linux have no such bar — reserving there made a
-    // legitimately near-full-height restored window get shrunk by 40px.
-    #[cfg(target_os = "macos")]
-    const MENU_BAR_RESERVE: i32 = 40;
-    #[cfg(not(target_os = "macos"))]
-    const MENU_BAR_RESERVE: i32 = 0;
     const MIN_W: i32 = 480;
     const MIN_H: i32 = 360;
 
     let Ok(Some(monitor)) = win.current_monitor() else { return; };
     let scale = monitor.scale_factor();
-    let mon_w = (monitor.size().width as f64 / scale).round() as i32;
-    let mon_h = (monitor.size().height as f64 / scale).round() as i32;
-    let mon_x = (monitor.position().x as f64 / scale).round() as i32;
-    let mon_y = (monitor.position().y as f64 / scale).round() as i32;
+    let work = monitor.work_area();
+    let wa_x = (work.position.x as f64 / scale).round() as i32;
+    let wa_y = (work.position.y as f64 / scale).round() as i32;
+    let wa_w = (work.size.width as f64 / scale).round() as i32;
+    let wa_h = (work.size.height as f64 / scale).round() as i32;
 
     let Ok(outer) = win.outer_size() else { return; };
     let cur_w = (outer.width as f64 / scale).round() as i32;
     let cur_h = (outer.height as f64 / scale).round() as i32;
 
-    let max_w = mon_w;
-    let max_h = mon_h - MENU_BAR_RESERVE;
-    let new_w = cur_w.clamp(MIN_W, max_w);
-    let new_h = cur_h.clamp(MIN_H, max_h);
+    let new_w = cur_w.clamp(MIN_W, wa_w.max(MIN_W));
+    let new_h = cur_h.clamp(MIN_H, wa_h.max(MIN_H));
     let size_clamped = new_w != cur_w || new_h != cur_h;
 
     let Ok(outer_pos) = win.outer_position() else { return; };
     let cur_x = (outer_pos.x as f64 / scale).round() as i32;
     let cur_y = (outer_pos.y as f64 / scale).round() as i32;
 
-    // Position is "off-monitor" if any edge of the window falls outside the
-    // current monitor's work area (top edge above the menu bar reserve, or
-    // any other edge past the monitor bounds for the post-clamp size).
-    let position_invalid = cur_x < mon_x
-        || cur_x + new_w > mon_x + mon_w
-        || cur_y < mon_y + MENU_BAR_RESERVE
-        || cur_y + new_h > mon_y + mon_h;
+    // "Off-monitor" = any edge outside the work area, measured with the size
+    // the window will actually have after the clamp above.
+    //
+    // The slack is the window frame: `outer_size()` includes the cropped
+    // resize border a decorated/frameless-but-thick window still carries,
+    // while the plugin saved an *inner* size. Without a couple of pixels of
+    // tolerance a window tucked flush against the work-area edge would be
+    // nudged inward on every single launch — the "it forgot my position"
+    // half of #517. The taskbar is ~40px, so real overflow is still caught.
+    const EDGE_SLACK: i32 = 8;
+    let position_invalid = cur_x < wa_x - EDGE_SLACK
+        || cur_x + new_w > wa_x + wa_w + EDGE_SLACK
+        || cur_y < wa_y - EDGE_SLACK
+        || cur_y + new_h > wa_y + wa_h + EDGE_SLACK;
 
     if size_clamped {
         let _ = win.set_size(tauri::LogicalSize::new(new_w as u32, new_h as u32));
     }
 
-    if size_clamped || position_invalid {
-        let new_x = mon_x + (mon_w - new_w) / 2;
-        let centered_y = mon_y + (mon_h - new_h) / 2;
-        let new_y = centered_y.max(mon_y + MENU_BAR_RESERVE);
+    if size_clamped {
+        let new_x = wa_x + (wa_w - new_w) / 2;
+        let new_y = wa_y + (wa_h - new_h) / 2;
         let _ = win.set_position(tauri::LogicalPosition::new(new_x, new_y));
+    } else if position_invalid {
+        let new_x = cur_x.clamp(wa_x, (wa_x + wa_w - new_w).max(wa_x));
+        let new_y = cur_y.clamp(wa_y, (wa_y + wa_h - new_h).max(wa_y));
+        if new_x != cur_x || new_y != cur_y {
+            let _ = win.set_position(tauri::LogicalPosition::new(new_x, new_y));
+        }
     }
 }
 
