@@ -228,10 +228,10 @@ function insertTable() {
       <Icon name="image" />
     </button>
     <div class="fbar__pop">
-      <!-- Four ways in: the icon opens the size dialog, dragging the grid on
-           hover drops a table of that size, and the panel's two rows open that
-           same dialog (to type the counts) or the grid editor on the table the
-           caret is already in. -->
+      <!-- Three ways in: the icon opens the size dialog, dragging the grid on
+           hover drops a table of that size, and the panel's row opens that same
+           dialog to type the counts. Editing an existing table needs no entry
+           here — the toolbar over the table is the editor (#500). -->
       <button
         class="fbar__btn"
         :title="t('formatBar.tableTip')"
@@ -278,13 +278,6 @@ function insertTable() {
                 rows: INSERT_TABLE_DEFAULT_ROWS,
               })
             }}
-          </button>
-          <button
-            class="fbar__panel-action"
-            :title="t('cmd.editor.tableEditor')"
-            @click="command('editor.tableEditor')"
-          >
-            {{ t('formatBar.tableVisual') }}
           </button>
         </div>
       </div>

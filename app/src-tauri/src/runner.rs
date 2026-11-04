@@ -146,8 +146,6 @@ mod rag;
 #[path = "app_build.rs"]
 mod app_build;
 // App Store builds ask for a rating with Apple's own sheet.
-#[path = "store_review.rs"]
-mod store_review;
 #[path = "iap.rs"]
 mod iap;
 #[path = "ios_folder.rs"]
@@ -634,12 +632,18 @@ pub fn run_with(initial_file: Option<String>) {
             commands::print_webview_to_pdf,
             commands::copy_file,
             commands::download_and_install_update,
+            // The Update Centre's Cancel button. It was only ever registered in
+            // the mobile handler (lib.rs), so on desktop `invoke` resolved to
+            // nothing: the click reset the dialog's own progress state while the
+            // Rust download kept going and still launched the installer.
+            commands::cancel_update_download,
             image_upload::upload_image,
             commands::list_dir,
             commands::fs_create_file,
             commands::fs_create_dir,
             commands::fs_delete,
             commands::fs_dir_exists,
+            commands::fs_files_exist,
             commands::fs_file_exists,
             commands::webview_runtime_version,
             commands::fs_rename,
@@ -804,7 +808,6 @@ pub fn run_with(initial_file: Option<String>) {
             rag::rag_reindex_file,
             // about-dialog build info (was lib.rs-only too).
             app_build::app_build_info,
-            store_review::request_store_review,
             iap::iap_get_state,
             iap::iap_fetch_products,
             iap::iap_purchase,

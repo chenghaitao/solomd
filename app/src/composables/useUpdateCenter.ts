@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { isMobile } from '../lib/platform';
 
 /**
  * Shared open state for the update centre.
@@ -10,5 +11,8 @@ import { ref } from 'vue';
 export const updateCenterOpen = ref(false);
 
 export function openUpdateCenter(): void {
+  // Desktop-only surface. Mobile ships through the app stores: it must never
+  // show the channel picker or the in-app installer, whatever path opened it.
+  if (isMobile()) return;
   updateCenterOpen.value = true;
 }

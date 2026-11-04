@@ -19,6 +19,67 @@
 
 ---
 
+## [5.0.17] — 2026-11-03
+
+同步上游 `v5.0.13`（12 个提交），并修复 iOS 端「设为默认 Markdown 编辑器」调用未注册命令的报错。
+
+### 1. 吸收的上游修复
+
+| 功能 | 内容 | 落点 |
+|---|---|---|
+| 预览/阅读模式保留撤销栈 | 切换时编辑器实例常驻，`Ctrl+Z` 可撤销；当前行相对视口偏移保持一致；切回恢复滚动位置与焦点（#512 #487 #516） | `Editor.vue`、`PaneContent.vue` |
+| 引用块内列表格式化 | 引用块内有序/无序/任务列表标记统一置于 `> ` 之后且可还原；无序列表整组切换；快捷键插入代码块光标落正文（#513） | `md-format.ts`、`Editor.vue` |
+| 多级有序列表层级对齐 | 修复 `1.当…` 这类中文前无空格的列表项吞并同级项，导致外层 `3.` 被误判为内层 `2.4` | `list-continuation.ts`、`list-renumber.ts`、`markdown.ts` |
+| 复制去转义反斜杠 | 复制为纯文本或 Word 时去除非代码块内的 `\#`、`\*`、`1\.` 等转义 | `useExport.ts`、`md-format.ts` |
+| 默认导出目录 | 设置 › 导出新增「默认导出目录」，留空跟随当前笔记目录（#503） | `SettingsPanel.vue`、`export-paths.ts` |
+| 桌面端 WebDAV 修复 | 测试连接不再报 `webdav_test_connection not found`（#510） | `webdav_sync.rs`、`runner.rs` |
+| Codeberg 同步 | Git 同步平台新增 Codeberg（#478） | `GithubSyncSettings.vue` |
+| 文件树横向滚动 | 未开启换行时可通过底部横条查看超长节点名（#495） | `FileTree.vue` |
+| 小标题字号下限 | 预览/阅读与编辑器中五、六级标题字号不小于正文 `1em`（#490） | `Preview.vue` |
+
+### 2. 冲突处理（23 个文件）
+
+| 类别 | 文件 | 处理 |
+|---|---|---|
+| 代码 | `list-continuation.ts` | 保留本地多级编号正则，吸收上游 `NO_SPACE_CJK_ORDERED` 分支 |
+| 代码 | `lib.rs` | 同时保留 `cancel_update_download` 与上游 `convert_file_to_markdown` |
+| 代码 | `FileTree.vue` | 采用上游 #495 实现（`.ftree__list` 的 `width: max-content`），去掉本地重复规则 |
+| 代码 | `usePandocExport.ts` | 保留 `exportDefaultPath`，去掉上游 `track` 遥测 import |
+| 版本/锁 | `Cargo.toml`、`Cargo.lock`、`tauri.conf.json`、`package.json` | 保留本地版本线，递增至 5.0.17 |
+| 推广/官网 | `README*.md`、`web/**`（thanks、sponsors、whats-new、supporters、docs） | 保留本地，不引入上游致谢墙与赞助者推广 |
+| MCP | `mcp-server/*` | 不再排除，跟随主版本同步至 5.0.17；保留本地 `[lints.rust] linker_messages` 静默 |
+
+### 3. 本地修复
+
+- **#499 图片可精确设置宽高**：图片右键菜单在 25% / 50% / 75% / 100% 预设之外新增「宽 × 高」像素输入框。可只填宽度（高度等比）、只填高度（宽度等比）或同时填写；尺寸语法新增高度形式 `![alt|x250](url)`，Markdown 与 HTML `<img>` 两种写法都支持，预览、实时模式与导出共用同一套解析。
+- **iOS / Android 端「设为默认 Markdown 编辑器」报 `Command set_as_default_markdown_editor not found`**：该命令只在桌面 runner（`src-tauri/src/runner.rs`）注册，移动端二进制没有。双保险修复：① 设置面板在移动端隐藏「文件关联」区块（`v-if="!isPhoneOrTablet"`），不再给出必定失败的入口；② `lib.rs` 的移动端 handler 补注册该命令，非桌面平台返回 `failedUnsupported`，任何残留调用路径都不会再抛「命令不存在」。
+- **更新路径按平台分流**：桌面端「检查更新」打开更新中心弹窗，可切换 fork / 官方源；移动端不走该弹窗（`openUpdateCenter()` 在移动端直接返回，不弹选源、不做应用内下载）。Android 保留「检查更新」按钮，只查官方源，有更新时打开官方下载页；iOS 按 App Store 规则隐藏检查入口，启动自动检查仅在桌面执行。
+- **移动端判断修正**：「在新窗口打开文件」统一为 `!isPhoneOrTablet`（移动端均无第二窗口）；「自动检查更新」保持 `!isIOS()`，且开关只在桌面显示——避免把 Android 的合法更新入口一并隐藏。
+
+### 4. 表格浮动工具条（#500），移除网格编辑弹窗
+
+- **表格改成在正文里改**：光标落在表格内时，表格上方浮出一条工具条，直接对文档做结构性修改——插入行（上/下）、删除行、插入列（左/右）、删除列、左/中/右对齐；`⋯` 菜单内收着上移/下移行、左移/右移列。每次点击是一次可撤销的编辑，不再有「应用 / 取消」和一份脱离正文的副本。
+- **入口与图标一并删除**：删掉 `components/TableEditor.vue` 与 `lib/table-editor-bus.ts`，同步移除段落菜单的「编辑当前表格」、命令面板 `Edit Table…`、格式栏「可视化编辑…」、快捷键 `⌘⌥T`，以及 `App.vue` 里表格会话对关窗/关标签的拦截分支。「插入表格」对话框与网格拖选保留——那是插入路径，不是编辑路径。
+- **两种编辑器同一套逻辑**：与选区浮条同构，`Editor.vue` 只提供 `read`（哪张表、哪个单元格）与 `rect`（它在屏幕上的位置）两个读取器，工具条本身不含表格逻辑。Windows 默认的 textarea 编辑器与 CodeMirror 都有这套工具条，不存在「只在其中一个引擎里生效」的问题。
+- **落点与判定**：整表按列宽重新序列化写回，光标落回同一单元格（新增行则落在新行），避免替换矩形后光标被映射到表尾；代码围栏内的竖线文本不会被误判为表格；表头行的「删除行 / 上移 / 下移」按钮置灰（无法确定删哪一行）。
+- **i18n**：`tableEditor` 段收敛为 `tableToolbar`，只留工具条用到的 15 个键（14 种语言同步）。
+
+### 5. 更新弹窗：历史版本默认折叠
+
+- 打开「检查更新」时只展示本次更新：标题、分组后的更新说明、下载按钮。版本历史默认收起，点标题行的「版本历史」才展开。
+- 组件首次打开后会常驻，折叠状态原本会被带到下一次；现在每次打开都重置为收起，避免上次展开的样子被记住。
+
+### 6. 桌面端「取消下载」失效（编译告警挖出的真 bug）
+
+- **告警**：`warning: function cancel_update_download is never used --> src\commands.rs:2121`
+- **根因**：`runner.rs` 用 `#[path = "commands.rs"] mod commands;` 把同一份源码编进 bin，而桌面 handler 只注册了 `download_and_install_update`，漏了 `cancel_update_download` —— 它此前只在 `lib.rs` 的移动端 handler 里出现过（`git log -S` 确认历史上从未注册进 runner.rs）。所以这个告警本身就是「桌面端根本没有这条命令」的证据。
+- **实际后果**：更新中心点「取消」→ `invoke` 报 `Command not found` → 前端 `try/catch` 吞掉异常，只把自己这边的 `downloading/percent` 复位；Rust 侧的下载线程继续跑，下完还会照样拉起安装包。用户以为取消了，实际没取消。
+- **修复**：`runner.rs` 的 `generate_handler!` 里补 `commands::cancel_update_download`，紧跟在 `download_and_install_update` 之后。
+- **另一条告警** `constant TIP_PRODUCT_IDS is never used` 属于良性：该常量只在 `#[cfg(macos | ios)]` 的 Apple 后端与 `#[cfg(android)]` 的 Google Play 后端里被读取，桌面构建两个后端都编不进来；因为 `iap.rs` 在 bin 里是私有模块，`pub` 常量才被判成死代码。加 `#[cfg_attr(not(any(macos, ios, android)), allow(dead_code))]` 精确消警，不掩盖其他平台的真实未使用。
+- **验证**：`cargo check`（bin + lib）EXIT 0，`never used` 告警消失。
+
+---
+
 ## [5.0.16] — 2026-11-03
 
 修 5.0.15 的一个 P1：点「检查更新」直接提示「无法连接更新源，请检查网络后重试」。

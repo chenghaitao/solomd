@@ -22,7 +22,7 @@ import {
   normalizeCombo,
   toTauriAccelerator,
   type KeyOverrides,
-} from './keybindings';
+} from './keybindings.ts';
 
 export type MenuPlatform = 'mac' | 'windows' | 'linux';
 
@@ -327,11 +327,11 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     sep,
     fmt('quote'), fmt('codeblock'),
     sep,
-    item('editor.tableEditor', t('cmd.editor.tableEditor')),
     item('editor.formulaEditor', t('cmd.editor.formulaEditor')),
     sep,
     // "Insert …" here, "Edit current …" above: the menu has both, so each
-    // label says which one it is.
+    // label says which one it is. Tables need no "Edit current" entry any more
+    // — the floating toolbar over the table is the editor (#500).
     item('insert.table', t('menubar.insertTable')),
     item('insert.mathBlock', t('menubar.insertMathBlock')),
     item('insert.mermaid', t('menubar.insertMermaid')),

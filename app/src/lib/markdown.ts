@@ -10,10 +10,10 @@ import frontMatter from 'markdown-it-front-matter';
 import mark from 'markdown-it-mark';
 import cjkFriendly from 'markdown-it-cjk-friendly';
 import yaml from 'js-yaml';
-import { numberEquations } from './equations';
-import { parseImageAltSize } from './md-image-url';
-import { sanitizeRenderedHtml } from './sanitize-html';
-import { getHljs, getKatex } from './render-deps';
+import { numberEquations } from './equations.ts';
+import { parseImageAltSize } from './md-image-url.ts';
+import { sanitizeRenderedHtml } from './sanitize-html.ts';
+import { getHljs, getKatex } from './render-deps.ts';
 
 // NOTE: `@hedgedoc/markdown-it-task-lists` is installed but unusable here —
 // its compiled ESM entry does `import Token from 'markdown-it/lib/token.js'`
@@ -126,6 +126,28 @@ export const md = new MarkdownIt({
 // autolinks continue to linkify as expected.
 md.linkify.set({ fuzzyLink: false });
 
+// ---- #380 — allow `file:` link / image destinations -------------------------
+// `[临时记录](file:///F:\缓存目录\临时记录.md)` used to render as its own
+// literal source text: markdown-it's default validator blocks the scheme
+// outright (`BAD_PROTO_RE = /^(vbscript|javascript|file|data):/`), so the
+// `link` rule threw the destination away and emitted plain text. In a local
+// Markdown editor a local-file link is the *point*, so the scheme is allowed
+// back — and so is the inverted case that the fork already relied on:
+// `rewriteLinkUrls()` (./image-resolve.ts) has always rewritten relative links
+// to `file:///…` on export, producing HTML that SoloMD itself could not
+// re-open. The genuinely dangerous schemes stay blocked, exactly as before.
+//
+// The href is left percent-encoded in the DOM on purpose: a bare `C:\…` href
+// is rejected by the sanitizer's URI allow-list, whereas `file:` passes both
+// markdown-it and DOMPurify (see ALLOWED_URI_REGEXP in ./sanitize-html.ts).
+// `openRenderedLink()` decodes it back into a filesystem path.
+const stockValidateLink = md.validateLink.bind(md);
+md.validateLink = (url: string): boolean => {
+  const str = String(url ?? '').trim().toLowerCase();
+  if (!str) return false;
+  if (str.startsWith('file:')) return true;
+  return stockValidateLink(url);
+};
 // #464 — Allow GFM tables to interrupt blockquotes and lists without requiring
 // a blank line, matching CodeMirror's GFM parser in Live mode (`> quote\n| a | b |`).
 const tableBlockRule = (md.block.ruler as any).__rules__?.find((r: any) => r.name === 'table');
@@ -221,18 +243,30 @@ md.inline.ruler.before('image', 'image_spaced_path', (state, silent) => {
 const defaultImageRenderer = md.renderer.rules.image;
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx];
-  if (!token.attrGet('referrerpolicy')) {
-    token.attrSet('referrerpolicy', 'no-referrer');
-  }
+  // #493 — Gitee (and a few other domestic image hosts) reject a request whose
+  // `Referer` is `http://tauri.localhost`, which is the origin Tauri 2 gives the
+  // Windows WebView. Every Gitee-hosted image therefore came back 403
+  // (`invalid Referer header`) while the same URL opened fine in a browser or
+  // in Typora. `no-referrer` is the policy a browser applies to a `file://`
+  // page, so it is a well-trodden path, and no host needs the referrer to serve
+  // a plain <img>. Kept per-element rather than a page-wide
+  // `<meta name="referrer">`: that would also drop the referrer on the OAuth
+  // and share links the app opens in the same webview.
+  token.attrSet('referrerpolicy', 'no-referrer');
   const rawAlt = token.children
     ? self.renderInlineAsText(token.children, options, env)
     : (token.content || token.attrGet('alt') || '');
   const parsed = parseImageAltSize(rawAlt);
-  if (parsed.width) {
+  if (parsed.width || parsed.height) {
     const existingStyle = token.attrGet('style');
-    const sizeStyle = `width: ${parsed.width};${parsed.height ? ` height: ${parsed.height};` : ''}`;
+    const sizeStyle = [
+      parsed.width ? `width: ${parsed.width};` : '',
+      parsed.height ? `height: ${parsed.height};` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     token.attrSet('style', existingStyle ? `${existingStyle}; ${sizeStyle}` : sizeStyle);
-    if (parsed.width.endsWith('px')) {
+    if (parsed.width?.endsWith('px')) {
       token.attrSet('width', parsed.width.slice(0, -2));
     }
     if (parsed.height?.endsWith('px')) {
@@ -242,7 +276,7 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const html = defaultImageRenderer
     ? defaultImageRenderer(tokens, idx, options, env, self)
     : self.renderToken(tokens, idx, options);
-  if (parsed.width) {
+  if (parsed.width || parsed.height) {
     return html.replace(/\balt="[^"]*"/, `alt="${escapeHtml(parsed.alt)}"`);
   }
   return html;

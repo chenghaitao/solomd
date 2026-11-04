@@ -1658,6 +1658,39 @@ function isDeleteChord(e: KeyboardEvent): boolean {
   return macKeys && e.key === 'Backspace' && e.metaKey && !e.ctrlKey;
 }
 
+// ── #495: horizontal scrolling instead of ellipsis ──────────────────────────
+// A long note name is no longer cut with "…": the rows grow to their natural
+// width and the scroll area gets a horizontal scrollbar (see the styles), so
+// the panel can be narrower than the longest name and still show all of it.
+// Shift+wheel then slides the tree sideways — the VNote behaviour the issue
+// asks for.
+
+/** The nearest ancestor that can scroll horizontally, or null. */
+function horizontalScrollerOf(start: HTMLElement | null): HTMLElement | null {
+  let el: HTMLElement | null = start;
+  while (el) {
+    const ox = getComputedStyle(el).overflowX;
+    if (ox === 'auto' || ox === 'scroll') return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+// Chromium already maps Shift+wheel onto a horizontal scroll, but only for a
+// scroller it considers the nearest one, and WebKit (macOS/Linux builds) does
+// not map it at all. Handling it here makes one behaviour on every platform;
+// preventDefault stops the native mapping from applying the same delta twice.
+function onTreeWheel(e: WheelEvent) {
+  if (!e.shiftKey || e.defaultPrevented) return;
+  const el = horizontalScrollerOf(treeBody.value ?? treeEl.value);
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+  if (!delta) return;
+  const before = el.scrollLeft;
+  el.scrollLeft = before + delta;
+  if (el.scrollLeft !== before) e.preventDefault();
+}
+
 function onTreeKey(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
   const target = e.target as HTMLElement | null;
@@ -1854,6 +1887,7 @@ onBeforeUnmount(() => {
     class="ftree"
     tabindex="-1"
     @keydown="onTreeKey"
+    @wheel="onTreeWheel"
     :class="{ 'ftree--fullnames': settings.explorerFullNames, 'ftree--embedded': props.embedded }"
     :style="props.embedded ? undefined : { '--file-tree-width': settings.fileTreeWidth + 'px' }"
     @contextmenu.prevent="openCtx($event, null)"
@@ -1986,7 +2020,7 @@ onBeforeUnmount(() => {
           @click="workspace.clearRecentFolders(); closeSwitcher()"
         >
           <span class="ftree__menu-check"></span>
-          <span class="ftree__menu-name">{{ t('explorer.clearRecentFolders') || '清除最近文件夹记录' }}</span>
+          <span class="ftree__menu-name">{{ t('explorer.clearRecentFolders') || 'Clear recent folders' }}</span>
         </button>
       </div>
       <div
@@ -2177,10 +2211,10 @@ onBeforeUnmount(() => {
       <template v-if="ctx.node && ctx.node.is_dir">
         <div class="ftree__ctx-sep"></div>
         <button class="ftree__ctx-item" @click="expandSubtree(ctx.node)">
-          {{ t('explorer.expandSubtree') || '展开全部子目录' }}
+          {{ t('explorer.expandSubtree') || 'Expand all subfolders' }}
         </button>
         <button class="ftree__ctx-item" @click="collapseSubtree(ctx.node)">
-          {{ t('explorer.collapseSubtree') || '折叠全部子目录' }}
+          {{ t('explorer.collapseSubtree') || 'Collapse all subfolders' }}
         </button>
       </template>
       <!-- Only between the "new file / folder" section (folders) and the rest:
@@ -3104,6 +3138,11 @@ export const FileTreeNode = defineComponent({
 :deep(.ftree__name-base) {
   white-space: nowrap;
   min-width: 0;
+}
+.ftree:not(.ftree--fullnames) :deep(.ftree__name-base) {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
 }
 :deep(.ftree__name-ext) {
   flex-shrink: 0;

@@ -38,7 +38,9 @@ import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls } from '../lib/ima
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
-import { track } from '../lib/telemetry';
+// Fork addition: rasterizes ```mermaid fences for the clipboard path below —
+// see lib/diagram-export.ts.
+import { inlineDiagramsInHtml } from '../lib/diagram-export';
 import {
   resolvePdfOptions,
   userTouchedPdfDefaults,
@@ -277,7 +279,6 @@ export function useExport() {
   }
 
   async function exportHtml() {
-    track('file_exported', { format: 'html' });
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.html`;
@@ -303,7 +304,6 @@ export function useExport() {
   }
 
   async function exportDocx() {
-    track('file_exported', { format: 'docx' });
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.docx`;
@@ -330,7 +330,6 @@ export function useExport() {
 
   /** Native-feel PDF export: build a real .pdf file via html2pdf.js. */
   async function exportPdf() {
-    track('file_exported', { format: 'pdf' });
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.pdf`;
@@ -420,7 +419,6 @@ export function useExport() {
    * WebKitGTK print on Linux).
    */
   async function exportPdfPrint(options?: { forcePrintDialog?: boolean }) {
-    track('file_exported', { format: options?.forcePrintDialog ? 'print' : 'pdf_print' });
     const ctx = activeOr();
     if (!ctx) return;
 
@@ -589,8 +587,13 @@ export function useExport() {
   async function copyAsHtml() {
     const src = copySource();
     if (!src) return;
+    // Fork addition: diagrams are rasterized for the clipboard. Word, Google
+    // Docs and most mail clients drop inline `<svg>` when pasting, so the
+    // alternative is a blank hole in the pasted document (`asPng`, see
+    // lib/diagram-export.ts). The SVG path used by the file exports is left
+    // exactly as upstream wrote it.
     await loadRenderDeps();
-    const html = renderMarkdown(src.source);
+    const html = await inlineDiagramsInHtml(renderMarkdown(src.source), { asPng: true });
     const okMsg = t(src.isSelection ? 'toast.copiedSelectionAsHtml' : 'toast.copiedAsHtml');
     // Native Clipboard API first — supports rich HTML on all desktops and on
     // iOS 16+. Tauri's `writeHtml` is unimplemented on iOS so we'd otherwise
@@ -688,7 +691,6 @@ export function useExport() {
    * of the whole document.
    */
   async function exportImage() {
-    track('file_exported', { format: 'image' });
     const ctx = activeOr();
     if (!ctx) return;
     const sel = getEditorSelectionMd(ctx.content);

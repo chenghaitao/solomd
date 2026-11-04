@@ -63,7 +63,6 @@ import { getDict } from '../i18n';
 import { flatten, englishFallbackNeedles, blockMatches, normalize, queryMatcher } from '../lib/settings-search';
 import type { Theme } from '../types';
 
-const isMobilePlatform = isIOS();
 // Quick capture needs an OS-level hotkey and a second window — neither exists
 // on Android or iOS, so the whole section stays off phones (isIOS alone would
 // still show it on Android).
@@ -97,7 +96,15 @@ function withChord(key: string, actionId: string): string {
 
 // v3.0 — left-side category nav. Settings was a 30+ item single scroll;
 // split into 6 groups so the user navigates by category, not by scroll.
-type SettingsCategory = 'basics' | 'writing' | 'sync' | 'integrations' | 'export' | 'keys' | 'advanced';
+type SettingsCategory =
+  | 'basics'
+  | 'editing'
+  | 'writing'
+  | 'sync'
+  | 'integrations'
+  | 'export'
+  | 'keys'
+  | 'advanced';
 const activeCategory = ref<SettingsCategory>('basics');
 // #144 — all six category pages share the single scrolling `.settings__body`
 // (pages are toggled via CSS display), so one page's scrollTop leaked into
@@ -257,6 +264,10 @@ onUnmounted(stopRecording);
 
 const categories: { id: SettingsCategory; icon: string; labelKey: string }[] = [
   { id: 'basics', icon: 'settings', labelKey: 'settings.catBasics' },
+  // "Editing" sits between the two it belongs to: what the app looks like
+  // (Basics) → how the editor behaves (Editing) → how you write in it
+  // (Writing). Everything that used to be the back half of Basics lives here.
+  { id: 'editing', icon: 'text-cursor', labelKey: 'settings.catEditing' },
   { id: 'writing', icon: 'pencil', labelKey: 'settings.catWriting' },
   { id: 'sync', icon: 'cloud', labelKey: 'settings.catSync' },
   { id: 'integrations', icon: 'plug', labelKey: 'settings.catIntegrations' },
@@ -273,11 +284,32 @@ const { checking: checkingUpdate, manualCheckUpdate } = useUpdateCheck();
 
 const settingDefault = ref(false);
 
+/** What `set_as_default_markdown_editor` returns (src-tauri/src/set_default.rs). */
+type SetDefaultOutcome = { ok: boolean; code: string; count: number; detail: string };
+
+// The Rust command is language-neutral on purpose — it reports a code, and the
+// toast follows the UI language here. `detail` is raw OS diagnostics (OSStatus,
+// registry path + error, xdg-mime stderr) interpolated as a value, not prose.
+const SET_DEFAULT_RESULT_KEY: Record<string, string> = {
+  doneMacos: 'settings.setDefaultDoneMacos',
+  failedMacos: 'settings.setDefaultFailedMacos',
+  doneWindows: 'settings.setDefaultDoneWindows',
+  failedWindows: 'settings.setDefaultFailedWindows',
+  doneLinux: 'settings.setDefaultDoneLinux',
+  failedLinux: 'settings.setDefaultFailedLinux',
+  failedUnsupported: 'settings.setDefaultFailedUnsupported',
+};
+
 async function setAsDefault() {
   settingDefault.value = true;
   try {
-    const msg = await invoke<string>('set_as_default_markdown_editor');
-    toasts.success(msg);
+    const res = await invoke<SetDefaultOutcome>('set_as_default_markdown_editor');
+    const text = t(SET_DEFAULT_RESULT_KEY[res.code] ?? 'settings.setDefaultFailedUnknown', {
+      count: String(res.count),
+      detail: res.detail,
+    });
+    if (res.ok) toasts.success(text);
+    else toasts.error(text);
   } catch (e) {
     toasts.error(String(e));
   } finally {
@@ -296,7 +328,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 // Every category, `keys` included — it was missing, so the shortcut sheet's
 // "change shortcuts" link opened Settings on Basics instead.
 const VALID_CATEGORIES = new Set<SettingsCategory>([
-  'basics', 'writing', 'sync', 'integrations', 'export', 'keys', 'advanced',
+  'basics', 'editing', 'writing', 'sync', 'integrations', 'export', 'keys', 'advanced',
 ]);
 watch(
   () => props.open,
@@ -680,6 +712,103 @@ onUnmounted(() => {
   clearHighlight();
 });
 
+// ---------------------------------------------------------------------------
+// The page area is a fixed-height box, resizable by dragging the grip along
+// the dialog's bottom edge.
+//
+// The height is persisted (`settings.settingsPanelHeight`) so it survives a
+// restart. It is NOT capped in the CSS: `--settings-h` is what the user asked
+// for, the panel's own `max-height: calc(100vh - 32px)` is what keeps the
+// dialog on screen, and `.settings__layout`'s `flex-shrink` gives back the
+// difference on a short window — the page (`.settings__body`) scrolls.
+// ---------------------------------------------------------------------------
+const layoutEl = ref<HTMLElement | null>(null);
+const settingsHeight = ref(settings.settingsPanelHeight);
+const settingsStyle = computed(() => ({ '--settings-h': `${settingsHeight.value}px` }));
+/** Below this the nav + page pair stops being readable. Mirrors the store's
+ *  own floor, which is the value that actually persists. */
+const MIN_SETTINGS_H = 280;
+/** Arrow-key nudge, matching the other keyboard-driven resizers. */
+const KEY_SETTINGS_H_STEP = 24;
+/** The dialog overlay's own gutter — see `.ds-modal { padding: var(--sp-5) }`
+ *  in ui/DsModal.vue. The drag ceiling is measured against it. */
+const OVERLAY_INSET = 24;
+
+// The store is the source of truth (a second window may write it); adopt its
+// value whenever it moves without us.
+watch(
+  () => settings.settingsPanelHeight,
+  (h) => {
+    if (h !== settingsHeight.value) settingsHeight.value = h;
+  },
+);
+
+let endSettingsResize: (() => void) | null = null;
+
+function onSettingsResizeDown(e: PointerEvent) {
+  if (e.button !== 0 || !layoutEl.value) return;
+  e.preventDefault();
+  endSettingsResize?.();
+  const handle = e.currentTarget as HTMLElement;
+  const fromY = e.clientY;
+  const fromH = settingsHeight.value;
+  // The dialog is centred, so growing the box by d also lifts its top by
+  // d/2 — a 1:1 drag would leave the grip falling behind the pointer at
+  // half speed. Doubling the delta makes the grip track the pointer exactly.
+  //
+  // `ceiling` is where the dialog runs out of room: the box's bottom is
+  // (startTop + (H + H0)/2), and it has to stay a grip + an overlay gutter
+  // above the viewport's edge. (Solving for H, with the centring folded in,
+  // is the expression below. It works out to `v - 2*gutter - chromeHeight`
+  // either way — independent of where the drag started, as it should be.)
+  const startTop = layoutEl.value.getBoundingClientRect().top;
+  const gripH = handle.getBoundingClientRect().height;
+  const ceiling = Math.max(
+    MIN_SETTINGS_H,
+    Math.round(2 * (window.innerHeight - OVERLAY_INSET - gripH - startTop) - fromH),
+  );
+  try { handle.setPointerCapture(e.pointerId); } catch {}
+  document.body.classList.add('settings-grip--dragging');
+
+  const onMove = (ev: PointerEvent) => {
+    if (ev.pointerId !== e.pointerId) return;
+    const raw = fromH + (ev.clientY - fromY) * 2;
+    settingsHeight.value = Math.min(Math.max(MIN_SETTINGS_H, raw), ceiling);
+  };
+  // Listen on window and treat a lost capture as the end too, same as the
+  // split divider: dragging hard emitted `lostpointercapture` right before
+  // `pointerup` there, and a handle-only listener then left the drag stuck.
+  const onEnd = () => {
+    endSettingsResize = null;
+    window.removeEventListener('pointermove', onMove, true);
+    window.removeEventListener('pointerup', onEnd, true);
+    window.removeEventListener('pointercancel', onEnd, true);
+    handle.removeEventListener('lostpointercapture', onEnd);
+    document.body.classList.remove('settings-grip--dragging');
+    // Persist what the box actually shows rather than the raw number: if the
+    // window was resized mid-drag the flex clamp, not `--settings-h`, decided
+    // the height, and the panel should reopen at that.
+    const shown = layoutEl.value?.getBoundingClientRect().height ?? 0;
+    if (shown) settingsHeight.value = Math.round(shown);
+    settings.setSettingsPanelHeight(settingsHeight.value);
+  };
+  endSettingsResize = onEnd;
+  window.addEventListener('pointermove', onMove, true);
+  window.addEventListener('pointerup', onEnd, true);
+  window.addEventListener('pointercancel', onEnd, true);
+  handle.addEventListener('lostpointercapture', onEnd);
+}
+
+/** Arrow keys walk the same grip, so the box is reachable without a mouse. */
+function onSettingsResizeKey(e: KeyboardEvent) {
+  const dir = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+  if (!dir) return;
+  e.preventDefault();
+  settingsHeight.value = Math.max(MIN_SETTINGS_H, settingsHeight.value + dir * KEY_SETTINGS_H_STEP);
+  settings.setSettingsPanelHeight(settingsHeight.value);
+}
+onUnmounted(() => endSettingsResize?.());
+
 
 // #246 — dictionaries actually present, so the picker can't offer a language
 // that would fail to load. `spellcheck_list_dicts` scans
@@ -986,7 +1115,7 @@ function onSelectPdfFont(v: string) {
           </span>
         </template>
       </div>
-      <div class="settings__layout">
+      <div ref="layoutEl" class="settings__layout" :style="settingsStyle">
         <!-- v3.0 — left-side category nav. Click switches the right-side
              content panel; only one category visible at a time. -->
         <nav class="settings__nav">
@@ -1172,35 +1301,35 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.wheelZoomHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.wordWrap" @change="settings.toggleWordWrap()" />
             {{ t('settings.wordWrap') }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.showLineNumbers" @change="settings.toggleLineNumbers()" />
             {{ t('settings.lineNumbers') }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.solidCursor" @change="settings.toggleSolidCursor()" />
             {{ t('settings.solidCursor') }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.viewMode === 'liveEdit' || (settings.viewMode === 'split' && settings.livePreview)" @change="settings.toggleLivePreview()" />
             {{ t('settings.livePreview') }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.alwaysShowMarkers" @change="settings.toggleAlwaysShowMarkers()" />
             {{ t('settings.alwaysShowMarkers') }}
@@ -1208,7 +1337,7 @@ function onSelectPdfFont(v: string) {
           <div class="hint">{{ t('settings.alwaysShowMarkersHint') }}</div>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.highlightCurrentLine" @change="settings.toggleHighlightCurrentLine()" />
             {{ t('settings.highlightCurrentLine') }}
@@ -1216,7 +1345,7 @@ function onSelectPdfFont(v: string) {
           <div class="hint">{{ t('settings.highlightCurrentLineHint') }}</div>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.tabTitleFromFirstLine" @change="settings.toggleTabTitleFromFirstLine()" />
             {{ t('settings.tabTitleFromFirstLine') }}
@@ -1247,7 +1376,7 @@ function onSelectPdfFont(v: string) {
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>{{ t('settings.outlineSide') }}</label>
           <select
             :value="settings.outlineSide"
@@ -1258,7 +1387,7 @@ function onSelectPdfFont(v: string) {
           </select>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>{{ t('settings.outlineMarker') }}</label>
           <select
             :value="settings.outlineMarker"
@@ -1270,14 +1399,14 @@ function onSelectPdfFont(v: string) {
           </select>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.previewFitWidth" @change="settings.togglePreviewFitWidth()" />
             {{ t('settings.previewFitWidth') }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>{{ t('settings.previewMaxWidth') }}: {{ settings.previewMaxWidth }}px</label>
           <input
             type="range"
@@ -1291,14 +1420,14 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.previewMaxWidthHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.limitEditorWidth" @change="settings.toggleLimitEditorWidth()" />
             {{ t('settings.limitEditorWidth') || 'Limit editor width (readable column)' }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1310,7 +1439,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.codeBlockLineNumbersHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1322,7 +1451,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.foldingHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1334,7 +1463,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.codeBlockWrapHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1346,7 +1475,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.explorerFullNamesHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1358,7 +1487,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.explorerDoubleClickFoldersHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1370,7 +1499,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.explorerFollowActiveHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1382,7 +1511,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.explorerShowHiddenHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1394,7 +1523,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.splitLiveSyncHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1406,7 +1535,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.distinctSplitPanesHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1418,7 +1547,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.markdownHardBreaksHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1430,7 +1559,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.smartQuotesHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1442,7 +1571,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('settings.markdownAutoNumberHeadingsHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1463,7 +1592,7 @@ function onSelectPdfFont(v: string) {
           />
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1475,14 +1604,14 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('reading.readingByDefaultOnMobileHint') }}</p>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.showFileTree" @change="settings.toggleFileTree()" />
             {{ t('settings.showFileTree') }}
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input
               type="checkbox"
@@ -1511,7 +1640,7 @@ function onSelectPdfFont(v: string) {
           </label>
         </section>
 
-        <section data-cat="basics">
+        <section data-cat="editing">
           <label>
             <input type="checkbox" :checked="settings.showTagsPanel" @change="settings.toggleTagsPanel()" />
             {{ t('settings.showTagsPanel') }}
@@ -1526,6 +1655,16 @@ function onSelectPdfFont(v: string) {
             {{ t('settings.selectionBubble') }}
           </label>
           <p class="setting-hint">{{ t('settings.selectionBubbleHint') }}</p>
+        </section>
+
+        <!-- 5.0 — the formatting toolbar above the editor. Desktop only for
+             the same reason as the bubble: the phone has KeyboardBar. -->
+        <section v-if="!isMobile()" data-cat="writing">
+          <label>
+            <input type="checkbox" :checked="settings.formatBar" @change="settings.toggleFormatBar()" />
+            {{ t('settings.formatBar') }}
+          </label>
+          <p class="setting-hint">{{ t('settings.formatBarHint') }}</p>
         </section>
 
         <section data-cat="writing">
@@ -2435,7 +2574,7 @@ function onSelectPdfFont(v: string) {
           </div>
         </section>
 
-        <section v-if="!isMobilePlatform" data-cat="advanced">
+        <section v-if="!isPhoneOrTablet" data-cat="advanced">
           <label>
             <input type="checkbox" :checked="settings.openFileInNewWindow" @change="settings.toggleOpenFileInNewWindow()" />
             {{ t('settings.openFileInNewWindow') }}
@@ -2465,8 +2604,10 @@ function onSelectPdfFont(v: string) {
           </div>
         </section>
 
-        <section v-if="!isMobilePlatform && !masBuild" data-cat="advanced">
-          <label>
+        <section v-if="!isIOS() && !masBuild" data-cat="advanced">
+          <!-- Auto-check only exists on desktop; mobile is updated by the OS
+               app store, so Android keeps just the manual "check" button. -->
+          <label v-if="!isPhoneOrTablet">
             <input type="checkbox" :checked="settings.autoCheckUpdate" @change="settings.toggleAutoCheckUpdate()" />
             {{ t('settings.autoCheckUpdate') }}
           </label>
@@ -2477,19 +2618,7 @@ function onSelectPdfFont(v: string) {
           </div>
         </section>
 
-        <!-- App Store builds send no usage data at all (lib/telemetry.ts), so
-             there is no switch to show. -->
-        <section v-if="!IS_APP_STORE_BUILD" data-cat="advanced">
-          <label>
-            <input type="checkbox" :checked="settings.telemetryEnabled" @change="settings.toggleTelemetry()" />
-            {{ t('settings.telemetry') }}
-          </label>
-          <div class="setting-hint">
-            {{ t('settings.telemetryHint') }}
-          </div>
-        </section>
-
-        <section data-cat="advanced">
+      <section data-cat="advanced">
           <label>{{ t('settings.customCss') }}</label>
           <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
             <button @click="pickCustomCss">{{ t('settings.pickCss') }}</button>
@@ -2509,7 +2638,7 @@ function onSelectPdfFont(v: string) {
           <p class="setting-hint">{{ t('themes.browseHint') }}</p>
         </section>
 
-        <section data-cat="advanced">
+        <section v-if="!isPhoneOrTablet" data-cat="advanced">
           <label>{{ t('settings.fileAssoc') }}</label>
           <div class="row" style="gap: 8px; align-items: center;">
             <button
@@ -2531,6 +2660,23 @@ function onSelectPdfFont(v: string) {
         <!-- v4.0: Public REST API for non-MCP clients. -->
         <div data-cat="integrations"><RestApiSettings /></div>
       </div>
+      </div>
+
+      <!-- Drag to set the page area's height (persisted, see
+           `settings.settingsPanelHeight`). Not on phones: the dialog is the
+           viewport there and has no room to give back. -->
+      <div
+        v-if="!isMobile()"
+        class="settings__grip"
+        role="separator"
+        aria-orientation="horizontal"
+        :aria-label="t('settings.panelResize')"
+        :title="t('settings.panelResize')"
+        tabindex="0"
+        @pointerdown="onSettingsResizeDown"
+        @keydown="onSettingsResizeKey"
+      >
+        <span class="settings__grip-bar" aria-hidden="true" />
       </div>
     <!-- v2.5: theme marketplace modal. Lives outside settings__body so it
          overlays the entire viewport; it self-teleports to body so closing
@@ -2678,10 +2824,45 @@ function onSelectPdfFont(v: string) {
    this file: the overlay is teleported, so a scoped selector cannot reach
    it. */
 .settings__layout {
-  flex: 1;
+  /* `flex: 1 1 auto` (not `flex: 1`, which zeroes the basis) so the explicit
+     height below is the box's real size; `flex-shrink` then lets a short
+     window take it back instead of pushing the dialog off-screen. */
+  flex: 1 1 auto;
   display: flex;
   min-height: 0;
-  height: 100%;
+  /* User-resizable: `--settings-h` is written by the grip below (and comes
+     from `settings.settingsPanelHeight`, so it survives a restart). No
+     viewport maths here on purpose — the panel's own max-height plus the
+     shrink above bound it, and `.settings__body` scrolls inside. */
+  height: var(--settings-h, 520px);
+}
+/* The height grip: a full-width strip under the box. It is deliberately
+   outside `.settings__layout` (a third child of that row would become a
+   column) and outside the scroll container, so it never scrolls away.
+   Styled like the split divider (#367): furniture, not a call to action, so
+   hover deepens the grip instead of painting the accent. */
+.settings__grip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 12px;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+.settings__grip-bar {
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fill-2);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.settings__grip:hover .settings__grip-bar {
+  background: var(--text-3);
+}
+.settings__grip:focus-visible .settings__grip-bar {
+  background: var(--accent);
 }
 .settings__nav {
   width: 220px;
@@ -2747,6 +2928,7 @@ function onSelectPdfFont(v: string) {
   display: none;
 }
 .settings__body[data-active-cat="basics"] > [data-cat="basics"],
+.settings__body[data-active-cat="editing"] > [data-cat="editing"],
 .settings__body[data-active-cat="writing"] > [data-cat="writing"],
 .settings__body[data-active-cat="sync"] > [data-cat="sync"],
 .settings__body[data-active-cat="integrations"] > [data-cat="integrations"],
@@ -2756,6 +2938,7 @@ function onSelectPdfFont(v: string) {
   display: block;
 }
 .settings__body[data-active-cat="basics"] > section[data-cat="basics"],
+.settings__body[data-active-cat="editing"] > section[data-cat="editing"],
 .settings__body[data-active-cat="writing"] > section[data-cat="writing"],
 .settings__body[data-active-cat="sync"] > section[data-cat="sync"],
 .settings__body[data-active-cat="integrations"] > section[data-cat="integrations"],
@@ -2771,10 +2954,17 @@ function onSelectPdfFont(v: string) {
   display: flex;
   align-items: center;
   gap: 10px;
-  /* 4px on top: the modal body scrolls (overflow-y: auto) with no padding,
-     which clipped the top edge of the input's focus ring. The header gives
-     the same 4px back (see .ds-modal.settings-modal .ds-modal__head). */
-  padding: 4px 24px 12px;
+  /* The dialog body is a scroll container, so it clips at its padding edge —
+     the field's focus ring (`--ring`, 4px out) had nothing to sit in and had
+     its top sliced off. Six px above the field gives the ring its room, and
+     `sticky` keeps the row (and the ring) put while a page scrolls under it.
+     `--bg`, not `--bg-pop`: the panel is forced to `--bg` below, and --bg-pop
+     is a shade off it in the dark themes — the strip would show as a band. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 24px 12px;
+  background: var(--bg);
   border-bottom: var(--bd-hair);
 }
 .settings__search-input {
@@ -3341,11 +3531,26 @@ input[type='range']:disabled {
   border-radius: var(--r-md);
 }
 :root:not(.narrow-viewport) .ds-modal.settings-modal .ds-modal__panel {
-  height: clamp(480px, 68vh, 660px);
+  /* Height comes from the local grip (`.settings__layout` reads
+     `--settings-h`, written from `settings.settingsPanelHeight`), so the frame
+     follows its content instead of a fixed clamp that would cap the drag.
+     `max-height` still keeps the dialog inside the viewport. */
+  height: auto;
   max-height: calc(100% - 32px);
 }
+/* #479 — between the phone layout and a desktop window there is the tablet
+   band (iPad portrait 820, Android tablets 800–1100): wide enough for the
+   two-column settings, too small for the fixed 820px panel, which either
+   overflowed the viewport or floated in backdrop with the settings squeezed
+   into a corner. Scale with the viewport instead of pinning a width. */
+@media (min-width: 601px) and (max-width: 1100px) {
+  .ds-modal.settings-modal .ds-modal__panel {
+    width: min(94vw, 900px) !important;
+    max-height: calc(100% - 24px);
+  }
+}
 .ds-modal.settings-modal .ds-modal__head {
-  /* 10px total gap to the search row; 4px of it lives in .settings__search
+  /* 12px total gap to the search row; 6px of it lives in .settings__search
      so the focus ring is not clipped by the scrolling body. */
   padding-bottom: 6px;
 }

@@ -57,6 +57,18 @@ const emit = defineEmits<{
 
 const IMAGE_SIZE_PRESETS = ['25%', '50%', '75%', '100%'] as const;
 
+// #499 — exact pixel sizing. Width and height can be set independently; the
+// omitted side keeps the image's aspect ratio. `x250` is the height-only form
+// the Markdown parser understands (`![alt|x250](url)`).
+const customWidth = ref('');
+const customHeight = ref('');
+function applyCustomSize() {
+  const w = customWidth.value.trim();
+  const h = customHeight.value.trim();
+  if (!w && !h) return;
+  emit('resize-image', w && h ? `${w}x${h}` : w ? w : `x${h}`);
+}
+
 const { t } = useI18n();
 const root = ref<HTMLElement | null>(null);
 const pos = ref({ left: props.x, top: props.y });
@@ -236,6 +248,33 @@ onBeforeUnmount(() => {
             @click="emit('resize-image', sz)"
           >{{ sz }}</button>
         </div>
+        <div class="editor-ctx__size-custom">
+          <input
+            v-model="customWidth"
+            class="editor-ctx__size-input"
+            type="number"
+            min="1"
+            inputmode="numeric"
+            :placeholder="t('overlay.imageSizeWidth')"
+            :aria-label="t('overlay.imageSizeWidth')"
+          />
+          <span class="editor-ctx__size-x">×</span>
+          <input
+            v-model="customHeight"
+            class="editor-ctx__size-input"
+            type="number"
+            min="1"
+            inputmode="numeric"
+            :placeholder="t('overlay.imageSizeHeight')"
+            :aria-label="t('overlay.imageSizeHeight')"
+          />
+          <button
+            type="button"
+            class="editor-ctx__size-apply"
+            @mousedown.prevent
+            @click="applyCustomSize"
+          >{{ t('overlay.imageSizeApply') }}</button>
+        </div>
       </div>
     </template>
   </div>
@@ -245,7 +284,7 @@ onBeforeUnmount(() => {
 .editor-ctx {
   position: fixed;
   z-index: 1000;
-  min-width: 180px;
+  min-width: 240px;
   padding: 4px;
   background: var(--bg-elev, var(--bg));
   border: 1px solid var(--border);
@@ -299,6 +338,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 4px 10px 6px;
 }
@@ -324,5 +364,36 @@ onBeforeUnmount(() => {
 .editor-ctx__size-btn:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border-color: var(--accent);
+}
+/* #499 — exact pixel size: width and height are independent. */
+.editor-ctx__size-custom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-basis: 100%;
+  margin-top: 6px;
+}
+.editor-ctx__size-input {
+  width: 56px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+}
+.editor-ctx__size-x {
+  color: var(--text-muted, var(--text));
+  font-size: 11px;
+}
+.editor-ctx__size-apply {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
 }
 </style>

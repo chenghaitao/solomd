@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { EditorState, Compartment, Prec } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab, undo as cmUndo, redo as cmRedo } from '@codemirror/commands';
-import { searchKeymap, search, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery } from '@codemirror/search';
+import { searchKeymap, search, openSearchPanel, closeSearchPanel, searchPanelOpen, getSearchQuery, setSearchQuery } from '@codemirror/search';
 import { createFindPanel, type FindPanelLabels } from '../lib/cm-find-panel';
 import { tabCaretMemory, tabTopLineMemory, type TabCaretSnapshot } from '../lib/scroll-memory';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language';
@@ -27,10 +27,9 @@ import {
   unfoldAllFolds,
   foldHeadingsToLevel,
 } from '../lib/cm-heading-fold';
-import { findTableSpan } from '../lib/markdown-table';
+import { serializeTable } from '../lib/markdown-table';
 import { findMathSpanAt, collectLabels } from '../lib/equations';
 import { openFormulaEditor } from '../lib/formula-editor-bus';
-import { openTableEditor } from '../lib/table-editor-bus';
 import {
   scanHeadings,
   foldedCharRanges,
@@ -107,15 +106,17 @@ import { cjkDoubleClickSelection } from '../lib/cm-cjk-dblclick';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
 import { SLASH_BLOCKS, filterBlocks, expandSnippet, indentExpandedSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
-import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
-import { isAndroid, isIOS, isMobile } from '../lib/platform';
+import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor, isAndroid, isIOS, isMobile } from '../lib/platform';
+import { computeListContinuation, computeListSoftBreak, repairIndentedFenceEdit, type ListContinuationOptions } from '../lib/list-continuation';
+import { listContinuationKeymap } from '../lib/cm-list-continuation';
 import SelectionBubble, { type BubbleSelection } from './SelectionBubble.vue';
+import TableToolbar from './TableToolbar.vue';
+import { applyTableAction, cellStart, rowAfterAction, tableAt, type TableAction, type TableToolbarState } from '../lib/table-toolbar';
 import { lineContext, nextHeadingKind, type Box } from '../lib/selection-bubble';
 import EditorContextMenu, { type EditorMenuAction, type EditorMenuSpell } from './EditorContextMenu.vue';
 import { lookupMisspelling, addToSpellDict } from '../lib/spell-suggest';
 import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
-import { computeListContinuation, computeListSoftBreak, repairIndentedFenceEdit } from '../lib/list-continuation';
 import { mapPos, renumberAfterEdit, renumberChanges } from '../lib/list-renumber';
 import { findMarkdownLinkAt, openMarkdownHref, openRenderedLink } from '../lib/link-open';
 
@@ -235,6 +236,7 @@ const aiKeyCompartment = new Compartment();
 // B4 — CodeMirror's own default/search keymap, minus every chord an app-level
 // shortcut owns (see `cmKeyOwnedByApp`). Reconfigured when bindings change.
 const baseKeymapCompartment = new Compartment();
+
 function baseKeymap() {
   const overrides = { ...settings.keybindings };
   return keymap.of(
@@ -488,6 +490,16 @@ function syncEditorContentSoon(text: string) {
           view.dispatch({
             changes: { from: edit.from, to: edit.to, insert: edit.insert },
             selection: { anchor: edit.selFrom, head: edit.selTo },
+            // #489 — the numbering pass rewrites the heading line, which makes
+            // it longer than what the user is typing: `##### text` becomes
+            // `##### 1.1.1.1.1 text`. When that line is at the bottom of the
+            // viewport (the reported case: long note, caret far down), the
+            // extra prefix can push it past a soft-wrap boundary, the line
+            // grows while `scrollTop` stays, and the caret ends up below the
+            // fold — the user sees the editor "jump" while typing. A programmatic
+            // dispatch does not scroll on its own, so ask for it explicitly:
+            // `nearest` moves nothing unless the caret really is out of view.
+            effects: EditorView.scrollIntoView(edit.selTo, { y: 'nearest', yMargin: 16 }),
           });
           if (Math.abs(view.scrollDOM.scrollTop - prevScrollTop) > 1) {
             view.scrollDOM.scrollTop = prevScrollTop;
@@ -1899,7 +1911,6 @@ function closePlainFind(toMatch = false) {
   if (toMatch && m && plainFindQuery.value) selectPlainRange(m.start, m.end, true);
 }
 
-/** Jump to the first match at or after where the caret was when the bar opened. */
 function revealPlainMatchFromAnchor() {
   runPlainSearch();
   const ms = plainMatches.value;
@@ -2486,7 +2497,9 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   const letter = mod ? plainModLetter(event) : '';
   if (mod && !event.altKey && !event.shiftKey && letter === 'f') {
     event.preventDefault();
-    openPlainFind();
+    // #389 — Ctrl/⌘+F opens the find bar, and pressing it again closes it.
+    if (plainFindOpen.value) closePlainFind(true);
+    else openPlainFind();
     return true;
   }
   if (mod && !event.altKey && letter === 'z') {
@@ -2579,7 +2592,24 @@ function plainAbsoluteSelection(): { from: number; to: number } | null {
  * textarea insert a plain newline.
  */
 function computeSmartEnter(el: HTMLTextAreaElement): { value: string; caret: number } | null {
-  return computeListContinuation(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
+  return computeListContinuation(
+    el.value,
+    el.selectionStart ?? 0,
+    el.selectionEnd ?? 0,
+    listContinuationOptions(),
+  );
+}
+
+/**
+ * The two toolbar toggles. Read on every keypress rather than cached, so
+ * clicking the icon takes effect on the next Enter without rebuilding the
+ * editor — the same contract `prec`/`compartment` reconfigure would need.
+ */
+function listContinuationOptions(): ListContinuationOptions {
+  return {
+    listContinuation: settings.markdownListContinue,
+    autoNumber: settings.markdownAutoNumber,
+  };
 }
 
 function computeSmartSoftBreak(el: HTMLTextAreaElement): { value: string; caret: number } | null {
@@ -4398,6 +4428,10 @@ function buildExtensions() {
         ]),
     // App-owned chords are filtered out of CodeMirror's keymap (baseKeymap):
     // the app shortcut listens on window, after CodeMirror has already acted.
+    // Fork addition: Enter continues a list / quote in CodeMirror too, honouring
+    // the two toolbar toggles (see lib/cm-list-continuation.ts). Ahead of
+    // baseKeymap so it wins over the plain newline.
+    listContinuationKeymap(() => listContinuationOptions()),
     baseKeymapCompartment.of(baseKeymap()),
     keymap.of([
       ...historyKeymap,
@@ -5046,7 +5080,11 @@ function findPanelLabels(): FindPanelLabels {
 
 function openFind(replace = false): void {
   if (usePlainWindowsEditor) {
-    openPlainFind(replace);
+    // #389 — the chord toggles on this path too; the find bar has no
+    // CodeMirror panel to ask, so the ref is the source of truth. Ctrl+H
+    // (replace) always opens and lands in the replace field.
+    if (!replace && plainFindOpen.value) closePlainFind(true);
+    else openPlainFind(replace);
     return;
   }
   if (view) {
@@ -5069,63 +5107,120 @@ function openFind(replace = false): void {
       }
     }
     view.focus();
-    openSearchPanel(view);
-    // CodeMirror's panel always carries the replace row; "Replace" (Ctrl+H)
-    // only decides which field gets the caret. With nothing to find yet the
-    // find field is the one that needs typing first.
-    if (replace && getSearchQuery(view.state).search) {
-      const field = view.dom.querySelector<HTMLInputElement>('.cm-search input[name=replace]');
-      field?.focus();
-      field?.select();
+    // #389 — ⌘/Ctrl+F toggles: the second press closes the box the first one
+    // opened. v5's find bar is still CodeMirror's search panel (createFindPanel
+    // only swaps its DOM), so `searchPanelOpen` answers correctly. Ctrl+H
+    // (replace) always opens and decides which field gets the caret.
+    if (!replace && searchPanelOpen(view.state)) {
+      closeSearchPanel(view);
+      view.focus();
+    } else {
+      openSearchPanel(view);
+      // CodeMirror's panel always carries the replace row; "Replace" (Ctrl+H)
+      // only decides which field gets the caret. With nothing to find yet the
+      // find field is the one that needs typing first.
+      if (replace && getSearchQuery(view.state).search) {
+        const field = view.dom.querySelector<HTMLInputElement>('.cm-search input[name=replace]');
+        field?.focus();
+        field?.select();
+      }
     }
   }
 }
 
+// ── floating table toolbar (TableToolbar.vue) ──────────────────────────────
+// Editor-agnostic for the same reason the selection bubble is: one reader pair
+// serves whichever editor this pane is running, so the bar is not silently
+// dead on the Windows textarea.
+const tableToolbarEnabled = computed(
+  () =>
+    !isMobile() &&
+    props.tab.language === 'markdown' &&
+    settings.viewMode !== 'preview' &&
+    settings.viewMode !== 'reading',
+);
+
+/** Whole-document text and caret offset, on either editor. */
+function editorTextAndCaret(): { text: string; caret: number } | null {
+  if (usePlainWindowsEditor) return { text: plainText.value || '', caret: plainCaretOffset() };
+  if (!view || view.composing) return null;
+  return { text: view.state.doc.toString(), caret: view.state.selection.main.head };
+}
+
+/** The textarea holding the caret on the plain path, if any. */
+function tableToolbarTextarea(): HTMLTextAreaElement | null {
+  if (!usePlainWindowsEditor) return null;
+  return plainLiveEnabled.value ? plainBlockEditors.value[plainActiveBlock.value] : plainEditor.value;
+}
+
+function readTableToolbar(): TableToolbarState | null {
+  // Only while this editor is where the caret is: a bar left over from a pane
+  // that lost focus would be offering edits to a document nobody is in.
+  const own = usePlainWindowsEditor ? plainHostEl.value : view?.dom ?? null;
+  if (!own || !own.contains(document.activeElement)) return null;
+  const ed = editorTextAndCaret();
+  if (!ed) return null;
+  const hit = tableAt(ed.text, ed.caret);
+  if (!hit) return null;
+  return { model: hit.model, row: hit.row, col: hit.col, key: `${hit.from}:${hit.to}:${ed.caret}` };
+}
+
+/** The table's box on screen — the bar sits above it, under it when there is
+ *  no room, and follows it while the document scrolls. */
+function readTableToolbarRect(): Box | null {
+  const ed = editorTextAndCaret();
+  if (!ed) return null;
+  const hit = tableAt(ed.text, ed.caret);
+  if (!hit) return null;
+  if (!usePlainWindowsEditor) {
+    if (!view) return null;
+    const a = view.coordsAtPos(hit.from, 1);
+    const b = view.coordsAtPos(hit.to, -1);
+    if (!a || !b) return null;
+    return {
+      left: Math.min(a.left, b.left),
+      right: Math.max(a.right, b.right),
+      top: a.top,
+      bottom: b.bottom,
+    };
+  }
+  const el = tableToolbarTextarea();
+  if (!el) return null;
+  const base = plainLiveEnabled.value ? plainBlocks.value[plainActiveBlock.value]?.start ?? 0 : 0;
+  const box = selectionBoxPx(el, el.value, hit.from - base, hit.to - base);
+  const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const ox = r.left + el.clientLeft + parseFloat(cs.paddingLeft || '0') - el.scrollLeft;
+  const oy = r.top + el.clientTop + parseFloat(cs.paddingTop || '0') - el.scrollTop;
+  return { left: box.left + ox, right: box.right + ox, top: box.top + oy, bottom: box.bottom + oy };
+}
+
 /**
- * Open the grid editor on the table the caret is in.
+ * One toolbar press = one edit on the real document.
  *
- * Works off the document text and line offsets rather than either editor's
- * internals, so the same code serves CodeMirror and the Windows plain
- * textarea; only the write-back differs.
+ * The whole table is rewritten from the model rather than patching lines by
+ * hand: serialization is what keeps the columns aligned, and the caret is put
+ * back in the cell the action was about so the next keystroke lands where the
+ * user is looking — not at the end of the table, where a mapped selection
+ * would otherwise drop it.
  */
-function openTableAtCursor(): void {
-  const source = usePlainWindowsEditor ? plainText.value || '' : view?.state.doc.toString() ?? '';
-  if (!source) {
-    toasts.info(t('tableEditor.notInTable'));
-    return;
-  }
-  const lines = source.split('\n');
-  const caret = usePlainWindowsEditor
-    ? plainCaretOffset()
-    : view
-      ? view.state.selection.main.head
-      : 0;
-
-  // Offset → line index, plus each line's start offset for the reverse trip.
-  const starts: number[] = [];
-  let off = 0;
-  for (const line of lines) {
-    starts.push(off);
-    off += line.length + 1;
-  }
-  let caretLine = 0;
-  for (let i = 0; i < starts.length; i++) {
-    if (starts[i] <= caret) caretLine = i;
-    else break;
-  }
-
-  const span = findTableSpan(lines, caretLine);
-  if (!span) {
-    toasts.info(t('tableEditor.notInTable'));
-    return;
-  }
-  const from = starts[span.startLine];
-  const to = starts[span.endLine] + lines[span.endLine].length;
-
-  openTableEditor({
-    source: source.slice(from, to),
-    apply: (markdown: string) => replaceDocRange(from, to, markdown),
-  });
+function onTableToolbarAction(action: TableAction): void {
+  const ed = editorTextAndCaret();
+  if (!ed) return;
+  const hit = tableAt(ed.text, ed.caret);
+  if (!hit) return;
+  const next = applyTableAction(hit.model, action, hit.row, hit.col);
+  if (next === hit.model) return;
+  // A table nested in a list item is indented; serialization produces flush-left
+  // lines, so the indent has to be put back or the table falls out of the item.
+  const indent = /^[ \t]*/.exec(ed.text.slice(hit.from, hit.to))?.[0] ?? '';
+  const markdown = serializeTable(next)
+    .split('\n')
+    .map((line) => indent + line)
+    .join('\n');
+  const row = rowAfterAction(action, hit.row, next);
+  const col = Math.max(0, Math.min(hit.col, next.header.length - 1));
+  replaceDocRange(hit.from, hit.to, markdown, hit.from + cellStart(markdown, row, col));
 }
 
 /**
@@ -5188,16 +5283,20 @@ function plainCaretOffset(): number {
   return plainEditor.value?.selectionStart ?? 0;
 }
 
-/** Replace a document range in whichever editor this pane is running. */
-function replaceDocRange(from: number, to: number, text: string): void {
+/** Replace a document range in whichever editor this pane is running.
+ *  `caretAt` is an absolute offset in the *new* document, for edits that know
+ *  where the cursor belongs — a table rewrite, where the default would be the
+ *  end of the inserted text. */
+function replaceDocRange(from: number, to: number, text: string, caretAt?: number): void {
   if (usePlainWindowsEditor) {
     const src = plainText.value || '';
     recordPlainHistory();
-    applyPlainContent(src.slice(0, from) + text + src.slice(to), from + text.length);
+    applyPlainContent(src.slice(0, from) + text + src.slice(to), caretAt ?? from + text.length);
     return;
   }
   if (!view) return;
-  view.dispatch({ changes: { from, to, insert: text } });
+  const changes = { from, to, insert: text };
+  view.dispatch(caretAt === undefined ? { changes } : { changes, selection: { anchor: caretAt } });
 }
 
 /**
@@ -5388,6 +5487,14 @@ function focusFreshCodeMirror() {
 
 let cancelCmScrollRestore: (() => void) | null = null;
 
+/**
+ * #486 — restore by document anchor, not by pixel offset. The snapshot stores
+ * the anchor position plus its offset from the viewport top (written in
+ * `saveCurrentTabCaret`), so the viewport lands on the same line even when
+ * something above it changed height while the tab was in the background (a
+ * lazily decoded image, a re-measured table, a fold opening). The plain pixel
+ * value is only the fallback for snapshots taken before the anchor existed.
+ */
 function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   cancelCmScrollRestore?.();
   if (!view || !saved) return;
@@ -6274,7 +6381,7 @@ function scrollToLineAtOffset(line: number, offsetTop = 8): void {
   view.scrollDOM.scrollTop = Math.max(0, view.scrollDOM.scrollTop + (y - scroller.top) - safeOffset);
 }
 
-defineExpose({ gotoLine, setCaret, insertImageFromPath, insertImageUrl, uploadLocalImages, getViewLine, getViewportAnchor, restoreSavedScroll, scrollToLine, scrollToLineAtOffset, lineTopY, insertMarkdown, openFind, applyFold, openTableAtCursor, openFormulaAtCursor });
+defineExpose({ gotoLine, setCaret, insertImageFromPath, insertImageUrl, uploadLocalImages, getViewLine, getViewportAnchor, restoreSavedScroll, scrollToLine, scrollToLineAtOffset, lineTopY, insertMarkdown, openFind, applyFold, openFormulaAtCursor });
 
 const cls = computed(() => ({
   'cm-host': true,
@@ -6549,6 +6656,14 @@ const cls = computed(() => ({
     :read="readBubbleSelection"
     :rect="readBubbleRect"
     @format="applyFormatKind"
+  />
+  <!-- The table toolbar replaces the grid dialog: same host, same readers. -->
+  <TableToolbar
+    :host="bubbleHost"
+    :enabled="tableToolbarEnabled"
+    :read="readTableToolbar"
+    :rect="readTableToolbarRect"
+    @action="onTableToolbarAction"
   />
   <Teleport to="body">
     <EditorContextMenu

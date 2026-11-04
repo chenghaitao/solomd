@@ -15,6 +15,14 @@
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
+// Only the Apple / Android backends enumerate the tiers. On a desktop build
+// without a store both backends are compiled out, so the constant has no
+// reader — the bin target pulls this file in as a private module, which is
+// what turns "unused" into a warning there.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "ios", target_os = "android")),
+    allow(dead_code)
+)]
 pub const TIP_PRODUCT_IDS: &[&str] = &[
     "app.solomd.tip.coffee",
     "app.solomd.tip.meal",

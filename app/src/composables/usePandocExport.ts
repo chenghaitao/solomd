@@ -28,7 +28,6 @@ import { useI18n } from '../i18n';
 // imports here.
 import { useSettingsStore } from '../stores/settings';
 import { exportDefaultPath } from '../lib/export-paths';
-import { track } from '../lib/telemetry';
 import {
   parseBibFile,
   parseCslJson,
@@ -242,7 +241,6 @@ export function usePandocExport() {
 
     const { bibliography, csl } = resolveCitationFlags(content);
 
-    track('file_exported', { format: `pandoc_${format}` });
     const tid = toasts.info(t('toast.pandocExporting', { format }), 0);
     try {
       await invoke('pandoc_export', {

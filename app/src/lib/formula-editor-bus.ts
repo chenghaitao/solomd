@@ -1,9 +1,9 @@
 /**
  * Bridge between "the caret is in a formula" and the formula editor dialog.
  *
- * Same shape as `table-editor-bus.ts` and for the same reason: the editor is
- * per-pane, the dialog is one modal, and the pane hands over its own write-back
- * closure so the dialog never has to know which editor it is talking to.
+ * The editor is per-pane and the dialog is one modal, so the pane hands over
+ * its own write-back closure — the dialog never has to know which editor it is
+ * talking to, or whether that editor is CodeMirror or the Windows textarea.
  */
 import { reactive } from 'vue';
 

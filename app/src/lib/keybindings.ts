@@ -211,8 +211,15 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'fmt.task', label: 'Task List', category: 'paragraph', defaults: ['Mod+Alt+9'] },
   { id: 'fmt.quote', label: 'Blockquote', category: 'paragraph', defaults: ['Mod+Alt+Q'] },
   { id: 'fmt.codeblock', label: 'Code Block', category: 'paragraph', defaults: ['Mod+Alt+K'] },
-  { id: 'editor.tableEditor', label: 'Edit Current Table…', category: 'paragraph', defaults: ['Mod+Alt+T'] },
   { id: 'editor.formulaEditor', label: 'Edit Current Formula…', category: 'paragraph', defaults: ['Mod+Alt+M'] },
+  // #387 (this fork) — the Insert menu's table entry became a dialog that asks
+  // for the size, and it needed a chord of its own. Every ⌘/Ctrl[+Alt][+Shift]+T
+  // is already spoken for (New Note, Reopen Tab, Toggle Toolbar), and plain
+  // Ctrl+Alt+I is the Typora/Word preset's "Toggle Properties
+  // Inspector", so this is the next one down: I for Insert, in the Ctrl+Alt
+  // family the B4 remap settled on because AMD Software and Microsoft Pinyin
+  // swallow so many Ctrl+Shift chords on Windows.
+  { id: 'insert.table', label: 'Insert Table…', category: 'paragraph', defaults: ['Mod+Alt+Shift+I'] },
 
   // ---- Format ----
   // Bold is NOT on Mod+B by default: that has toggled the file tree since

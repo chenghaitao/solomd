@@ -35,6 +35,7 @@ import { useGithubSyncStore } from '../stores/githubSync';
 import { useGithubSync } from './useGithubSync';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { hasGitBackend } from '../lib/platform';
+import { useI18n } from '../i18n';
 
 export interface Command {
   id: string;
@@ -56,6 +57,9 @@ export function useCommands(): Command[] {
   const tiles = useTilesStore();
   const exporter = useExport();
   const toasts = useToastsStore();
+  // Destructured as `tr`: four places in this file already hold a local
+  // `const t = freshActiveTab()`, and shadowing those would read as a bug.
+  const { t: tr } = useI18n();
   const daily = useDailyNotes();
   const pandoc = usePandocExport();
   const bases = useBasesView();
@@ -380,6 +384,17 @@ export function useCommands(): Command[] {
     },
 
     {
+      // #387 — was a palette entry that pasted a fixed 2×2 template; it now
+      // asks for the size first. Same id as the menu item and the bindable
+      // action, so the chord, the menu and the palette stay one behaviour.
+      id: 'insert.table',
+      title: 'Insert Table…',
+      shortcut: kb('insert.table'),
+      hint: 'Choose the number of columns and rows, then insert a Markdown table',
+      run: () => window.dispatchEvent(new CustomEvent('solomd:open-insert-table-dialog')),
+    },
+
+    {
       id: 'editor.formulaEditor',
       title: 'Edit Formula…',
       shortcut: kb('editor.formulaEditor'),
@@ -387,17 +402,6 @@ export function useCommands(): Command[] {
       run: () =>
         window.dispatchEvent(
           new CustomEvent('solomd:edit-formula', { detail: { paneId: tiles.focusedPaneId } }),
-        ),
-    },
-
-    {
-      id: 'editor.tableEditor',
-      title: 'Edit Table…',
-      shortcut: kb('editor.tableEditor'),
-      hint: 'Edit the table under the cursor as a grid — add / move / delete rows and columns, set alignment',
-      run: () =>
-        window.dispatchEvent(
-          new CustomEvent('solomd:edit-table', { detail: { paneId: tiles.focusedPaneId } }),
         ),
     },
 
@@ -538,6 +542,12 @@ export function useCommands(): Command[] {
       },
     },
 
+    // The toolbar's sparkle button and the Format menu both land here. A
+    // syntax-repair pass briefly sat where this comment is; it was removed
+    // because it rewrote several places at once in one click and misread
+    // quoted table cells (a cell holding a `|` came back with an extra
+    // column). Formatting stays: it is what Prettier does, and it is what
+    // this command has always been.
     {
       id: 'format.markdown',
       title: 'Format Markdown (Prettier)',
@@ -546,11 +556,11 @@ export function useCommands(): Command[] {
       run: async () => {
         const t = freshActiveTab();
         if (!t) {
-          toasts.warning('No active document');
+          toasts.warning(tr('format.noDocument'));
           return;
         }
         if (t.language !== 'markdown') {
-          toasts.warning('Format works on Markdown files only');
+          toasts.warning(tr('format.markdownOnly'));
           return;
         }
         try {
@@ -559,18 +569,18 @@ export function useCommands(): Command[] {
           // Prettier loads on first use: anything typed while it did would be
           // overwritten by a result formatted from the older text.
           if (freshActiveTab()?.id !== t.id || t.content !== src) {
-            toasts.info('The document changed while formatting — run Format again');
+            toasts.info(tr('format.stale'));
             return;
           }
           if (next === src) {
-            toasts.info('Already formatted');
+            toasts.info(tr('format.already'));
             return;
           }
           tabs.setContent(t.id, next);
-          toasts.success('Formatted');
+          toasts.success(tr('format.done'));
         } catch (e) {
           console.error('format failed', e);
-          toasts.warning('Format failed — check syntax');
+          toasts.warning(tr('format.failed'));
         }
       },
     },

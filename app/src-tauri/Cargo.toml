@@ -1,6 +1,6 @@
 [package]
 name = "solomd"
-version = "5.0.13"
+version = "5.0.17"
 description = "SoloMD — a lightweight, cross-platform Markdown + plain text editor"
 authors = ["zhitong"]
 edition = "2021"
@@ -77,10 +77,10 @@ walkdir = "2.5.0"
 # whole separate crate.
 #
 # (Telemetry used to live in `tauri-plugin-aptabase` and pinned this list
-#  for its plugin-setup `tokio::spawn` calls. We migrated telemetry to a
-#  pure-frontend POST to solomd.app/api/track so the plugin is gone, but
-#  the runtime entry in main.rs and these features stay — they're still
-#  needed for the rest of the app's async work.)
+#  for its plugin-setup `tokio::spawn` calls. Telemetry has since been
+#  removed from the product entirely, but the runtime entry in main.rs and
+#  these features stay — they're still needed for the rest of the app's
+#  async work.)
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros"] }
 
 # File-to-Markdown conversion (built-in, no Python needed)
@@ -197,7 +197,9 @@ objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSArray", "NSString", "NSUserDefaults", "NSURL", "NSGeometry"] }
 
 # App Store rating sheet (src/store_review.rs) on iOS; macOS uses the
-# objc2 already listed above.
+# objc2 already listed above. Kept from upstream even though this fork drops
+# the rating prompt itself: the dependency is what makes the iOS target
+# compile when any of the other objc2 modules is touched.
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2 = "0.5"
 
@@ -233,3 +235,11 @@ gio = "0.18"
 
 [dev-dependencies]
 tempfile = "3"
+
+# Import libraries: link.exe announces every .lib/.exp it writes on stdout
+# ("正在创建库 X 和对象 Y"), and rustc 1.9x reports linker stdout through the
+# `linker_messages` lint - so every build ends with a few lines of MSVC chatter
+# that say nothing about our code. Silence that one lint only; the real ones
+# (dead_code, unused, ...) stay on.
+[lints.rust]
+linker_messages = "allow"

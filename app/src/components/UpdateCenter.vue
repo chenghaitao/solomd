@@ -47,7 +47,10 @@ const currentVersion = ref('');
 const releases = ref<ChannelRelease[]>([]);
 const loading = ref(false);
 const failed = ref(false);
-const historyOpen = ref(true);
+// Collapsed by default: the dialog opens on the one release that matters.
+// The history is opt-in, so a long changelog never pushes the download button
+// below the fold.
+const historyOpen = ref(false);
 
 const downloading = ref(false);
 const percent = ref<number | null>(null);
@@ -152,6 +155,10 @@ watch(
   () => props.modelValue,
   (open) => {
     if (!open) return;
+    // The dialog stays mounted after its first open, so the fold state would
+    // otherwise survive into the next visit. Every open starts on the
+    // headline; the history is one click away.
+    historyOpen.value = false;
     resetTransient();
     void ensureVersion();
     void load();
@@ -244,7 +251,12 @@ function ignoreVersion(): void {
     </p>
 
     <div class="uc__history">
-      <button type="button" class="uc__history-head" @click="historyOpen = !historyOpen">
+      <button
+        type="button"
+        class="uc__history-head"
+        :aria-expanded="historyOpen"
+        @click="historyOpen = !historyOpen"
+      >
         <span>{{ t('updateCenter.history') }}</span>
         <svg
           class="uc__chevron"
