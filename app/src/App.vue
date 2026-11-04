@@ -8,11 +8,13 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { documentDir } from '@tauri-apps/api/path';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
+import { recordDay, shouldPrompt, type StarPromptState } from './lib/star-prompt';
 import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager';
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
 import { ensureSpellDict } from './lib/spell-suggest';
 import Toolbar from './components/Toolbar.vue';
+import TelemetryBanner from './components/TelemetryBanner.vue';
 import TileRoot from './components/TileRoot.vue';
 import StatsPill from './components/StatsPill.vue';
 import Outline from './components/Outline.vue';
@@ -54,7 +56,6 @@ import UnsavedDialog from './components/UnsavedDialog.vue';
 import FileChangedDialog from './components/FileChangedDialog.vue';
 import Toast from './components/Toast.vue';
 import KeyboardBar from './components/KeyboardBar.vue';
-import FormatBar from './components/FormatBar.vue';
 import { forceKeyboardBarPreview } from './lib/platform';
 import { useTabsStore } from './stores/tabs';
 import { useSettingsStore, buildEditorFontStack, setRightSidebarShell } from './stores/settings';
@@ -67,19 +68,18 @@ import { useFileWatcher } from './composables/useFileWatcher';
 import { loadCustomTheme } from './lib/custom-theme';
 import { ensureCustomFontLoaded } from './lib/custom-font';
 import { isIOS, isMacOS, isAndroid, isMobile, isWindowsDesktop } from './lib/platform';
-import { systemInsetPadding, type SystemInsetsPx } from './lib/android-insets';
 import { useViewport, useTabletOverlay } from './composables/useViewport';
 import { toNativeSpec } from './lib/app-menu';
 import { themeFamily } from './lib/themes';
 import type { Theme, ViewMode } from './types';
 import { useAppMenu } from './composables/useAppMenu';
 import { useUpdateCheck } from './composables/useUpdateCheck';
-import { updateCenterOpen, openUpdateCenter } from './composables/useUpdateCenter';
 import { useCommands } from './composables/useCommands';
 import { useI18n } from './i18n';
 import { quickCaptureError } from './lib/quick-capture-status';
 import { tableEditor, closeTableEditor } from './lib/table-editor-bus';
 import { formulaEditor, closeFormulaEditor } from './lib/formula-editor-bus';
+import { track } from './lib/telemetry';
 import { openWelcomeTour } from './lib/welcome-tour';
 import { useWorkspaceStore } from './stores/workspace';
 import { useWorkspaceIndexStore } from './stores/workspaceIndex';
@@ -200,24 +200,6 @@ function onImageUrlConfirm(url: string, alt: string) {
   window.dispatchEvent(
     new CustomEvent('solomd:insert-image-url', {
       detail: { url, alt, paneId: tiles.focusedPaneId },
-    }),
-  );
-}
-// "Insert Table" dialog (#387). Reached from the toolbar's Insert menu, the
-// Paragraph menu, the command palette and Ctrl+Alt+Shift+I — all four funnel
-// through the one window event, which the bindable action `insert.table`
-// dispatches. On confirm the generated Markdown rides the same
-// `solomd:insert-markdown` channel the Insert menu's own snippets use, so it
-// lands at the caret in whichever editor the focused pane hosts.
-const insertTableDialogOpen = ref(false);
-function onOpenInsertTableDialog() {
-  insertTableDialogOpen.value = true;
-}
-function onInsertTableConfirm(markdown: string) {
-  insertTableDialogOpen.value = false;
-  window.dispatchEvent(
-    new CustomEvent('solomd:insert-markdown', {
-      detail: { snippet: markdown, paneId: tiles.focusedPaneId },
     }),
   );
 }
@@ -344,14 +326,10 @@ const { component: CjkProofreadC, open: cjkProofreadLazyOpen } = useLazyComponen
   () => import('./components/CjkProofread.vue'), () => cjkProofreadOpen.value);
 const { component: AboutDialogC, open: aboutLazyOpen } = useLazyComponent(
   () => import('./components/AboutDialog.vue'), () => aboutOpen.value);
-const { component: UpdateCenterC, open: updateCenterLazyOpen } = useLazyComponent(
-  () => import('./components/UpdateCenter.vue'), () => updateCenterOpen.value);
 const { component: AgentSetupWizardC, open: wizardLazyOpen } = useLazyComponent(
   () => import('./components/AgentSetupWizard.vue'), () => wizardOpen.value);
 const { component: ImageUrlDialogC, open: imageUrlLazyOpen } = useLazyComponent(
   () => import('./components/ImageUrlDialog.vue'), () => imageUrlDialogOpen.value);
-const { component: InsertTableDialogC, open: insertTableLazyOpen } = useLazyComponent(
-  () => import('./components/InsertTableDialog.vue'), () => insertTableDialogOpen.value);
 const { component: AndroidFolderPickerC, open: androidPickerLazyOpen } = useLazyComponent(
   () => import('./components/AndroidFolderPicker.vue'), () => androidPickerOpen.value);
 
@@ -987,15 +965,11 @@ const menuCommands = useCommands();
 const updateCheck = useUpdateCheck();
 
 /** Insert-menu snippets (`$|$` marks where the caret lands) — the same
- *  templates the toolbar's Insert menu uses.
- *
- *  `insert.table` is deliberately absent since #387: it is a bindable action
- *  (`useShortcuts`) that opens the size dialog, and `dispatchMenuAction` falls
- *  through to it below — a snippet here would shadow that and paste a fixed
- *  2×2 table again. */
+ *  templates the toolbar's Insert menu uses. */
 const INSERT_SNIPPETS: Record<string, string> = {
   'insert.mathBlock': '\n$$\n$|$\n$$\n',
   'insert.mathInline': '$$|$$',
+  'insert.table': '\n| $|$ | Header |\n| --- | --- |\n| cell | cell |\n',
   'insert.mermaid': MERMAID_INSERT_SNIPPET,
   'insert.hr': '\n---\n',
 };
@@ -1225,10 +1199,6 @@ function onWindowBlur() {
 }
 function onWindowFocus() {
   document.documentElement.classList.remove('window-inactive');
-  // The user just came back from Explorer / Finder, which is exactly where a
-  // file gets deleted, moved or renamed behind our back. Cheap (one IPC for
-  // every tab) and it keeps the "file is gone" marks honest.
-  void files.refreshMissingFiles();
 }
 
 /**
@@ -1270,25 +1240,54 @@ async function reconcileIosFolder() {
   }
 }
 
-// #479 — publish the system-bar padding, or zero when the OS already inset the
-// WebView. Split out of the launch code so a rotation can re-measure: whether
-// the bars overlap the content is a property of the *current* viewport, not of
-// the window that was open at launch.
-let androidInsetsCache: SystemInsetsPx = { top: 0, bottom: 0 };
-function applyAndroidInsets(insets: SystemInsetsPx = androidInsetsCache) {
-  androidInsetsCache = insets;
-  const pad = systemInsetPadding(
-    insets,
-    window.innerHeight,
-    window.screen?.height ?? 0,
-    window.devicePixelRatio || 1,
-  );
-  const root = document.documentElement;
-  root.style.setProperty('--android-safe-top', `${pad.top}px`);
-  root.style.setProperty('--android-safe-bottom', `${pad.bottom}px`);
+/**
+ * Ask for a GitHub star (an App Store rating in App Store builds) once,
+ * after SoloMD has been opened on several different days (lib/star-prompt) — never on day one, never twice, and not
+ * in the first minute of a session, when the user came to write.
+ */
+const STAR_PROMPT_KEY = 'solomd.starPrompt';
+function scheduleStarPrompt() {
+  const today = new Date().toISOString().slice(0, 10);
+  let state: StarPromptState | null = null;
+  try {
+    state = JSON.parse(localStorage.getItem(STAR_PROMPT_KEY) || 'null');
+  } catch {
+    state = null;
+  }
+  const next = recordDay(state, today);
+  try {
+    localStorage.setItem(STAR_PROMPT_KEY, JSON.stringify(next));
+  } catch {
+    return; // no storage: we could never remember having asked
+  }
+  if (!shouldPrompt(next, today)) return;
+  setTimeout(() => {
+    try {
+      localStorage.setItem(STAR_PROMPT_KEY, JSON.stringify({ ...next, shown: true }));
+    } catch {
+      return;
+    }
+    // App Store builds ask for an App Store rating instead, with Apple's own
+    // sheet and no custom question in front of it (src-tauri/src/store_review.rs).
+    // Ratings are what that channel's ranking and conversion run on.
+    if (IS_APP_STORE_BUILD) {
+      void invoke('request_store_review').catch(() => {});
+      return;
+    }
+    void import('./stores/toasts').then(({ useToastsStore }) => {
+      useToastsStore().push(
+        t('starPrompt.message'),
+        'info',
+        20000,
+        () => void openUrl('https://github.com/zhitongblog/solomd').catch(() => {}),
+        { actionLabel: t('starPrompt.action') },
+      );
+    });
+  }, 60_000);
 }
 
 onMounted(async () => {
+  scheduleStarPrompt();
   // Launch: put the keyboard in the editor once it has mounted (the
   // CodeMirror path never focused itself, so typing went nowhere until a
   // click). Skipped on mobile/iPad (#461): programmatic focus without a user
@@ -1298,28 +1297,19 @@ onMounted(async () => {
   if (!isMobile()) {
     focusActiveEditorSoon(() => tiles.focusedPaneId, { timeoutMs: 5000 });
   }
-  // A restored session names files that may be long gone (deleted, moved, or
-  // on a drive that is not mounted). Mark those tabs before the user can read
-  // the stale text as if the file were still there.
-  void files.refreshMissingFiles();
   void reconcileIosFolder();
   // #153 (mobile) — Android's WebView reports env(safe-area-inset-top) as 0
   // under forced edge-to-edge, so the toolbar rendered under the status bar
   // and was untappable. Read the real bar heights natively and inject them as
   // CSS vars (the .app padding uses max(env, var)). Physical px → CSS px via
   // devicePixelRatio. Runs only on Android; failures leave the vars unset (0).
-  // #479 — a device that already insets the activity (Android 10/12, no
-  // forced edge-to-edge) got the nav-bar height as an unusable blank strip at
-  // the bottom, in both orientations. `systemInsetPadding` compares the
-  // viewport with the screen height and pads only when the bars really do
-  // overlap, and the same measurement is redone on rotate / split-screen.
   if (isAndroid()) {
     try {
-      androidInsetsCache = await invoke<SystemInsetsPx>('android_system_insets');
-      applyAndroidInsets();
-      const reapply = () => applyAndroidInsets();
-      window.addEventListener('resize', reapply);
-      window.addEventListener('orientationchange', reapply);
+      const insets = await invoke<{ top: number; bottom: number }>('android_system_insets');
+      const dpr = window.devicePixelRatio || 1;
+      const root = document.documentElement;
+      root.style.setProperty('--android-safe-top', `${Math.round((insets.top || 0) / dpr)}px`);
+      root.style.setProperty('--android-safe-bottom', `${Math.round((insets.bottom || 0) / dpr)}px`);
     } catch (e) {
       console.warn('android_system_insets failed', e);
     }
@@ -1408,6 +1398,12 @@ onMounted(async () => {
   window.addEventListener('solomd:open-help', onOpenHelpEvent as EventListener);
   window.addEventListener('solomd:open-global-search', onOpenSearchEvent as EventListener);
   window.addEventListener('solomd:open-cjk-proofread', onOpenCjkProofreadEvent as EventListener);
+
+  track('app_launched', {
+    locale: settings.language,
+    theme: settings.theme,
+    live_preview: settings.livePreview ? 1 : 0,
+  });
 
   // OS file association — an OS-level file-open always belongs in the current
   // window (this window was just spawned for it). Bypass new-window routing.
@@ -1525,9 +1521,6 @@ onMounted(async () => {
   // can detach it — otherwise every HMR remount stacks another listener.
   window.addEventListener('solomd:open-agent-wizard', onOpenAgentWizard);
   window.addEventListener('solomd:open-image-url-dialog', onOpenImageUrlDialog);
-  // #387 — the bindable action / palette / toolbar all ask for the dialog
-  // through this one event.
-  window.addEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
 
   // Initialize tile layout: validate persisted state or create default
   tiles.validate(tabs.tabs);
@@ -1631,28 +1624,27 @@ onMounted(async () => {
   // Auto-check for updates — once startup has settled; nobody waits on it,
   // and it shouldn't share the main thread with the first keystrokes.
   if (!isIOS() && settings.autoCheckUpdate) runWhenIdle(() => void checkForUpdatesNow());
-
-  // QA hook: `?updateCenter` opens the dialog straight away so the layout can
-  // be driven from a plain browser build (same idea as `?forcePlain` /
-  // `?forceWinChrome`). Purely a dev affordance — it reads a URL flag.
-  if (typeof location !== 'undefined' && location.search.includes('updateCenter')) {
-    openUpdateCenter();
-  }
 });
 
 async function checkForUpdatesNow(): Promise<void> {
   try {
-    const { getVersion } = await import('@tauri-apps/api/app');
-    const { checkChannelUpdate } = await import('./lib/release-channels');
-    const { openUpdateCenter } = await import('./composables/useUpdateCenter');
-    const current = await getVersion();
-    const result = await checkChannelUpdate(settings.updateChannel, current);
-    if (!result.hasUpdate || !result.latest) return;
-    // "Ignore this version" must also silence the startup check, otherwise the
-    // user dismisses the dialog and it comes straight back on the next launch.
-    if (result.latest.version === settings.ignoredUpdateVersion) return;
-    openUpdateCenter();
-  } catch { /* silent — the startup check never interrupts work */ }
+    const { checkForUpdateOnStartup } = await import('./lib/check-update');
+    const { runDirectUpdateInstall } = await import('./composables/useUpdateCheck');
+    const result = await checkForUpdateOnStartup();
+    if (result && result.hasUpdate && result.latest) {
+      const toastsStore = (await import('./stores/toasts')).useToastsStore();
+      const { useI18n } = await import('./i18n');
+      const { t: tr, lang } = useI18n();
+      const actionLabel = lang.value === 'zh' ? '立即升级' : 'Update';
+      toastsStore.push(
+        tr('settings.updateAvailable', { version: result.latest || '' }),
+        'success',
+        15000,
+        () => { void runDirectUpdateInstall(result.latest!); },
+        { actionLabel },
+      );
+    }
+  } catch { /* silent */ }
 }
 
 function onAIRewriteAccept(e: Event) {
@@ -1814,7 +1806,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('solomd:open-settings', onOpenSettingsEvent as EventListener);
   window.removeEventListener('solomd:open-agent-wizard', onOpenAgentWizard);
   window.removeEventListener('solomd:open-image-url-dialog', onOpenImageUrlDialog);
-  window.removeEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
   if (unlistenOpened) {
     unlistenOpened();
     unlistenOpened = null;
@@ -2290,28 +2281,6 @@ const viewOpen = ref(false);
  */
 const savedViewsStore = useSavedViewsStore();
 const viewPaneVisible = computed(() => viewOpen.value && !!savedViewsStore.activeView);
-
-/**
- * 5.0 — the formatting toolbar above the editor (`components/FormatBar.vue`).
- *
- * It belongs to the editor, so it follows the same rules the editor's own
- * chrome does: nothing to format in a side view (bases / inbox / a type lens /
- * a saved view) or in preview-only mode, and no Markdown tab, no Markdown
- * toolbar — a `.txt` or `.csv` note has no markers to write. Desktop only:
- * the phone gets `KeyboardBar`, and SettingsPanel hides the switch there too.
- */
-const showFormatBar = computed(
-  () =>
-    settings.formatBar &&
-    !isMobile() &&
-    tabs.activeTab?.language === 'markdown' &&
-    settings.viewMode !== 'preview' &&
-    settings.viewMode !== 'reading' &&
-    !basesOpen.value &&
-    !inboxViewOpen.value &&
-    !typeLensOpen.value &&
-    !viewPaneVisible.value,
-);
 const aiHasKey = ref(false);
 async function refreshAiHasKey() {
   if (!settings.aiEnabled) { aiHasKey.value = false; return; }
@@ -2339,29 +2308,26 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
     }"
   >
     <!--
-      v2.4 reading mode swaps out the entire toolbar / sidebar / status-bar
-      stack for a single ReadingView component. We keep all the modal
-      dialogs (settings, palette, etc.) mounted at the bottom so the user
-      can still summon them from inside reading mode if needed.
+      v2.4 reading mode shows a single ReadingView component while keeping the
+      workspace shell mounted via v-show (#512 / #516) so the editor's undo/redo
+      stack and scroll/DOM state survive entering and leaving reading mode.
     -->
-    <template v-if="settings.viewMode === 'reading'">
-      <ReadingView />
-    </template>
-    <template v-else>
-      <!-- 5.0 window (docs/v5-ui-spec.md §3): on Windows a 44px frameless title
-           bar spans the window; below it — and on every other platform at the
-           top — the sidebar runs full height beside a column holding the 52px
-           header and the workspace. On macOS the traffic lights sit in the
-           sidebar's top inset, or over the header when the sidebar is hidden. -->
-      <Toolbar
-        v-if="winTitleBar"
-        variant="titlebar"
-        @open-palette="paletteOpen = true"
-        @open-settings="openSettingsAt()"
-        @open-help="helpOpen = true"
-        @open-search="toggleGlobalSearch()"
-      />
-      <div class="shell">
+    <ReadingView v-if="settings.viewMode === 'reading'" />
+    <!-- 5.0 window (docs/v5-ui-spec.md §3): on Windows a 44px frameless title
+         bar spans the window; below it — and on every other platform at the
+         top — the sidebar runs full height beside a column holding the 52px
+         header and the workspace. On macOS the traffic lights sit in the
+         sidebar's top inset, or over the header when the sidebar is hidden. -->
+    <Toolbar
+      v-if="winTitleBar"
+      v-show="settings.viewMode !== 'reading'"
+      variant="titlebar"
+      @open-palette="paletteOpen = true"
+      @open-settings="openSettingsAt()"
+      @open-help="helpOpen = true"
+      @open-search="toggleGlobalSearch()"
+    />
+    <div v-show="settings.viewMode !== 'reading'" class="shell">
         <!-- #168 — on a phone the side panes float over the editor instead of
              stealing its width; this catches the tap that dismisses them. -->
         <div
@@ -2404,7 +2370,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
         @open-help="helpOpen = true"
         @open-search="toggleGlobalSearch()"
       />
-      <FormatBar v-if="showFormatBar" />
+      <TelemetryBanner />
       <div class="workspace">
         <aside
           v-if="showRightSidebar && settings.outlineSide === 'left'"
@@ -2604,7 +2570,6 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
         </div>
         <div v-if="sidebarCtx" class="sidebar-ctx__backdrop" @click="closeSidebarCtx" />
       </Teleport>
-    </template>
 
     <AIRewriteOverlay
       v-if="!IS_APP_STORE_BUILD"
@@ -2634,12 +2599,6 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
     />
     <component :is="CjkProofreadC" v-if="CjkProofreadC" :open="cjkProofreadLazyOpen" @close="cjkProofreadOpen = false" />
     <component :is="AboutDialogC" v-if="AboutDialogC" :open="aboutLazyOpen" @close="aboutOpen = false" />
-    <component
-      :is="UpdateCenterC"
-      v-if="UpdateCenterC"
-      :model-value="updateCenterLazyOpen"
-      @update:model-value="updateCenterOpen = $event"
-    />
     <component :is="AgentSetupWizardC" v-if="!IS_APP_STORE_BUILD && AgentSetupWizardC" :open="wizardLazyOpen" @close="wizardOpen = false" />
     <UnsavedDialog
       :open="unsavedOpen"
@@ -2656,14 +2615,6 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       :open="imageUrlLazyOpen"
       @confirm="onImageUrlConfirm"
       @cancel="imageUrlDialogOpen = false"
-    />
-    <!-- #387 — Insert → Table asks for the column and row counts first. -->
-    <component
-      :is="InsertTableDialogC"
-      v-if="InsertTableDialogC"
-      :open="insertTableLazyOpen"
-      @confirm="onInsertTableConfirm"
-      @cancel="insertTableDialogOpen = false"
     />
     <SessionRestoreDialog />
     <!-- v4.6 F5 — saved-view create/edit modal (self-mounts via window events). -->

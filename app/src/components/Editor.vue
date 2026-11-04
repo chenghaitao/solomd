@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { EditorState, Compartment, Prec } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab, undo as cmUndo, redo as cmRedo } from '@codemirror/commands';
-import { searchKeymap, search, openSearchPanel, closeSearchPanel, searchPanelOpen, getSearchQuery, setSearchQuery } from '@codemirror/search';
+import { searchKeymap, search, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery } from '@codemirror/search';
 import { createFindPanel, type FindPanelLabels } from '../lib/cm-find-panel';
 import { tabCaretMemory, tabTopLineMemory, type TabCaretSnapshot } from '../lib/scroll-memory';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language';
@@ -107,15 +107,15 @@ import { cjkDoubleClickSelection } from '../lib/cm-cjk-dblclick';
 import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve';
 import { SLASH_BLOCKS, filterBlocks, expandSnippet, indentExpandedSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
-import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor, isAndroid, isIOS, isMobile } from '../lib/platform';
-import { computeListContinuation, computeListSoftBreak, repairIndentedFenceEdit, type ListContinuationOptions } from '../lib/list-continuation';
-import { listContinuationKeymap } from '../lib/cm-list-continuation';
+import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor } from '../lib/platform';
+import { isAndroid, isIOS, isMobile } from '../lib/platform';
 import SelectionBubble, { type BubbleSelection } from './SelectionBubble.vue';
 import { lineContext, nextHeadingKind, type Box } from '../lib/selection-bubble';
 import EditorContextMenu, { type EditorMenuAction, type EditorMenuSpell } from './EditorContextMenu.vue';
 import { lookupMisspelling, addToSpellDict } from '../lib/spell-suggest';
 import { copyImageElement } from '../lib/image-clipboard';
 import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
+import { computeListContinuation, computeListSoftBreak, repairIndentedFenceEdit } from '../lib/list-continuation';
 import { mapPos, renumberAfterEdit, renumberChanges } from '../lib/list-renumber';
 import { findMarkdownLinkAt, openMarkdownHref, openRenderedLink } from '../lib/link-open';
 
@@ -235,7 +235,6 @@ const aiKeyCompartment = new Compartment();
 // B4 — CodeMirror's own default/search keymap, minus every chord an app-level
 // shortcut owns (see `cmKeyOwnedByApp`). Reconfigured when bindings change.
 const baseKeymapCompartment = new Compartment();
-
 function baseKeymap() {
   const overrides = { ...settings.keybindings };
   return keymap.of(
@@ -489,16 +488,6 @@ function syncEditorContentSoon(text: string) {
           view.dispatch({
             changes: { from: edit.from, to: edit.to, insert: edit.insert },
             selection: { anchor: edit.selFrom, head: edit.selTo },
-            // #489 — the numbering pass rewrites the heading line, which makes
-            // it longer than what the user is typing: `##### text` becomes
-            // `##### 1.1.1.1.1 text`. When that line is at the bottom of the
-            // viewport (the reported case: long note, caret far down), the
-            // extra prefix can push it past a soft-wrap boundary, the line
-            // grows while `scrollTop` stays, and the caret ends up below the
-            // fold — the user sees the editor "jump" while typing. A programmatic
-            // dispatch does not scroll on its own, so ask for it explicitly:
-            // `nearest` moves nothing unless the caret really is out of view.
-            effects: EditorView.scrollIntoView(edit.selTo, { y: 'nearest', yMargin: 16 }),
           });
           if (Math.abs(view.scrollDOM.scrollTop - prevScrollTop) > 1) {
             view.scrollDOM.scrollTop = prevScrollTop;
@@ -562,8 +551,18 @@ const plainRenderCache = new Map<string, string>();
 // code re-render — the plainBlocks computed reads it through that key.
 const renderDepsVersion = useRenderDepsVersion();
 
+// #512 / #516 — Keep the editor's internal rendering mode ('liveEdit' | 'edit' | 'split')
+// stable while the pane is temporarily hidden in 'preview' or 'reading' mode so
+// neither the Windows block editor nor CodeMirror's live-edit compartment unmounts
+// or resets its undo/redo stack or scroll layout.
+const activeEditorViewMode = ref<'edit' | 'liveEdit' | 'split'>(
+  settings.viewMode === 'edit' || settings.viewMode === 'liveEdit' || settings.viewMode === 'split'
+    ? settings.viewMode
+    : 'liveEdit',
+);
+
 const plainLiveEnabled = computed(
-  () => usePlainWindowsEditor && settings.viewMode === 'liveEdit' && props.tab.language === 'markdown',
+  () => usePlainWindowsEditor && activeEditorViewMode.value === 'liveEdit' && props.tab.language === 'markdown',
 );
 
 const plainEditorStyle = computed(() => ({
@@ -1900,6 +1899,7 @@ function closePlainFind(toMatch = false) {
   if (toMatch && m && plainFindQuery.value) selectPlainRange(m.start, m.end, true);
 }
 
+/** Jump to the first match at or after where the caret was when the bar opened. */
 function revealPlainMatchFromAnchor() {
   runPlainSearch();
   const ms = plainMatches.value;
@@ -2486,9 +2486,7 @@ function handlePlainKeydownShared(event: KeyboardEvent): boolean {
   const letter = mod ? plainModLetter(event) : '';
   if (mod && !event.altKey && !event.shiftKey && letter === 'f') {
     event.preventDefault();
-    // #389 — Ctrl/⌘+F opens the find bar, and pressing it again closes it.
-    if (plainFindOpen.value) closePlainFind(true);
-    else openPlainFind();
+    openPlainFind();
     return true;
   }
   if (mod && !event.altKey && letter === 'z') {
@@ -2581,24 +2579,7 @@ function plainAbsoluteSelection(): { from: number; to: number } | null {
  * textarea insert a plain newline.
  */
 function computeSmartEnter(el: HTMLTextAreaElement): { value: string; caret: number } | null {
-  return computeListContinuation(
-    el.value,
-    el.selectionStart ?? 0,
-    el.selectionEnd ?? 0,
-    listContinuationOptions(),
-  );
-}
-
-/**
- * The two toolbar toggles. Read on every keypress rather than cached, so
- * clicking the icon takes effect on the next Enter without rebuilding the
- * editor — the same contract `prec`/`compartment` reconfigure would need.
- */
-function listContinuationOptions(): ListContinuationOptions {
-  return {
-    listContinuation: settings.markdownListContinue,
-    autoNumber: settings.markdownAutoNumber,
-  };
+  return computeListContinuation(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
 }
 
 function computeSmartSoftBreak(el: HTMLTextAreaElement): { value: string; caret: number } | null {
@@ -4288,7 +4269,7 @@ function richExtensionsFor(tab: Tab) {
   // the WYSIWYG bundle ALREADY includes rich highlighting + marker hiding,
   // and stacking livePreviewExtension on top would cause duplicate
   // marker-replace decorations.
-  if (settings.viewMode === 'liveEdit') {
+  if (activeEditorViewMode.value === 'liveEdit') {
     // v3.6 issue #44: in live-edit mode, also collapse standalone image
     // lines + GFM tables into block widgets when the cursor is elsewhere.
     // Cursor enters → widget unmounts → source returns. Image paths
@@ -4331,7 +4312,7 @@ function richExtensionsFor(tab: Tab) {
   }
   // In 'edit' (源码 / Source mode), always render raw Markdown source — never
   // hide markers, enlarge headings, or swap task/wikilink syntax for widgets.
-  if (settings.viewMode === 'edit') {
+  if (activeEditorViewMode.value === 'edit') {
     return richHighlightOnly();
   }
   return settings.livePreview
@@ -4417,10 +4398,6 @@ function buildExtensions() {
         ]),
     // App-owned chords are filtered out of CodeMirror's keymap (baseKeymap):
     // the app shortcut listens on window, after CodeMirror has already acted.
-    // Fork addition: Enter continues a list / quote in CodeMirror too, honouring
-    // the two toolbar toggles (see lib/cm-list-continuation.ts). Ahead of
-    // baseKeymap so it wins over the plain newline.
-    listContinuationKeymap(() => listContinuationOptions()),
     baseKeymapCompartment.of(baseKeymap()),
     keymap.of([
       ...historyKeymap,
@@ -4929,7 +4906,7 @@ function onEditorHistory(e: Event) {
  * route it to `plainUndo` / `plainRedo` on the active tab's plain editor.
  */
 function onPlainWindowKeydown(event: KeyboardEvent) {
-  if (!usePlainWindowsEditor || event.defaultPrevented) return;
+  if (event.defaultPrevented) return;
   if (props.tab.id !== tabs.activeId) return;
   if (settings.viewMode === 'preview' || settings.viewMode === 'reading') return;
   const active = document.activeElement;
@@ -4938,13 +4915,28 @@ function onPlainWindowKeydown(event: KeyboardEvent) {
     (active.tagName === 'INPUT' ||
       active.tagName === 'TEXTAREA' ||
       active.tagName === 'SELECT' ||
-      active.isContentEditable)
+      active.isContentEditable ||
+      active.closest('.cm-editor'))
   ) {
     return;
   }
   const mod = event.ctrlKey || event.metaKey;
   if (!mod || event.altKey) return;
   const letter = plainModLetter(event);
+  if (!usePlainWindowsEditor) {
+    if (!view) return;
+    if (letter === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) cmRedo(view);
+      else cmUndo(view);
+      focusFreshCodeMirror();
+    } else if (letter === 'y') {
+      event.preventDefault();
+      cmRedo(view);
+      focusFreshCodeMirror();
+    }
+    return;
+  }
   if (letter === 'z') {
     event.preventDefault();
     if (event.shiftKey) plainRedo();
@@ -5054,11 +5046,7 @@ function findPanelLabels(): FindPanelLabels {
 
 function openFind(replace = false): void {
   if (usePlainWindowsEditor) {
-    // #389 — the chord toggles on this path too; the find bar has no
-    // CodeMirror panel to ask, so the ref is the source of truth. Ctrl+H
-    // (replace) always opens and lands in the replace field.
-    if (!replace && plainFindOpen.value) closePlainFind(true);
-    else openPlainFind(replace);
+    openPlainFind(replace);
     return;
   }
   if (view) {
@@ -5081,23 +5069,14 @@ function openFind(replace = false): void {
       }
     }
     view.focus();
-    // #389 — ⌘/Ctrl+F toggles: the second press closes the box the first one
-    // opened. v5's find bar is still CodeMirror's search panel (createFindPanel
-    // only swaps its DOM), so `searchPanelOpen` answers correctly. Ctrl+H
-    // (replace) always opens and decides which field gets the caret.
-    if (!replace && searchPanelOpen(view.state)) {
-      closeSearchPanel(view);
-      view.focus();
-    } else {
-      openSearchPanel(view);
-      // CodeMirror's panel always carries the replace row; "Replace" (Ctrl+H)
-      // only decides which field gets the caret. With nothing to find yet the
-      // find field is the one that needs typing first.
-      if (replace && getSearchQuery(view.state).search) {
-        const field = view.dom.querySelector<HTMLInputElement>('.cm-search input[name=replace]');
-        field?.focus();
-        field?.select();
-      }
+    openSearchPanel(view);
+    // CodeMirror's panel always carries the replace row; "Replace" (Ctrl+H)
+    // only decides which field gets the caret. With nothing to find yet the
+    // find field is the one that needs typing first.
+    if (replace && getSearchQuery(view.state).search) {
+      const field = view.dom.querySelector<HTMLInputElement>('.cm-search input[name=replace]');
+      field?.focus();
+      field?.select();
     }
   }
 }
@@ -5409,14 +5388,6 @@ function focusFreshCodeMirror() {
 
 let cancelCmScrollRestore: (() => void) | null = null;
 
-/**
- * #486 — restore by document anchor, not by pixel offset. The snapshot stores
- * the anchor position plus its offset from the viewport top (written in
- * `saveCurrentTabCaret`), so the viewport lands on the same line even when
- * something above it changed height while the tab was in the background (a
- * lazily decoded image, a re-measured table, a fold opening). The plain pixel
- * value is only the fallback for snapshots taken before the anchor existed.
- */
 function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   cancelCmScrollRestore?.();
   if (!view || !saved) return;
@@ -5803,16 +5774,34 @@ watch(
   }
 );
 
-// v2.3: switching into / out of `liveEdit` swaps the rich extension
-// bundle (live-edit decorations are MUCH more aggressive than the
-// livePreview fallback, so we need a real reconfigure).
+// v2.3 / #512 / #516: switching into / out of `liveEdit` swaps the rich extension
+// bundle only when switching between actual editor modes ('liveEdit' | 'edit' | 'split').
+// Entering 'preview' or 'reading' flushes pending edits and snapshots the caret/scroll
+// while keeping the editor's internal state and undo history untouched.
 watch(
   () => settings.viewMode,
-  () => {
-    view?.dispatch({ effects: richCompartment.reconfigure(richExtensionsFor(props.tab)) });
-    syncPlainEditorAfterModeSwitch();
-    void processPlainLiveRenderedBlocks();
-  }
+  (mode, oldMode) => {
+    if (mode === 'preview' || mode === 'reading') {
+      flushContentSync();
+      saveCurrentTabCaret(props.tab.id);
+      return;
+    }
+    const modeChanged = activeEditorViewMode.value !== mode;
+    activeEditorViewMode.value = mode;
+    if (modeChanged) {
+      view?.dispatch({ effects: richCompartment.reconfigure(richExtensionsFor(props.tab)) });
+      syncPlainEditorAfterModeSwitch();
+      void processPlainLiveRenderedBlocks();
+    }
+    if (oldMode === 'preview' || oldMode === 'reading') {
+      if (usePlainWindowsEditor) {
+        focusPlainEditor(true);
+      } else {
+        focusFreshCodeMirror();
+      }
+    }
+  },
+  { flush: 'sync' },
 );
 
 // A stale select-all must not survive leaving live edit (the merged single
@@ -6141,7 +6130,151 @@ function insertMarkdown(snippet: string): void {
   view.focus();
 }
 
-defineExpose({ gotoLine, setCaret, insertImageFromPath, insertImageUrl, uploadLocalImages, getViewLine, scrollToLine, lineTopY, insertMarkdown, openFind, applyFold, openTableAtCursor, openFormulaAtCursor });
+/**
+ * #487 / #516 — Return the 1-indexed anchor line (the active caret line if it is
+ * currently visible inside the editor viewport, otherwise the top visible line)
+ * together with its visual Y offset in px relative to the scroll container's top.
+ */
+function getViewportAnchor(): { line: number; offsetTop: number } | null {
+  if (usePlainWindowsEditor) {
+    if (plainLiveEnabled.value) {
+      const hostEl = plainLiveHost.value;
+      const blocks = plainBlocks.value;
+      if (hostEl && hostEl.clientHeight > 0 && blocks.length > 0) {
+        const hostRect = hostEl.getBoundingClientRect();
+        const idx = plainActiveBlock.value;
+        const activeBlock = blocks[idx];
+        const activeNode = hostEl.querySelector<HTMLElement>(`[data-plain-block-index="${idx}"]`);
+        if (activeBlock && activeNode) {
+          const blockRect = activeNode.getBoundingClientRect();
+          const el = plainBlockEditors.value[idx];
+          const subLines = el ? el.value.slice(0, el.selectionStart ?? 0).split('\n').length - 1 : 0;
+          const caretOffsetTop = blockRect.top - hostRect.top + subLines * plainLineHeightPx();
+          if (caretOffsetTop >= -4 && caretOffsetTop <= hostEl.clientHeight - 12) {
+            const blockStartLine = plainText.value.slice(0, activeBlock.start).split('\n').length;
+            return {
+              line: blockStartLine + subLines,
+              offsetTop: Math.max(0, Math.round(caretOffsetTop)),
+            };
+          }
+        }
+        const blockNodes = hostEl.querySelectorAll<HTMLElement>('[data-plain-block-index]');
+        for (const node of Array.from(blockNodes)) {
+          const rect = node.getBoundingClientRect();
+          if (rect.bottom > hostRect.top + 12) {
+            const bIdx = Number(node.getAttribute('data-plain-block-index') || '0');
+            const b = blocks[bIdx];
+            if (b) {
+              return {
+                line: plainText.value.slice(0, b.start).split('\n').length,
+                offsetTop: Math.max(0, Math.round(rect.top - hostRect.top)),
+              };
+            }
+          }
+        }
+      }
+      const topLine = getViewLine();
+      return topLine != null ? { line: topLine, offsetTop: 8 } : null;
+    }
+    const el = plainEditor.value;
+    if (el && el.clientHeight > 0) {
+      const caretLine = el.value.slice(0, el.selectionStart ?? 0).split('\n').length;
+      const tops = plainLineTops.value;
+      const lineTop =
+        tops && caretLine >= 1 && caretLine <= tops.length
+          ? plainPaddingTopPx(el) + tops[caretLine - 1]
+          : plainPaddingTopPx(el) + (caretLine - 1) * plainLineHeightPx();
+      const caretOffsetTop = lineTop - el.scrollTop;
+      if (caretOffsetTop >= -4 && caretOffsetTop <= el.clientHeight - 12) {
+        return { line: caretLine, offsetTop: Math.max(0, Math.round(caretOffsetTop)) };
+      }
+    }
+    const topLine = getViewLine();
+    return topLine != null ? { line: topLine, offsetTop: 8 } : null;
+  }
+  if (!view) return null;
+  const scroller = view.scrollDOM;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const clientHeight = scroller.clientHeight || scrollerRect.height;
+  if (clientHeight > 0) {
+    try {
+      const head = view.state.selection.main.head;
+      const caretBlock = view.lineBlockAt(head);
+      const caretOffsetTop = view.documentTop + caretBlock.top - scrollerRect.top;
+      if (caretOffsetTop >= -4 && caretOffsetTop <= clientHeight - 12) {
+        const caretLine = view.state.doc.lineAt(head).number;
+        return { line: caretLine, offsetTop: Math.max(0, Math.round(caretOffsetTop)) };
+      }
+    } catch {}
+  }
+  const topLine = getViewLine();
+  return topLine != null ? { line: topLine, offsetTop: 8 } : null;
+}
+
+/**
+ * #516 — Restore the exact saved editor viewport scroll + caret anchor for the
+ * current tab after returning from Preview or Reading mode.
+ */
+function restoreSavedScroll(): void {
+  const saved = tabCaretMemory.get(props.tab.id);
+  if (usePlainWindowsEditor) {
+    restorePlainScroll(saved);
+    focusPlainEditor(true);
+    return;
+  }
+  restoreCodeMirrorScroll(saved);
+  focusFreshCodeMirror();
+}
+
+/**
+ * #487 — Scroll the given 1-indexed line to a specific visual Y offset (`offsetTop` px)
+ * from the top of the editor viewport.
+ */
+function scrollToLineAtOffset(line: number, offsetTop = 8): void {
+  cancelCmScrollRestore?.();
+  const safeOffset = Math.max(0, offsetTop);
+  if (usePlainWindowsEditor) {
+    if (plainLiveEnabled.value) {
+      const hostEl = plainLiveHost.value;
+      if (!hostEl) return;
+      const offset = plainLineStartOffset(Math.floor(line));
+      const blocks = plainBlocks.value;
+      const idx = blocks.findIndex((b) => offset >= b.start && offset <= b.end);
+      const targetIdx = idx >= 0 ? idx : Math.max(0, blocks.length - 1);
+      const blockEl = hostEl.querySelector<HTMLElement>(`[data-plain-block-index="${targetIdx}"]`);
+      if (blockEl) {
+        const hostRect = hostEl.getBoundingClientRect();
+        const blockRect = blockEl.getBoundingClientRect();
+        hostEl.scrollTop = Math.max(0, hostEl.scrollTop + (blockRect.top - hostRect.top) - safeOffset);
+      }
+      return;
+    }
+    const el = plainEditor.value;
+    if (!el) return;
+    const safeLine = Math.max(1, Math.floor(line));
+    const frac = Math.max(0, Math.min(line - safeLine, 0.999));
+    const tops = plainLineTops.value;
+    if (tops && safeLine <= tops.length) {
+      const i = safeLine - 1;
+      const h = i + 1 < tops.length ? tops[i + 1] - tops[i] : plainLineHeightPx();
+      el.scrollTop = Math.max(0, plainPaddingTopPx(el) + tops[i] + frac * h - safeOffset);
+    } else {
+      el.scrollTop = Math.max(0, (safeLine - 1 + frac) * plainLineHeightPx() - safeOffset);
+    }
+    syncPlainLiveScroll();
+    return;
+  }
+  if (!view) return;
+  const safe = Math.max(1, Math.min(Math.floor(line), view.state.doc.lines));
+  const frac = Math.max(0, Math.min(line - safe, 0.999));
+  const lineObj = view.state.doc.line(safe);
+  const block = view.lineBlockAt(lineObj.from);
+  const y = view.documentTop + block.top + frac * block.height;
+  const scroller = view.scrollDOM.getBoundingClientRect();
+  view.scrollDOM.scrollTop = Math.max(0, view.scrollDOM.scrollTop + (y - scroller.top) - safeOffset);
+}
+
+defineExpose({ gotoLine, setCaret, insertImageFromPath, insertImageUrl, uploadLocalImages, getViewLine, getViewportAnchor, restoreSavedScroll, scrollToLine, scrollToLineAtOffset, lineTopY, insertMarkdown, openFind, applyFold, openTableAtCursor, openFormulaAtCursor });
 
 const cls = computed(() => ({
   'cm-host': true,
@@ -6817,7 +6950,14 @@ const cls = computed(() => ({
   font-weight: 620;
 }
 .plain-block__render :deep(h3) {
+  font-size: 1.125em;
+}
+.plain-block__render :deep(h4) {
   font-size: 1.0625em;
+}
+.plain-block__render :deep(h5),
+.plain-block__render :deep(h6) {
+  font-size: 1em;
 }
 .plain-block__render :deep(p),
 .plain-block__render :deep(ul),

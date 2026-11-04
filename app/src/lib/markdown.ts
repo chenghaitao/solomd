@@ -10,10 +10,10 @@ import frontMatter from 'markdown-it-front-matter';
 import mark from 'markdown-it-mark';
 import cjkFriendly from 'markdown-it-cjk-friendly';
 import yaml from 'js-yaml';
-import { numberEquations } from './equations.ts';
-import { parseImageAltSize } from './md-image-url.ts';
-import { sanitizeRenderedHtml } from './sanitize-html.ts';
-import { getHljs, getKatex } from './render-deps.ts';
+import { numberEquations } from './equations';
+import { parseImageAltSize } from './md-image-url';
+import { sanitizeRenderedHtml } from './sanitize-html';
+import { getHljs, getKatex } from './render-deps';
 
 // NOTE: `@hedgedoc/markdown-it-task-lists` is installed but unusable here —
 // its compiled ESM entry does `import Token from 'markdown-it/lib/token.js'`
@@ -126,28 +126,6 @@ export const md = new MarkdownIt({
 // autolinks continue to linkify as expected.
 md.linkify.set({ fuzzyLink: false });
 
-// ---- #380 — allow `file:` link / image destinations -------------------------
-// `[临时记录](file:///F:\缓存目录\临时记录.md)` used to render as its own
-// literal source text: markdown-it's default validator blocks the scheme
-// outright (`BAD_PROTO_RE = /^(vbscript|javascript|file|data):/`), so the
-// `link` rule threw the destination away and emitted plain text. In a local
-// Markdown editor a local-file link is the *point*, so the scheme is allowed
-// back — and so is the inverted case that the fork already relied on:
-// `rewriteLinkUrls()` (./image-resolve.ts) has always rewritten relative links
-// to `file:///…` on export, producing HTML that SoloMD itself could not
-// re-open. The genuinely dangerous schemes stay blocked, exactly as before.
-//
-// The href is left percent-encoded in the DOM on purpose: a bare `C:\…` href
-// is rejected by the sanitizer's URI allow-list, whereas `file:` passes both
-// markdown-it and DOMPurify (see ALLOWED_URI_REGEXP in ./sanitize-html.ts).
-// `openRenderedLink()` decodes it back into a filesystem path.
-const stockValidateLink = md.validateLink.bind(md);
-md.validateLink = (url: string): boolean => {
-  const str = String(url ?? '').trim().toLowerCase();
-  if (!str) return false;
-  if (str.startsWith('file:')) return true;
-  return stockValidateLink(url);
-};
 // #464 — Allow GFM tables to interrupt blockquotes and lists without requiring
 // a blank line, matching CodeMirror's GFM parser in Live mode (`> quote\n| a | b |`).
 const tableBlockRule = (md.block.ruler as any).__rules__?.find((r: any) => r.name === 'table');
@@ -243,16 +221,9 @@ md.inline.ruler.before('image', 'image_spaced_path', (state, silent) => {
 const defaultImageRenderer = md.renderer.rules.image;
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx];
-  // #493 — Gitee (and a few other domestic image hosts) reject a request whose
-  // `Referer` is `http://tauri.localhost`, which is the origin Tauri 2 gives the
-  // Windows WebView. Every Gitee-hosted image therefore came back 403
-  // (`invalid Referer header`) while the same URL opened fine in a browser or
-  // in Typora. `no-referrer` is the policy a browser applies to a `file://`
-  // page, so it is a well-trodden path, and no host needs the referrer to serve
-  // a plain <img>. Kept per-element rather than a page-wide
-  // `<meta name="referrer">`: that would also drop the referrer on the OAuth
-  // and share links the app opens in the same webview.
-  token.attrSet('referrerpolicy', 'no-referrer');
+  if (!token.attrGet('referrerpolicy')) {
+    token.attrSet('referrerpolicy', 'no-referrer');
+  }
   const rawAlt = token.children
     ? self.renderInlineAsText(token.children, options, env)
     : (token.content || token.attrGet('alt') || '');
@@ -989,8 +960,20 @@ function normalizeListIndent(source: string): string {
   let curDelta = 0;
   let curOrig = -1;
   const markRe = /^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/;
+  const noSpaceOrderedRe = /^(\s*)(\d{1,3}[.)])([^\s\d.)].*)$/;
+  const cjkLeadRe = /^[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef“”‘’（【《「『]/;
   const fenceRe = /^(\s*)(```+|~~~+)/;
-  for (const line of lines) {
+  const hasAdjacentListLine = (idx: number): boolean => {
+    for (let j = idx + 1; j < lines.length; j++) {
+      const next = lines[j];
+      if (fenceRe.test(next)) return false;
+      if (next.trim() === '') continue;
+      return markRe.test(next) || noSpaceOrderedRe.test(next);
+    }
+    return false;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const fm = fenceRe.exec(line);
     if (fm) {
       if (!inFence) {
@@ -1009,7 +992,17 @@ function normalizeListIndent(source: string): string {
       out.push(line);
       continue;
     }
-    const m = markRe.exec(line);
+    let m = markRe.exec(line);
+    if (!m) {
+      const ns = noSpaceOrderedRe.exec(line);
+      if (
+        ns &&
+        !line.includes('|') &&
+        (cjkLeadRe.test(ns[3]) || stack.length > 0 || hasAdjacentListLine(i))
+      ) {
+        m = [line, ns[1], ns[2], ' ', ns[3]] as unknown as RegExpExecArray;
+      }
+    }
     if (m) {
       const orig = expand(m[1]);
       // Content column = marker glyph + its trailing spaces. A child list must
@@ -1369,10 +1362,50 @@ function normalizeImageBackslashPaths(source: string): string {
   return out.join('\n');
 }
 
+function normalizeFullwidthEscapes(source: string): string {
+  if (!source.includes('\\')) return source;
+  const lines = source.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+  let fenceMarker = '';
+  const fenceRe = /^(\s*)(```+|~~~+)/;
+  for (const line of lines) {
+    const m = fenceRe.exec(line);
+    if (m) {
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = m[2][0];
+      } else if (m[2][0] === fenceMarker && line.trim() === m[2]) {
+        inFence = false;
+        fenceMarker = '';
+      }
+      out.push(line);
+      continue;
+    }
+    if (inFence || !line.includes('\\')) {
+      out.push(line);
+      continue;
+    }
+    // Preserve inline code spans while unescaping `\` before fullwidth CJK punctuation
+    const parts = line.split(/(`+[^`]*`+)/g);
+    out.push(
+      parts
+        .map((seg, i) =>
+          i % 2 === 1
+            ? seg
+            : seg.replace(/\\([＃＊＿～｀［］（）｛｝｜！＞＋－．、【】《》“”‘’：；，。？])/g, '$1'),
+        )
+        .join(''),
+    );
+  }
+  return out.join('\n');
+}
+
 export function preprocessMarkdown(source: string): string {
   let s = normalizeTableDelimiters(unwrapInlineHtmlBlocks(source || ''));
   s = normalizeLatexDelimiters(s);
   s = normalizeImageBackslashPaths(s);
+  s = normalizeFullwidthEscapes(s);
   if (autoNumberHeadings) s = numberedSectionHeadings(s);
   // `\label` / `\eqref` are LaTeX that KaTeX does not implement — resolve
   // them to `\tag` + anchors + links here so preview, PDF, Word and image

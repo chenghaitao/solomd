@@ -38,9 +38,7 @@ import { inlineLocalImages, rewriteLinkUrls, rewriteImageUrls } from '../lib/ima
 import { useTabsStore } from '../stores/tabs';
 import { useSettingsStore } from '../stores/settings';
 import { useToastsStore } from '../stores/toasts';
-// Fork addition: rasterizes ```mermaid fences for the clipboard path below —
-// see lib/diagram-export.ts.
-import { inlineDiagramsInHtml } from '../lib/diagram-export';
+import { track } from '../lib/telemetry';
 import {
   resolvePdfOptions,
   userTouchedPdfDefaults,
@@ -49,32 +47,11 @@ import {
   withPdfToc,
 } from '../lib/pdf-options';
 
-/** Strip Markdown syntax to produce plain prose. */
+import { stripMarkdownFormatting } from '../lib/clean-ai';
+
+/** Strip Markdown syntax (and unescape `\#`, `\*`, etc.) to produce plain prose. */
 function stripMarkdown(src: string): string {
-  return src
-    // Remove fenced code blocks (keep contents)
-    .replace(/```[a-zA-Z0-9]*\n([\s\S]*?)```/g, '$1')
-    // Inline code: `x` -> x
-    .replace(/`([^`]+)`/g, '$1')
-    // Images: ![alt](url) -> alt
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    // Links: [text](url) -> text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Bold/italic: **x** _x_ *x* __x__ -> x
-    .replace(/(\*\*|__)(.+?)\1/g, '$2')
-    .replace(/(\*|_)(.+?)\1/g, '$2')
-    // Strikethrough
-    .replace(/~~(.+?)~~/g, '$1')
-    // Headings: # x -> x
-    .replace(/^#{1,6}\s+/gm, '')
-    // Blockquotes: > x -> x
-    .replace(/^>\s?/gm, '')
-    // List markers
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    // Horizontal rules
-    .replace(/^[-*_]{3,}\s*$/gm, '')
-    .trim();
+  return stripMarkdownFormatting(src).trim();
 }
 
 /**
@@ -275,7 +252,7 @@ export function useExport() {
     // #260 — start in the document's own folder instead of wherever the
     // last save happened. Falls back to a bare filename for unsaved
     // buffers and virtual (SAF) paths, which is the old behaviour.
-    const defaultPath = exportDefaultPath(activeOr()?.filePath, filename) ?? filename;
+    const defaultPath = exportDefaultPath(activeOr()?.filePath, filename, settings.defaultExportDir) ?? filename;
     // Dev-only QA hook (like ?forcePlain): lets a self-test drive an export
     // end to end without a native save panel. Stripped from release builds.
     if (import.meta.env.DEV) {
@@ -300,6 +277,7 @@ export function useExport() {
   }
 
   async function exportHtml() {
+    track('file_exported', { format: 'html' });
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.html`;
@@ -325,6 +303,7 @@ export function useExport() {
   }
 
   async function exportDocx() {
+    track('file_exported', { format: 'docx' });
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.docx`;
@@ -351,6 +330,7 @@ export function useExport() {
 
   /** Native-feel PDF export: build a real .pdf file via html2pdf.js. */
   async function exportPdf() {
+    track('file_exported', { format: 'pdf' });
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.pdf`;
@@ -440,6 +420,7 @@ export function useExport() {
    * WebKitGTK print on Linux).
    */
   async function exportPdfPrint(options?: { forcePrintDialog?: boolean }) {
+    track('file_exported', { format: options?.forcePrintDialog ? 'print' : 'pdf_print' });
     const ctx = activeOr();
     if (!ctx) return;
 
@@ -608,13 +589,8 @@ export function useExport() {
   async function copyAsHtml() {
     const src = copySource();
     if (!src) return;
-    // Fork addition: diagrams are rasterized for the clipboard. Word, Google
-    // Docs and most mail clients drop inline `<svg>` when pasting, so the
-    // alternative is a blank hole in the pasted document (`asPng`, see
-    // lib/diagram-export.ts). The SVG path used by the file exports is left
-    // exactly as upstream wrote it.
     await loadRenderDeps();
-    const html = await inlineDiagramsInHtml(renderMarkdown(src.source), { asPng: true });
+    const html = renderMarkdown(src.source);
     const okMsg = t(src.isSelection ? 'toast.copiedSelectionAsHtml' : 'toast.copiedAsHtml');
     // Native Clipboard API first — supports rich HTML on all desktops and on
     // iOS 16+. Tauri's `writeHtml` is unimplemented on iOS so we'd otherwise
@@ -623,7 +599,7 @@ export function useExport() {
       try {
         const item = new ClipboardItem({
           'text/html': new Blob([html], { type: 'text/html' }),
-          'text/plain': new Blob([src.source], { type: 'text/plain' }),
+          'text/plain': new Blob([stripMarkdown(src.source)], { type: 'text/plain' }),
         });
         await navigator.clipboard.write([item]);
         toasts.success(okMsg);
@@ -712,6 +688,7 @@ export function useExport() {
    * of the whole document.
    */
   async function exportImage() {
+    track('file_exported', { format: 'image' });
     const ctx = activeOr();
     if (!ctx) return;
     const sel = getEditorSelectionMd(ctx.content);

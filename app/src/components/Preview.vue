@@ -21,7 +21,7 @@ import { useTabsStore } from '../stores/tabs';
 import PreviewSearch from './PreviewSearch.vue';
 import { attachCodeCopyButtons as attachSharedCodeCopyButtons } from '../lib/code-copy';
 import { writePngToClipboard } from '../lib/image-clipboard';
-import { previewScrollMemory, tabTopLineMemory } from '../lib/scroll-memory';
+import { previewScrollMemory, tabTopLineMemory, tabViewportAnchorMemory } from '../lib/scroll-memory';
 
 const props = withDefaults(
   defineProps<{
@@ -464,10 +464,10 @@ async function copyDiagramPng(svg: SVGElement) {
 let restoringTabScroll = false;
 let explicitLineJumped = false;
 
-function scrollToSourceLineQuiet(line: number): boolean {
+function scrollToSourceLineQuiet(line: number, offsetTop?: number): boolean {
   const article = host.value;
   const container = article?.parentElement as HTMLElement | null;
-  if (!article || !container || line <= 1) return false;
+  if (!article || !container || line < 1) return false;
   const nodes = Array.from(article.querySelectorAll<HTMLElement>('[data-source-line]'));
   if (!nodes.length) return false;
   let lo = 0;
@@ -484,8 +484,25 @@ function scrollToSourceLineQuiet(line: number): boolean {
     }
   }
   const target = nodes[best];
-  const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
-  container.scrollTop = Math.max(0, container.scrollTop + delta - TOP_GAP);
+  const nodeLine = Number(target.getAttribute('data-source-line') || 1);
+  const targetRect = target.getBoundingClientRect();
+  let inBlockOffset = 0;
+  if (line > nodeLine) {
+    const nextNode = best + 1 < nodes.length ? nodes[best + 1] : null;
+    const nextLine = nextNode ? Number(nextNode.getAttribute('data-source-line') || 0) : 0;
+    if (nextNode && nextLine > nodeLine) {
+      const frac = Math.max(0, Math.min(1, (line - nodeLine) / (nextLine - nodeLine)));
+      const spanPx = Math.max(0, nextNode.getBoundingClientRect().top - targetRect.top);
+      inBlockOffset = frac * spanPx;
+    } else {
+      const totalLines = Math.max(line, (props.source || '').split('\n').length);
+      const frac = Math.max(0, Math.min(1, (line - nodeLine) / Math.max(1, totalLines - nodeLine + 1)));
+      inBlockOffset = frac * targetRect.height;
+    }
+  }
+  const desiredOffset = typeof offsetTop === 'number' ? Math.max(0, offsetTop) : TOP_GAP;
+  const delta = targetRect.top + inBlockOffset - container.getBoundingClientRect().top;
+  container.scrollTop = Math.max(0, container.scrollTop + delta - desiredOffset);
   previewScrollMemory.set(props.tabId || '', container.scrollTop);
   return true;
 }
@@ -494,10 +511,11 @@ function restoreTabScroll(tabId?: string) {
   const container = host.value?.parentElement as HTMLElement | null;
   if (!container) return;
   restoringTabScroll = true;
-  const savedLine = tabId ? tabTopLineMemory.get(tabId) : undefined;
+  const anchor = tabId ? tabViewportAnchorMemory.get(tabId) : undefined;
+  const savedLine = anchor?.line ?? (tabId ? tabTopLineMemory.get(tabId) : undefined);
   const hasSavedPx = tabId ? previewScrollMemory.has(tabId) : false;
-  if (savedLine && savedLine > 1 && (!hasSavedPx || props.skin === 'reading')) {
-    scrollToSourceLineQuiet(savedLine);
+  if (savedLine && savedLine >= 1 && (!hasSavedPx || props.skin === 'reading')) {
+    scrollToSourceLineQuiet(savedLine, anchor?.offsetTop);
   } else {
     const saved = tabId ? (previewScrollMemory.get(tabId) ?? 0) : 0;
     container.scrollTop = saved;
@@ -594,8 +612,6 @@ onBeforeUnmount(() => {
 });
 
 function openSearch() {
-  // #389 — ⌘/Ctrl+F toggles: pressed while the bar is up it closes again
-  // instead of re-focusing a box the user wants gone.
   if (searchOpen.value) {
     searchOpen.value = false;
     return;
@@ -854,7 +870,10 @@ defineExpose({ scrollToLine, openSearch });
   font-size: 1.25em;
   font-weight: 620;
 }
-:where(.preview-content) h3 { font-size: 1.0625em; }
+:where(.preview-content) h3 { font-size: 1.125em; }
+:where(.preview-content) h4 { font-size: 1.0625em; }
+:where(.preview-content) h5,
+:where(.preview-content) h6 { font-size: 1em; }
 :where(.preview-content) > :first-child { margin-top: 0; }
 :where(.preview-content) p { margin: 0.9em 0; }
 :where(.preview-content) a {
@@ -972,32 +991,18 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content--fit) table {
   width: 100%;
 }
-/* #384 — zebra striping: across a wide reading column a bare grid makes it
-   easy to lose the row you are on. `tbody` only, so the header never takes a
-   stripe, and mixed against `--text` so one rule works on both themes. */
-:where(.preview-content) tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--text) 4.5%, transparent);
-}
 /* #367 — a table wider than the column scrolls on its own instead of
    pushing the whole preview sideways (where the headings and prose scroll
-   away with it). `display: block` turns the table itself into the scroll
-   container: the anonymous table box generated inside it fills the block, so
-   a normal table spans the column and a too-wide one is capped at the column
-   and gets its own horizontal scrollbar.
-   #384 — the block used to be sized `max-content`, which shrank *every*
-   table to its content and left a short table floating mid-column once the
-   reader turned "fit width" off and pinned the column to a fixed width. It
-   is `100%` now, so tables line up with the prose; the anonymous box still
-   measures its columns by content, and `overflow-x` still catches a table
-   that cannot fit.
-   On screen only and only in the preview pane — print/PDF overlays reuse
-   `.preview-content` and must not clip. Fit-width mode keeps its full-width
-   tables (the block box would stop them stretching); there the pane itself
-   still scrolls. */
+   away with it). `display: block` + `max-content` is the GitHub recipe: a
+   narrow table still sizes to its content, a wide one is capped at the column
+   and gets its own horizontal scrollbar. On screen only and only in the
+   preview pane — print/PDF overlays reuse `.preview-content` and must not
+   clip. Fit-width mode keeps its full-width tables (the block box would stop
+   them stretching); there the pane itself still scrolls. */
 @media screen {
   .preview-host .preview-content:not(.preview-content--fit) table {
     display: block;
-    width: 100%;
+    width: max-content;
     max-width: 100%;
     overflow-x: auto;
   }
@@ -1160,41 +1165,20 @@ defineExpose({ scrollToLine, openSearch });
      preview pane (720px was the old hardcoded serif column). */
   max-width: var(--preview-max-width, 680px);
   margin: 0 auto;
-  padding: 64px 32px 96px;
-  font-family: var(--font-reading);
-  /* #143 — scale with the user's preview font size instead of a fixed 18px
-     (the setting looked dead in reading mode).
-     #384 — the extra 1.2× that used to sit here is gone. At the 15px default
-     it rendered reading mode at 18px against the editor's own 14px, which
-     readers reported as the same document "suddenly larger" on switching.
-     Reading mode now inherits the preview size unchanged: its identity comes
-     from the serif face, the wider column and the looser leading, not from a
-     bigger font. */
-  font-size: var(--content-font-size, 15px);
+  padding: 88px 32px 30vh;
+  /* 5.0 §5 — reading view sets the text exactly as the editor and preview
+     do (face, size, scale, blocks); only the page margin is roomier. A face
+     the user picked still wins via --content-font-family. */
+  font-family: var(--content-font-family, var(--font-ui));
+  font-size: var(--content-font-size, 16px);
   line-height: 1.8;
   color: var(--text);
-  /* #384 — a soft shadow down both sides reads the column as a "page" resting
-     on the canvas (the PDF-reader look) without darkening the surrounding
-     area. Mixing against `--text` keeps it a dark shadow in light themes and a
-     light halo in dark ones, so the edge stays visible either way with no
-     theme-specific override. The negative spread stops the gradient bleeding
-     out past the column's top and bottom edges; the two one-pixel solid
-     shadows above the blur give the edge itself a defined line. */
-  box-shadow:
-    -1px 0 0 0 color-mix(in srgb, var(--text) 10%, transparent),
-    1px 0 0 0 color-mix(in srgb, var(--text) 10%, transparent),
-    -14px 0 22px -14px color-mix(in srgb, var(--text) 22%, transparent),
-    14px 0 22px -14px color-mix(in srgb, var(--text) 22%, transparent);
 }
 /* #117 — let the Fit-Width toggle widen reading mode too (full-bleed reading
    column instead of the fixed 720px). Needs higher specificity than the plain
    `.preview-content--reading` rule above, which appears later in source. */
 .preview-content--reading.preview-content--fit {
   max-width: none;
-  /* #384 — drop the side shadow when the column is full-bleed: there is no
-     canvas either side of it for a "page" edge to sit against, so the shadow
-     would only smear along the window borders. */
-  box-shadow: none;
 }
 /* Tighten max-width on phones; on iPad keep the comfy reading column. */
 @media (max-width: 540px) {

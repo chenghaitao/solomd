@@ -61,11 +61,6 @@ interface Settings {
   solidCursor: boolean;
   // 5.0 — floating format bar over a text selection (desktop only).
   selectionBubble: boolean;
-  // 5.0 — the formatting toolbar above the editor (bold, headings, lists,
-  // code, links, images, tables, undo). Default ON: it is the discoverable
-  // half of #296 — the shortcuts stay for people who prefer them, and the
-  // menus stay either way. OFF = the editor column goes back to text only.
-  formatBar: boolean;
   // #353 — keep Markdown markers (`#`, `**`, …) visible in the CodeMirror
   // live views instead of hiding them off the caret line, so clicking a line
   // doesn't reflow it. Styling (heading size, bold) still applies.
@@ -148,12 +143,6 @@ interface Settings {
   uiFontSize: number;
   language: 'en' | 'zh' | 'ja' | 'ko' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl' | 'nl' | 'tr' | 'sv' | 'uk' | 'ru';
   autoCheckUpdate: boolean;
-  /** Which update source the update centre talks to. `fork` (default) is this
-   *  repository's releases; `official` is upstream's, resolved through the
-   *  solomd.app proxy and the Gitee mirror. */
-  updateChannel: 'fork' | 'official';
-  /** Version the user asked to stop being nagged about ('' = none). */
-  ignoredUpdateVersion: string;
   // Preview layout
   previewFitWidth: boolean;
   /** v4.10 issue #165 — preview/reading content column width in px (was a
@@ -171,6 +160,10 @@ interface Settings {
   limitEditorWidth: boolean;
   // Custom CSS theme override (path to a .css file on disk)
   customCssPath: string;
+  // Anonymous telemetry (Aptabase). Defaults true but user can opt out.
+  telemetryEnabled: boolean;
+  // First-run banner dismissal. Shown once, never again.
+  telemetryNoticeAck: boolean;
   // Restore previously-open tabs + pane layout at startup (default: true).
   restoreSession: boolean;
   // Scope open tabs to the active workspace folder (default: true). Each
@@ -247,12 +240,6 @@ interface Settings {
   sideSidebarWidth: number;
   // Width (in px) of the left file tree sidebar. User-resizable via drag handle.
   fileTreeWidth: number;
-  // Height (in px) of the Settings dialog's category area — the nav rail and
-  // the page beside it, under the fixed search row. User-resizable via the
-  // grip on the panel's bottom edge. Stored as the user left it; a short
-  // window takes it back through the panel's max-height, not through a
-  // rewrite here.
-  settingsPanelHeight: number;
   // v2.0 F4: BYOK AI rewrite. `aiProvider` is a stable id from
   // ai-providers.ts PROVIDERS — widened to string to avoid breaking when
   // new providers land.
@@ -371,6 +358,9 @@ interface Settings {
   // academic) a Word export starts from. A per-document `docx:` front-matter
   // block overrides individual keys, the same way `pdf:` does.
   docxPreset: 'plain' | 'report' | 'academic';
+  // #503 — Optional default export directory. When empty, exports default to
+  // the current note's own directory (#260).
+  defaultExportDir: string;
   // Print / system-PDF palette, independent of the app theme. Printing in a
   // dark theme put a dark slab on paper and wasted ink; `light` (the default)
   // always prints on white, `dark` prints the dark palette on purpose, and
@@ -429,14 +419,6 @@ interface Settings {
   // paragraphs render identically either way. OFF = strict CommonMark
   // soft-break (newline collapses to a space).
   markdownHardBreaks: boolean;
-  // Toolbar "项目符号" — Enter at the end of a list / quote line inherits that
-  // line's format (next bullet, next quote). Default ON. OFF = Enter is always
-  // a plain newline, whatever the line above looked like.
-  markdownListContinue: boolean;
-  // Toolbar "自动编号" — ordered items are counted, including multi-level
-  // outlines (`1.1` ⏎ → `1.2`). Default ON. OFF = ordered lists are no longer
-  // continued at all (bullets / tasks / quotes are unaffected).
-  markdownAutoNumber: boolean;
   // #216: rewrite straight quotes to curly ones in preview/exports
   // (markdown-it `smartquotes`). Default OFF — CJK font fallbacks draw
   // U+2019 fullwidth ("test'　s"), and the preview should match the typed
@@ -673,7 +655,6 @@ function defaults(): Settings {
     showLineNumbers: false,
     solidCursor: false,
     selectionBubble: true,
-    formatBar: true,
     alwaysShowMarkers: false,
     highlightCurrentLine: true,
     tabTitleFromFirstLine: false,
@@ -711,8 +692,6 @@ function defaults(): Settings {
     windowsEditorEngineExplicit: false,
     uiFontSize: 13,
     autoCheckUpdate: true,
-    updateChannel: 'fork',
-    ignoredUpdateVersion: '',
     language: (() => {
       // Detect browser language on first run. Maps navigator BCP-47 tag
       // to one of the 15 shipped UI locales; everything else → 'en'.
@@ -741,6 +720,8 @@ function defaults(): Settings {
     plantumlServer: 'https://www.plantuml.com/plantuml',
     limitEditorWidth: true,
     customCssPath: '',
+    telemetryEnabled: true,
+    telemetryNoticeAck: false,
     restoreSession: true,
     perWorkspaceTabs: true,
     autoReloadExternalChanges: true,
@@ -770,7 +751,6 @@ function defaults(): Settings {
     agentToolLoopCap: 8,
     sideSidebarWidth: 260,
     fileTreeWidth: 260,
-    settingsPanelHeight: 520,
     aiEnabled: false,
     aiProvider: 'openai',
     aiModel: '',
@@ -837,8 +817,6 @@ function defaults(): Settings {
     splitLiveSync: true,
     splitRatio: 50,
     markdownHardBreaks: true,
-    markdownListContinue: true,
-    markdownAutoNumber: true,
     spellcheckLang: 'en_US',
     ltMode: 'off',
     ltLocalUrl: 'http://localhost:8081',
@@ -858,6 +836,7 @@ function defaults(): Settings {
     rsPaneOrder: ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'neighborhood', 'types', 'history', 'inspector', 'agent'],
     previewFontSize: 16,
     attachmentMode: 'shared',
+    defaultExportDir: '',
     assetsDirName: '_assets',
     attachmentCustomPath: './images/${filename}/',
     imageUploader: 'none',
@@ -1035,12 +1014,6 @@ function load(): Settings {
         if (isMobile()) merged.rightSidebarHidden = true;
         merged.v491MobileLayoutMigrated = true;
       }
-      // Anonymous telemetry was removed from the product. The merge above is
-      // `{ ...defaults(), ...parsed }`, so an existing blob's two telemetry keys
-      // would survive into `merged` and be written back on every save forever.
-      // Drop them once; nothing reads them any more.
-      delete (merged as unknown as Record<string, unknown>).telemetryEnabled;
-      delete (merged as unknown as Record<string, unknown>).telemetryNoticeAck;
       if (!parsed.v503SourceModeMigrated) {
         merged.livePreview = false;
         merged.v503SourceModeMigrated = true;
@@ -1240,10 +1213,6 @@ export const useSettingsStore = defineStore('settings', {
       this.selectionBubble = !this.selectionBubble;
       this.persist();
     },
-    toggleFormatBar() {
-      this.formatBar = !this.formatBar;
-      this.persist();
-    },
     toggleAlwaysShowMarkers() {
       this.alwaysShowMarkers = !this.alwaysShowMarkers;
       this.persist();
@@ -1428,6 +1397,14 @@ export const useSettingsStore = defineStore('settings', {
       this.autoCheckUpdate = !this.autoCheckUpdate;
       this.persist();
     },
+    toggleTelemetry() {
+      this.telemetryEnabled = !this.telemetryEnabled;
+      this.persist();
+    },
+    ackTelemetryNotice() {
+      this.telemetryNoticeAck = true;
+      this.persist();
+    },
     toggleRestoreSession() {
       this.restoreSession = !this.restoreSession;
       this.persist();
@@ -1528,16 +1505,6 @@ export const useSettingsStore = defineStore('settings', {
       // eats too much editor space.
       const clean = Math.max(180, Math.min(600, Math.round(w) || 260));
       this.fileTreeWidth = clean;
-      this.persist();
-    },
-    setSettingsPanelHeight(h: number) {
-      // These bounds are the *stored* ones, and they exist so a corrupt or
-      // absurd value cannot lock the dialog into an unusable box. How much of
-      // the stored height actually fits is the panel's business — its
-      // max-height plus `.settings__layout`'s flex-shrink handle a shrinking
-      // window without touching what the user asked for.
-      const clean = Math.max(280, Math.min(1400, Math.round(h) || 520));
-      this.settingsPanelHeight = clean;
       this.persist();
     },
     setDailyNotesFolder(p: string) {
@@ -1804,14 +1771,6 @@ export const useSettingsStore = defineStore('settings', {
       this.markdownHardBreaks = !this.markdownHardBreaks;
       this.persist();
     },
-    toggleMarkdownListContinue() {
-      this.markdownListContinue = !this.markdownListContinue;
-      this.persist();
-    },
-    toggleMarkdownAutoNumber() {
-      this.markdownAutoNumber = !this.markdownAutoNumber;
-      this.persist();
-    },
     setSpellcheckLang(code: string) {
       this.spellcheckLang = code || 'en_US';
       this.persist();
@@ -1876,6 +1835,10 @@ export const useSettingsStore = defineStore('settings', {
     setAttachmentMode(mode: 'shared' | 'per-file' | 'custom') {
       this.attachmentMode =
         mode === 'per-file' ? 'per-file' : mode === 'custom' ? 'custom' : 'shared';
+      this.persist();
+    },
+    setDefaultExportDir(dir: string) {
+      this.defaultExportDir = (dir || '').trim();
       this.persist();
     },
     // #7 — Typora-style custom path template (used when attachmentMode==='custom').

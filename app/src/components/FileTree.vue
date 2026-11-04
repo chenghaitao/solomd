@@ -1658,39 +1658,6 @@ function isDeleteChord(e: KeyboardEvent): boolean {
   return macKeys && e.key === 'Backspace' && e.metaKey && !e.ctrlKey;
 }
 
-// ── #495: horizontal scrolling instead of ellipsis ──────────────────────────
-// A long note name is no longer cut with "…": the rows grow to their natural
-// width and the scroll area gets a horizontal scrollbar (see the styles), so
-// the panel can be narrower than the longest name and still show all of it.
-// Shift+wheel then slides the tree sideways — the VNote behaviour the issue
-// asks for.
-
-/** The nearest ancestor that can scroll horizontally, or null. */
-function horizontalScrollerOf(start: HTMLElement | null): HTMLElement | null {
-  let el: HTMLElement | null = start;
-  while (el) {
-    const ox = getComputedStyle(el).overflowX;
-    if (ox === 'auto' || ox === 'scroll') return el;
-    el = el.parentElement;
-  }
-  return null;
-}
-
-// Chromium already maps Shift+wheel onto a horizontal scroll, but only for a
-// scroller it considers the nearest one, and WebKit (macOS/Linux builds) does
-// not map it at all. Handling it here makes one behaviour on every platform;
-// preventDefault stops the native mapping from applying the same delta twice.
-function onTreeWheel(e: WheelEvent) {
-  if (!e.shiftKey || e.defaultPrevented) return;
-  const el = horizontalScrollerOf(treeBody.value ?? treeEl.value);
-  if (!el || el.scrollWidth <= el.clientWidth) return;
-  const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
-  if (!delta) return;
-  const before = el.scrollLeft;
-  el.scrollLeft = before + delta;
-  if (el.scrollLeft !== before) e.preventDefault();
-}
-
 function onTreeKey(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
   const target = e.target as HTMLElement | null;
@@ -1887,7 +1854,6 @@ onBeforeUnmount(() => {
     class="ftree"
     tabindex="-1"
     @keydown="onTreeKey"
-    @wheel="onTreeWheel"
     :class="{ 'ftree--fullnames': settings.explorerFullNames, 'ftree--embedded': props.embedded }"
     :style="props.embedded ? undefined : { '--file-tree-width': settings.fileTreeWidth + 'px' }"
     @contextmenu.prevent="openCtx($event, null)"
@@ -2020,7 +1986,7 @@ onBeforeUnmount(() => {
           @click="workspace.clearRecentFolders(); closeSwitcher()"
         >
           <span class="ftree__menu-check"></span>
-          <span class="ftree__menu-name">{{ t('explorer.clearRecentFolders') || 'Clear recent folders' }}</span>
+          <span class="ftree__menu-name">{{ t('explorer.clearRecentFolders') || '清除最近文件夹记录' }}</span>
         </button>
       </div>
       <div
@@ -2211,10 +2177,10 @@ onBeforeUnmount(() => {
       <template v-if="ctx.node && ctx.node.is_dir">
         <div class="ftree__ctx-sep"></div>
         <button class="ftree__ctx-item" @click="expandSubtree(ctx.node)">
-          {{ t('explorer.expandSubtree') || 'Expand all subfolders' }}
+          {{ t('explorer.expandSubtree') || '展开全部子目录' }}
         </button>
         <button class="ftree__ctx-item" @click="collapseSubtree(ctx.node)">
-          {{ t('explorer.collapseSubtree') || 'Collapse all subfolders' }}
+          {{ t('explorer.collapseSubtree') || '折叠全部子目录' }}
         </button>
       </template>
       <!-- Only between the "new file / folder" section (folders) and the rest:
@@ -2608,7 +2574,8 @@ export const FileTreeNode = defineComponent({
   border-right: 0;
 }
 .ftree--embedded .ftree__body {
-  overflow: visible;
+  overflow-y: visible;
+  overflow-x: auto;
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
@@ -2963,11 +2930,10 @@ export const FileTreeNode = defineComponent({
 .ftree__body {
   flex: 1;
   overflow-y: auto;
-  /* #495 — a name too long for the panel slides sideways instead of being cut
-     (see the `:not(.ftree--fullnames)` rules below, which are what actually
-     make the rows wider than this box). */
   overflow-x: auto;
   padding-bottom: var(--sp-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill-2) transparent;
 }
 
 /* #282 — a persisted filter must never be invisible. */
@@ -3007,9 +2973,16 @@ export const FileTreeNode = defineComponent({
   list-style: none;
   margin: 0;
   padding: 0 var(--sp-2);
+  box-sizing: border-box;
   /* Gives the empty area under a short tree enough body to be a drop target
      for "move to the vault root". */
   min-height: 48px;
+}
+/* #495 — Allow horizontal scrolling for long node names instead of "..." truncation
+   when single-line mode is active. */
+.ftree:not(.ftree--fullnames) .ftree__list {
+  min-width: 100%;
+  width: max-content;
 }
 :deep(.ftree__item) {
   display: flex;
@@ -3117,62 +3090,43 @@ export const FileTreeNode = defineComponent({
 :deep(.ftree__caret--open) {
   transform: rotate(90deg);
 }
-/* Long names are cut to the sidebar's current width (#259) — unless the panel
-   is in the default (non-wrapping) mode, where #495 made them scroll instead,
-   so the ellipsis rules below are scoped to the wrap modes only. */
+/* #495 — Long names expand the tree horizontally so the full name can be
+   viewed via the horizontal scrollbar without "..." truncation. */
 :deep(.ftree__name) {
-  flex: 1;
+  flex: 1 0 auto;
   min-width: 0;
   margin-left: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* #495 — default mode: the name keeps its natural width, so the row grows
-   past the panel and `.ftree__body` scrolls. `min-width: max-content` is what
-   makes the flex line refuse to shrink; `flex: 1 1 auto` still lets a short
-   name fill the row so the whole width stays clickable. */
-.ftree:not(.ftree--fullnames) .ftree__body :deep(.ftree__item) {
-  min-width: max-content;
-}
-.ftree:not(.ftree--fullnames) :deep(.ftree__name) {
-  flex: 1 1 auto;
-  min-width: max-content;
-  overflow: visible;
-  text-overflow: clip;
-  /* A hair of padding puts the end of the longest name off the panel edge. */
-  padding-right: 6px;
-}
-/* A file name with an extension: the name shrinks with an ellipsis, the
-   extension never does — "a-very-long-meeting-no….md". */
 :deep(.ftree__name--split) {
   display: flex;
 }
 :deep(.ftree__name-base) {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-}
-.ftree:not(.ftree--fullnames) :deep(.ftree__name-base) {
-  flex: 0 0 auto;
-  overflow: visible;
-  text-overflow: clip;
 }
 :deep(.ftree__name-ext) {
   flex-shrink: 0;
   white-space: nowrap;
 }
-/* #182 — full-filename mode: wrap long names instead of truncating. */
+/* #182 — full-filename mode: wrap long names instead of scrolling horizontally. */
 .ftree--fullnames :deep(.ftree__item) {
   padding-top: 5px;
   padding-bottom: 5px;
 }
 .ftree--fullnames :deep(.ftree__name) {
+  flex: 1 1 0%;
   white-space: normal;
   overflow-wrap: break-word;
   word-break: break-word;
   line-height: 1.3;
+}
+.ftree--fullnames :deep(.ftree__name--split) {
+  display: inline;
+}
+.ftree--fullnames :deep(.ftree__name-base),
+.ftree--fullnames :deep(.ftree__name-ext) {
+  white-space: normal;
 }
 :deep(.ftree__dir-count) {
   flex: none;

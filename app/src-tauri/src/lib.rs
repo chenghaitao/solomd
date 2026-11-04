@@ -1,8 +1,10 @@
 pub mod app_build;
 // App Store builds ask for a rating with Apple's own sheet (iOS starts here).
+pub mod store_review;
 pub mod iap;
 pub mod ios_folder;
 pub mod commands;
+pub mod convert;
 // Image-bed (图床) upload: PicGo / shell command / sm.ms / S3-compatible / GitHub.
 pub mod image_upload;
 pub mod search;
@@ -197,6 +199,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_build::app_build_info,
+            store_review::request_store_review,
             iap::iap_get_state,
             iap::iap_fetch_products,
             iap::iap_purchase,
@@ -215,7 +218,7 @@ pub fn run() {
             commands::print_webview_to_pdf,
             commands::copy_file,
             commands::download_and_install_update,
-            commands::cancel_update_download,
+            convert::convert_file_to_markdown,
             storage_android::android_has_all_files_access,
             storage_android::android_request_all_files_access,
             storage_android::android_system_insets,

@@ -22,7 +22,7 @@ import {
   normalizeCombo,
   toTauriAccelerator,
   type KeyOverrides,
-} from './keybindings.ts';
+} from './keybindings';
 
 export type MenuPlatform = 'mac' | 'windows' | 'linux';
 

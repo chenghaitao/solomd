@@ -1,23 +1,12 @@
 import { ref } from 'vue';
-import { downloadAndInstallUpdate, type UpdateProgressPayload } from '../lib/check-update';
-import { DEFAULT_CHANNEL, type UpdateChannel } from '../lib/release-channels';
+import { checkForUpdate, downloadAndInstallUpdate } from '../lib/check-update';
 import { useToastsStore } from '../stores/toasts';
 import { useI18n } from '../i18n';
-import { openUpdateCenter } from './useUpdateCenter';
 
-/** Shared so the Settings button and Help → Check for Updates agree. */
+/** Shared so the Settings button and Help → Check for Updates show one state. */
 const checking = ref(false);
 
-/**
- * Download + install in the background, reporting through a single toast.
- *
- * The update centre is the normal path now; this stays for callers that only
- * have a version string (e.g. a notification action) and don't open the dialog.
- */
-export async function runDirectUpdateInstall(
-  version: string,
-  channel: UpdateChannel = DEFAULT_CHANNEL,
-): Promise<void> {
+export async function runDirectUpdateInstall(version: string): Promise<void> {
   const toasts = useToastsStore();
   const { lang } = useI18n();
   const isZh = lang.value === 'zh';
@@ -27,7 +16,7 @@ export async function runDirectUpdateInstall(
     : `Downloading update v${cleanVer}…`;
   const toastId = toasts.push(initMsg, 'info', 0);
 
-  const onProgress = (p: UpdateProgressPayload) => {
+  const ok = await downloadAndInstallUpdate(cleanVer, (p) => {
     const item = toasts.items.find((it) => it.id === toastId);
     if (!item) return;
     const pct = p.percent != null ? ` ${p.percent}%` : '';
@@ -35,9 +24,7 @@ export async function runDirectUpdateInstall(
     item.message = isZh
       ? `正在下载更新 v${cleanVer}${pct}${src}…`
       : `Downloading update v${cleanVer}${pct}${src}…`;
-  };
-
-  const ok = await downloadAndInstallUpdate(cleanVer, { channel, onProgress });
+  });
 
   toasts.resolve(toastId);
   if (ok) {
@@ -51,16 +38,29 @@ export async function runDirectUpdateInstall(
 }
 
 /**
- * "Check for updates now" — Settings → Advanced and the Help menu. Both open
- * the update centre, which does its own check and shows the real state (and
- * the selected source's changelog) instead of a one-shot toast.
+ * "Check for updates now" — Settings → Advanced and, since bug/C1, the Help
+ * menu. One implementation so the two can never report differently.
  */
 export function useUpdateCheck() {
+  const toasts = useToastsStore();
+  const { t } = useI18n();
+
   async function manualCheckUpdate(): Promise<void> {
     if (checking.value) return;
     checking.value = true;
     try {
-      openUpdateCenter();
+      const r = await checkForUpdate();
+      if (r.error) {
+        // Both solomd.app proxy + GitHub/Gitee direct failed (offline / DNS / etc).
+        // Don't lie to the user with "up to date" — show a real error.
+        toasts.error(t('settings.updateCheckFailed'));
+      } else if (r.hasUpdate && r.latest) {
+        await runDirectUpdateInstall(r.latest);
+      } else {
+        toasts.info(t('settings.upToDate'));
+      }
+    } catch (e) {
+      toasts.error(String(e));
     } finally {
       checking.value = false;
     }
