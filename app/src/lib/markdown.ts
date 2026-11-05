@@ -286,6 +286,45 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
 // Annotate every block-level opening token with `data-source-line` set to
 // the 1-indexed source line. App.vue's split-scroll uses these attributes
 // to map editor viewport lines to preview elements for accurate alignment.
+//
+// preprocessMarkdown() inserts blank lines around raw HTML blocks so
+// markdown-it parses them as blocks. Those inserted lines shift every token
+// map after them, so anchors used to point N lines below the real source
+// (#T09-4: +2 for <details> and native <table> blocks). Resolve every
+// anchor through a normalized-line -> source-line map built once per render.
+type SourceLineMap = number[] | null;
+
+function buildSourceLineMap(source: string, normalized: string): SourceLineMap {
+  if (normalized === source) return null;
+  const srcLines = source.split('\n');
+  const normLines = normalized.split('\n');
+  // Only net-added blank lines are remapped. If preprocessing removed or
+  // merged lines we cannot align them safely — fall back to the raw token map.
+  if (normLines.length <= srcLines.length) return null;
+  const map: number[] = new Array(normLines.length);
+  let si = 0;
+  for (let ni = 0; ni < normLines.length; ni++) {
+    // An inserted blank line does not consume a source line.
+    if (si < srcLines.length && normLines[ni] === '' && srcLines[si] !== '') {
+      map[ni] = si + 1;
+      continue;
+    }
+    map[ni] = si + 1;
+    si++;
+  }
+  return si < srcLines.length ? null : map;
+}
+
+/** 1-indexed *source* line for a 0-indexed token map line. */
+function sourceLine(env: unknown, zeroBasedLine: number): number {
+  const map = (env as { solomdLineMap?: unknown } | undefined)?.solomdLineMap;
+  if (Array.isArray(map)) {
+    const n = map[zeroBasedLine];
+    if (typeof n === 'number' && n > 0) return n;
+  }
+  return zeroBasedLine + 1;
+}
+
 const BLOCK_OPEN_TYPES = new Set([
   'paragraph_open',
   'heading_open',
@@ -379,7 +418,7 @@ md.renderer.rules.math_block = function (tokens, idx, options, env, self) {
     ? defaultMathBlock(tokens, idx, options, env, self)
     : self.renderToken(tokens, idx, options);
   const tok = tokens[idx];
-  const line = tok.map && tok.map.length > 0 ? tok.map[0] + 1 : 0;
+  const line = tok.map && tok.map.length > 0 ? sourceLine(env, tok.map[0]) : 0;
   if (!line) return html;
   return `<div class="md-math-block" data-source-line="${line}">${html}</div>`;
 };
@@ -388,7 +427,7 @@ md.core.ruler.push('source_line_map', (state) => {
   for (const tok of state.tokens) {
     if (!BLOCK_OPEN_TYPES.has(tok.type)) continue;
     if (!tok.map || tok.map.length < 1) continue;
-    const line = tok.map[0] + 1; // 1-indexed
+    const line = sourceLine(state.env, tok.map[0]); // 1-indexed source line
     tok.attrJoin('data-source-line', String(line));
   }
 });
@@ -538,7 +577,7 @@ md.core.ruler.before('source_line_map', 'table_of_contents', (state) => {
     navOpen.map = marker.map;
     navOpen.attrSet('class', 'md-toc');
     navOpen.attrSet('aria-label', 'Table of contents');
-    navOpen.attrSet('data-source-line', String((marker.map?.[0] ?? 0) + 1));
+    navOpen.attrSet('data-source-line', String(sourceLine(env, marker.map?.[0] ?? 0)));
     const navClose = new state.Token('toc_close', 'nav', -1);
     navClose.block = true;
     state.tokens.splice(
@@ -555,14 +594,64 @@ md.core.ruler.before('source_line_map', 'table_of_contents', (state) => {
 // the output, so documents built around `<div>…<img>…</div>` containers had no
 // sync anchors at all and the split panes drifted apart across those regions
 // (#203 双栏错位). Wrap the raw block in a neutral div carrying the line.
+//
+// EXCEPT when the block leaves a container tag open (or is a stray closing
+// tag). Blank lines split `<details>` from its `</details>` into separate HTML
+// blocks; wrapping the opening block in `<div>…</div>` implicitly closes the
+// unclosed `<details>` at that `</div>`, which pushes the content between the
+// two blocks (e.g. a Markdown table) OUT of the fold container (#T09-4). For
+// those blocks, put the anchor on the block's own first opening tag instead,
+// so the browser keeps the raw DOM structure and the fold works again.
+const HTML_VOID_TAGS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+  'meta', 'param', 'source', 'track', 'wbr',
+]);
+
+function rawHtmlNeedsTransparentAnchor(html: string): boolean {
+  const stripped = html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  const stack: string[] = [];
+  let firstIsClose = false;
+  let seenTag = false;
+  const tagRe = /<(\/)?([A-Za-z][A-Za-z0-9-]*)\b[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(stripped)) !== null) {
+    if (!seenTag) {
+      seenTag = true;
+      firstIsClose = m[1] === '/';
+    }
+    const tag = m[2].toLowerCase();
+    if (HTML_VOID_TAGS.has(tag)) continue;
+    if (m[1] === '/') {
+      const open = stack.lastIndexOf(tag);
+      if (open >= 0) stack.length = open;
+    } else if (!/\/\s*>$/.test(m[0])) {
+      stack.push(tag);
+    }
+  }
+  return stack.length > 0 || firstIsClose;
+}
+
+/** Move the scroll-sync anchor onto the first opening tag instead of adding a
+ *  wrapper element. A stray closing tag has no opening tag to decorate — it
+ *  simply renders verbatim, which is what keeps the fold intact. */
+function anchorRawHtml(html: string, line: number): string {
+  return html.replace(/<([A-Za-z][A-Za-z0-9-]*)([^>]*)>/, (whole, tag, rest) => {
+    if (/\bdata-source-line\s*=/.test(whole)) return whole;
+    return `<${tag} data-source-line="${line}"${rest}>`;
+  });
+}
+
 const defaultHtmlBlock = md.renderer.rules.html_block;
 md.renderer.rules.html_block = function (tokens, idx, options, env, self) {
   const html = defaultHtmlBlock
     ? defaultHtmlBlock(tokens, idx, options, env, self)
     : tokens[idx].content;
   const tok = tokens[idx];
-  const line = tok.map && tok.map.length > 0 ? tok.map[0] + 1 : 0;
+  const line = tok.map && tok.map.length > 0 ? sourceLine(env, tok.map[0]) : 0;
   if (!line) return html;
+  if (rawHtmlNeedsTransparentAnchor(html)) return anchorRawHtml(html, line);
   return `<div data-source-line="${line}">${html}</div>`;
 };
 
@@ -646,7 +735,7 @@ md.core.ruler.after('inline', 'task_lists', (state) => {
       'class',
       existingClass ? `${existingClass} task-list-item` : 'task-list-item',
     );
-    const line = tok.map && tok.map.length > 0 ? tok.map[0] + 1 : 0;
+    const line = tok.map && tok.map.length > 0 ? sourceLine(state.env, tok.map[0]) : 0;
     tok.attrSet('data-line', String(line));
 
     // Walk back to find the enclosing list token and tag it.
@@ -1455,6 +1544,11 @@ export function renderMarkdown(
   lastFrontMatterRaw = null;
   const normalized = preprocessMarkdown(source);
   const env: Record<string, unknown> = {};
+  // Preprocessing may have inserted blank lines around raw HTML blocks. Every
+  // `data-source-line` / `data-line` anchor below resolves through this map so
+  // split-pane sync still points at the user's real source lines.
+  const lineMap = buildSourceLineMap(source, normalized);
+  if (lineMap) env.solomdLineMap = lineMap;
   if (options?.tocSource !== undefined) {
     env.solomdTocSource = preprocessMarkdown(options.tocSource);
   }

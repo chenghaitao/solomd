@@ -718,6 +718,22 @@ function openByKey(name: DropdownName) {
   void focusMenuItem('first');
 }
 const anyToolbarMenuOpen = computed(() => exportOpen.value || moreOpen.value);
+// Every floating layer this component owns — keep this in step with
+// closeAllDropdowns() below, so a new popover can't silently lose its
+// tap-outside surface on the tablet overlay.
+const anyToolbarFloating = computed(
+  () => anyToolbarMenuOpen.value || menubarOpen.value !== null || pomoOpen.value,
+);
+// The tablet overlay needs a "tap outside" surface while a layer is open, even
+// when the file tree is collapsed (App.vue's scrim used to be tree-only). The
+// layers are teleported to <body>, so report the state through an event rather
+// than let App.vue reach into another component's DOM. flush:'post' keeps the
+// broadcast in step with the rendered layer.
+watch(anyToolbarFloating, (open) => {
+  // Windows renders two Toolbars; only the header one owns the scrim state.
+  if (isTitlebar.value) return;
+  window.dispatchEvent(new CustomEvent('solomd:toolbar-floating-state', { detail: open }));
+}, { flush: 'post' });
 watch(
   () => [menuPos.value, anyToolbarMenuOpen.value, menubarOpen.value],
   () => {

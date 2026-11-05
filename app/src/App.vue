@@ -1779,6 +1779,7 @@ function onPageHide() {
 onBeforeUnmount(() => {
   window.removeEventListener('pagehide', onPageHide);
   window.removeEventListener('keydown', onEsc);
+  window.removeEventListener('solomd:toolbar-floating-state', onToolbarFloatingState);
   document.removeEventListener('click', onStrayLinkClick);
   document.removeEventListener('auxclick', onStrayLinkClick);
   window.removeEventListener('wheel', onWheelZoom, { capture: true } as EventListenerOptions);
@@ -1887,6 +1888,16 @@ const phone = usePhoneStore();
 // 5.0 §7 — iPad portrait: the sidebar floats over the text and steps aside
 // once a note is picked.
 const { isTabletOverlay } = useTabletOverlay();
+// Toolbar-owned floating layers (Export / More / menubar / pomodoro) are
+// teleported to <body>, so the tablet scrim has no way to see them directly.
+// Toolbar.vue reports its open state; without this the scrim only existed
+// while the file tree was open and a tap outside a layer fell straight
+// through to the editor.
+const toolbarFloatingOpen = ref(false);
+function onToolbarFloatingState(e: Event) {
+  toolbarFloatingOpen.value = (e as CustomEvent<boolean>).detail === true;
+}
+window.addEventListener('solomd:toolbar-floating-state', onToolbarFloatingState);
 // DEV-only: `?layoutdebug` prints the chrome's geometry on screen, for
 // checking layouts in iOS Simulator Safari, which can't be scripted.
 const layoutDebug = ref('');
@@ -2002,8 +2013,12 @@ window.addEventListener('popstate', () => {
     phoneHistoryOps--;
     return;
   }
+  // Any layout: BACK dismisses floating menus first. The narrow branch below
+  // only manages the phone shell's view stack — on the tablet overlay there
+  // is no view stack, so `solomd:close-menus` used to never be dispatched and
+  // an open More/Export menu survived every BACK press.
+  window.dispatchEvent(new Event('solomd:close-menus'));
   if (isNarrow.value && phone.view !== 'home') {
-    window.dispatchEvent(new Event('solomd:close-menus'));
     phone.show('home');
   }
 });
@@ -2093,6 +2108,17 @@ function closeNarrowDrawer(): void {
   if (settings.showFileTree) settings.toggleFileTree();
   if (settings.showViewsPanel) settings.toggleViewsPanel();
   if (showRightSidebar.value) settings.toggleRightSidebar();
+}
+
+/**
+ * Tablet overlay: the scrim covers the workspace while the file tree or a
+ * floating toolbar menu is open, so a tap outside can never fall through to
+ * the editor. One tap dismisses the whole overlay stack — menus (Toolbar
+ * listens on window) and the floating file tree together.
+ */
+function onTabletScrimClick(): void {
+  window.dispatchEvent(new Event('solomd:close-menus'));
+  if (settings.showFileTree) settings.toggleFileTree();
 }
 
 // v4.0.2 — ordered list of currently-visible right-sidebar panes. Drives
@@ -2356,10 +2382,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
           @click="closeNarrowDrawer"
         />
         <div
-          v-if="isTabletOverlay && !isNarrow && settings.showFileTree"
-          class="workspace__scrim"
+          v-if="isTabletOverlay && !isNarrow && (settings.showFileTree || toolbarFloatingOpen)"
+          class="workspace__scrim workspace__scrim--tablet"
           aria-hidden="true"
-          @click="settings.toggleFileTree()"
+          @click="onTabletScrimClick"
         />
         <!-- 5.0 §8 — phone: 笔记 home / search screens with the bottom bar. -->
         <div v-if="isNarrow && phone.view !== 'editor'" class="phone-screen">
@@ -2862,6 +2888,14 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   background: rgba(0, 0, 0, 0.32);
   border: 0;
   padding: 0;
+}
+/* The toolbar is z-index 20 and the floating file tree 40. A tablet scrim at
+   35 covered the More/Export buttons, so the first tap was swallowed (it only
+   folded the tree) and a second tap on the trigger looked like "won't close".
+   Keep the tablet scrim above the content but below the toolbar; the phone
+   scrim above stays untouched. */
+.workspace__scrim--tablet {
+  z-index: 19;
 }
 /* The editor keeps the full width underneath the drawer. */
 .app--narrow .content {

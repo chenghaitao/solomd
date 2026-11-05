@@ -21,6 +21,31 @@
 
 ## [5.0.18] — 2026-11-05
 
+### Android 平板浮层：「更多」菜单关不掉（点外部 / 点按钮 / 返回键）
+
+- **现象**：视口落在 601–1023 CSS px 且 `pointer: coarse`（平板浮层布局）时，展开顶部「更多」菜单后，点外部会穿透到编辑器，再点「更多」按钮或按系统返回键都关不掉。
+- **原因**（三条叠加）：
+  1. `popstate` 只在手机窄屏分支派发 `solomd:close-menus`，平板上 `isNarrow === false`，返回键永远不通知 Toolbar。
+  2. 平板遮罩的 `v-if` 只认 `settings.showFileTree` —— 文件树收起时屏幕上没有任何承载面；且 `@click` 只调 `toggleFileTree()`，不通知菜单关闭。
+  3. `.workspace__scrim` 的 `z-index: 35` 高于 `.toolbar` 的 `20`，遮罩盖住了「更多」/「导出」按钮本身：第一次点击被遮罩吞掉（只收文件树），表现成「点按钮不关闭」。
+- **修复**：
+  - `App.vue`：`popstate` 无条件派发 `solomd:close-menus`（手机分支照旧）；新增 `toolbarFloatingOpen`，由 Toolbar 的 `solomd:toolbar-floating-state` 事件同步；平板遮罩改为 `showFileTree || toolbarFloatingOpen`，点击时统一关菜单 + 收文件树；新增 `.workspace__scrim--tablet { z-index: 19 }`，遮罩盖内容但不盖工具栏（手机遮罩仍是 35）。
+  - `Toolbar.vue`：`anyToolbarFloating` 与 `closeAllDropdowns()` 覆盖同一组浮层（export / more / menubar / pomodoro），`watch(..., { flush: 'post' })` 广播开合状态；`isTitlebar` 守卫避免 Windows 双 Toolbar 互相覆盖。
+- **没有加**全局 `pointerdown` 兜底：在 `pointerdown` 阶段移除遮罩会让后续 `click` 落到编辑器，反而制造点击穿透；遮罩本身就是可靠的 `click` 承载面。
+- **验证**：`vue-tsc --noEmit` 通过、`pnpm test` 645/645；Playwright + `?forceTabletOverlay`（667×1000 触摸视口）在文件树展开 / 收起两态下，点外部、点按钮、返回键均能关闭菜单且 `editorHits=0`；桌面 1440×900 回归无遮罩、菜单开关正常。
+
+### HTML 块滚动同步锚点：`<details>` 折叠内容跳出容器 + 行号偏移（#T09-4）
+
+- **现象**：`preprocessMarkdown()` 在原生 HTML 块前后插空行后，`<details>` 与 `</details>` 被拆成两个 HTML 块；#203 给块包的 `<div data-source-line>` 会让浏览器在 `</div>` 处隐式闭合未关闭的 `<details>`，折叠容器内的 Markdown 表格被挤出折叠区。同时插入的空行让其后所有滚动同步锚点 `data-source-line` 偏移 +2。
+- **修复**（`lib/markdown.ts`）：
+  - 新增 `buildSourceLineMap()`：渲染前建立「规范化行 → 源行」映射，`source_line_map` / TOC / 数学块 / 任务列表 / HTML 块全部经 `sourceLine()` 解析为用户真实源行号；仅在预处理只净增空行时启用，行结构变化则回退原 token map。
+  - 新增 `rawHtmlNeedsTransparentAnchor()`（标签栈判定块内是否留有未闭合容器 / 孤立闭合标签）：命中时不包 `<div>`，改由 `anchorRawHtml()` 把锚点直接挂到块自身第一个开标签上，保留原始 DOM 结构，折叠恢复生效；完整闭合的容器仍走 #203 的 `<div>` 包裹。
+- **验证**：新增 `markdown-html-block.test.ts` 5 条断言（表格位于 `<details>` 内、行号不偏移、闭合容器仍保留锚点、原生 HTML 表格折叠、普通文档行号不变），全套 645/645 通过。
+
+---
+
+### 修复上游 #521：列表懒延续行回车误编辑
+
 修复上游 [#521](https://github.com/zhitongblog/solomd/issues/521)：**CodeMirror 引擎（WebView2 ≥ 154 的默认）下，无序列表项的懒延续段落行回车会误编辑**。textarea 引擎不受影响，两引擎行为现已一致。
 
 ### 1. 症状
