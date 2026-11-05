@@ -6,6 +6,7 @@ import {
   computeListContinuation,
   computeListSoftBreak,
   insideFence,
+  isLazyListContinuationLine,
   repairIndentedFenceEdit,
   type ListContinuationOptions,
 } from './list-continuation.ts';
@@ -204,4 +205,38 @@ test('repairIndentedFenceEdit restores missing list-fence indent when typing on 
   assert.ok(repaired);
   assert.equal(repaired!.value, '1. 列表一\n   ```\n   c\n   ```\n2. 列表二');
   assert.equal(repaired!.caret, cIdx + 4);
+});
+
+// #521 — a lazy-continuation paragraph line under a list item: Enter must be
+// a plain newline on the CodeMirror path too (isLazyListContinuationLine), or
+// @codemirror/lang-markdown's insertNewlineContinueMarkup doubles the break in
+// a loose list and deletes a line no longer than the marker width.
+test('#521 lazy-continuation lines are recognised for plain-Enter takeover', () => {
+  const lazy = (src: string): boolean | null => {
+    const caret = src.indexOf('|');
+    const text = src.slice(0, caret) + src.slice(caret + 1);
+    return isLazyListContinuationLine(text, caret, caret);
+  };
+  // The reported case: 注意：… under a bullet, list is loose (blank lines + second item).
+  assert.equal(lazy('- 无序列表\n注意：这个无序列表的文字可以用来测试|\n\n\n- 无序列表\n测'), true);
+  // Short lazy line (would be deleted by CodeMirror as an "empty item"):
+  assert.equal(lazy('- 无序列表\n注意|\n\n\n- 无序列表\n测'), true);
+  // Mid-line caret as well:
+  assert.equal(lazy('- 无序列表\n注意|：这个可以测试\n\n- 下一项'), true);
+  // Tight list — same takeover, the behaviour just becomes explicit:
+  assert.equal(lazy('- 无序列表\n注意：这个可以测试|\n- 下一项'), true);
+  // Ordered lists are covered too:
+  assert.equal(lazy('1. 第一项\n注意：这个可以测试|\n\n2. 第二项'), true);
+
+  // NOT lazy lines — CodeMirror's own Enter stays in charge:
+  assert.equal(lazy('普通段落，不在列表下|\n\n- 无序列表'), false);
+  assert.equal(lazy('- 无序列表\n\n注意：空行隔开，列表已结束|'), false);
+  assert.equal(lazy('- marker 行归 computeListContinuation 管|\n\n- 下一项'), false);
+  assert.equal(lazy('- 无序列表\n  缩进延续行走 computeListContinuation 的缩进换行|\n\n- 下一项'), false);
+  // Blank line keeps CodeMirror's empty-item semantics:
+  assert.equal(lazy('- 无序列表\n|\n\n- 下一项'), false);
+  // Quote lines have their own rule:
+  assert.equal(lazy('> 引用行|\n\n> 继续引用'), false);
+  // Inside a fence nothing happens:
+  assert.equal(lazy('- 无序列表\n  ```\n代码行|\n  ```'), false);
 });

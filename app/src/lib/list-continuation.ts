@@ -256,6 +256,46 @@ export function computeListContinuation(
 }
 
 /**
+ * #521 — True when `caret` sits on a *lazy-continuation* line of a list item:
+ * a non-marker, unindented text line directly under list content (e.g. the
+ * `注意：…` line under `- 无序列表`). A plain newline is the correct Enter
+ * behaviour there — the textarea paths already do exactly that.
+ *
+ * CodeMirror's own `insertNewlineContinueMarkup` mis-edits these lines when
+ * the enclosing list is loose (items separated by blank lines): it inserts an
+ * extra blank line on the break, and when the line is no longer than the
+ * item's marker width (`注意` under `- `) it mistakes the text for the marker
+ * and deletes the whole line as an "empty item". The CodeMirror Enter command
+ * uses this predicate to take over with a plain newline before that happens.
+ */
+export function isLazyListContinuationLine(
+  text: string,
+  selStart: number,
+  selEnd: number,
+): boolean {
+  if (selStart !== selEnd) return false;
+  const caret = selStart;
+  const lineStart = text.lastIndexOf('\n', caret - 1) + 1;
+  const nl = text.indexOf('\n', caret);
+  const lineEnd = nl < 0 ? text.length : nl;
+  const line = text.slice(lineStart, lineEnd);
+  if (line.trim() === '') return false; // blank lines keep CodeMirror's empty-item semantics
+  if (enclosingFenceIndent(text, lineStart) !== null) return false;
+  const quote = line.match(QUOTE_PREFIX)?.[1] ?? '';
+  if (quote.includes('>')) return false; // quote lines have their own continuation rule
+  const rest = line.slice(quote.length);
+  if (LIST_MARKER.test(rest) || NO_SPACE_CJK_ORDERED.test(rest)) {
+    return false; // marker lines are computeListContinuation's business
+  }
+  const listIndent = enclosingListContentIndent(text, lineStart);
+  if (!listIndent) return false; // not under any list item
+  const leadWs = /^[ \t]+/.exec(line)?.[0] ?? '';
+  // Unindented (lazy) continuation: leadWs below the item's content column.
+  // Indented ones are already continued by computeListContinuation.
+  return leadWs.length < listIndent.length;
+}
+
+/**
  * Markdown list / quote soft line break on `Shift + Enter`:
  * Instead of starting a new list item (`2. ` / `- `), inserts a newline
  * indented to the current list item's content column (e.g. 3 spaces under

@@ -107,7 +107,7 @@ import { installSvgImageFallbacks, rewriteImageUrls } from '../lib/image-resolve
 import { SLASH_BLOCKS, filterBlocks, expandSnippet, indentExpandedSnippet } from '../lib/slash-blocks';
 import { useWorkspaceIndexStore } from '../stores/workspaceIndex';
 import { isWindowsEditorRuntime, shouldUsePlainWindowsEditor, isAndroid, isIOS, isMobile } from '../lib/platform';
-import { computeListContinuation, computeListSoftBreak, repairIndentedFenceEdit, type ListContinuationOptions } from '../lib/list-continuation';
+import { computeListContinuation, computeListSoftBreak, isLazyListContinuationLine, repairIndentedFenceEdit, type ListContinuationOptions } from '../lib/list-continuation';
 import { listContinuationKeymap } from '../lib/cm-list-continuation';
 import SelectionBubble, { type BubbleSelection } from './SelectionBubble.vue';
 import TableToolbar from './TableToolbar.vue';
@@ -4205,7 +4205,23 @@ function markdownEnterCommand(v: EditorView): boolean {
   if (v.state.selection.ranges.length > 1) return false;
   const sel = v.state.selection.main;
   const res = computeListContinuation(v.state.doc.toString(), sel.from, sel.to);
-  if (!res) return false;
+  if (!res) {
+    // #521 — a lazy-continuation paragraph line under a list item needs a
+    // plain newline. Leaving it to CodeMirror's insertNewlineContinueMarkup
+    // breaks it twice in a loose list: the line break is doubled, and a line
+    // no longer than the marker width ("注意" under "- ") is misread as an
+    // empty item and deleted whole.
+    if (sel.empty && isLazyListContinuationLine(v.state.doc.toString(), sel.from, sel.to)) {
+      v.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: '\n' },
+        selection: { anchor: sel.from + 1 },
+        scrollIntoView: true,
+        userEvent: 'input.type',
+      });
+      return true;
+    }
+    return false;
+  }
   return applyTextComputation(v, res, 'input.type');
 }
 

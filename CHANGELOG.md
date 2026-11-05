@@ -19,6 +19,36 @@
 
 ---
 
+## [5.0.18] — 2026-11-05
+
+修复上游 [#521](https://github.com/zhitongblog/solomd/issues/521)：**CodeMirror 引擎（WebView2 ≥ 154 的默认）下，无序列表项的懒延续段落行回车会误编辑**。textarea 引擎不受影响，两引擎行为现已一致。
+
+### 1. 症状
+
+测试样本：`- 无序列表` 下一行跟无缩进的普通文字（列表项的懒延续行），且列表是松散的（项与项之间隔空行）：
+
+- 行文字**多于** marker 宽度（`- ` 为 2）时回车 → **多插一个空行**（一次回车得到两个换行）；
+- 行文字**不多于** marker 宽度（如 `注意` 两字）时回车 → **整行被删除**。
+
+### 2. 根因
+
+`@codemirror/lang-markdown` 的 `insertNewlineContinueMarkup`：它假设行首 marker 之外的内容是列表项内容，对**没有 marker 的懒延续行**（如 `- 无序列表` 正下方的 `注意：…`）判断失真：
+
+- `line.text.slice(inner.to)` 把行首与 marker 等宽的正文当作 marker 吃掉——剩余为空即误判「空列表项」，走「删除一级 markup」分支，删掉整行；
+- 列表是 loose（`nonTightList`）时，普通换行前再补一个 `blankLine + "\n"`，段落内断行被插入多余空行。
+
+### 3. 修复
+
+- `lib/list-continuation.ts`：新增 `isLazyListContinuationLine(text, selStart, selEnd)`——当前行是列表项下方**非 marker、无缩进**的延续行（`enclosingListContentIndent` 命中且缩进不足内容列）时为真；空行、引用行、fence 内、marker 行均不命中。
+- `Editor.vue` `markdownEnterCommand`：`computeListContinuation` 放行后、落到 CodeMirror 之前，若命中该判定则接管为**纯换行**（与 textarea 引擎的原生行为一致），阻断 `insertNewlineContinueMarkup` 的误编辑。
+
+### 4. 验证
+
+- `list-continuation.test.ts` 新增 12 条断言（懒延续行正/反例、有序列表、tight 列表、空行、引用、fence），`pnpm test` 645/645；`vue-tsc --noEmit` 通过。
+- Playwright 驱动 dev build（`?forceCodeMirror`，Windows Chrome）按 issue 步骤实测：冒号位置回车 → `注意` / `：这个…` 干净断行（原多一空行）；`注意` 后回车 → 行保留、正常换行（原整行被删）；列表项行（`- 无序列表` 中间回车）仍正确续写 `- `，marker 行为无回归。
+
+---
+
 ## [5.0.17] — 2026-11-03
 
 同步上游 `v5.0.13`（12 个提交），并修复 iOS 端「设为默认 Markdown 编辑器」调用未注册命令的报错。
