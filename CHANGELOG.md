@@ -29,9 +29,15 @@
   - **设置字段**：`cloudVaultEncrypted/AutoSubdir/CategorizeFiles`、`cloudApiSyncMode/Encrypted/AutoSubdir/CategorizeFiles`、`syncMaxVersions`(20)、`autoSnapshotOnSave`(true) 补进 `Settings` 接口与 `defaults()`，否则 `vue-tsc` 直接报错。
   - **i18n**：15 个语言各出现两个 `tableToolbar` 块（ours + 上游），重复键破坏类型推导；保留第一个、删除第二个。
   - 上游的 `TabBar.vue`「在新窗口打开」菜单项与 `cm-live-blocks.ts` 的 `dedentTableSource()` 已在合并提交内补回。
-- **未同步 `markdown.ts`**：本地渲染器带上游没有的修复（`sourceLine()` 规范化行→源行映射、#T09-4 未闭合 `<details>` 的锚点挂载、`file:` 链接放行、#493 `no-referrer`）。上游的表格解析重写没有叠加，因此回退 5 条断言**上游解析器**行为的上游测试（`markdown-tables.test.ts` 3 条、`cm-live-blocks.test.ts` 2 条）。
-  **已知差异（后续跟进）**：① 引用块内分隔行列数不一致的表格自动修复并保留 `>` 前缀；② 表格后无空行紧跟的无竖线普通段落不被吞入 `tbody` —— 两项目前仍只有上游具备。
-- **验证**：`cargo check` 通过（无代码警告，仅增量编译锁文件提示）、`vue-tsc --noEmit` 0 错误、`vite build` 成功、`pnpm test` **652/652**。
+- **`markdown.ts` 主体保留 ours**：本地渲染器带上游没有的修复（`sourceLine()` 规范化行→源行映射、#T09-4 未闭合 `<details>` 的锚点挂载、`file:` 链接放行、#493 `no-referrer`）。上游对该文件的**整体**重写没有叠加，但其中三处表格修复已定向回移（见下一节），因此只保留上游 `cm-live-blocks.test.ts` 的 2 条差异用例不接（#504 单元格点击偏移、outer-pipeless 表的 live block 渲染 —— 属上游 `cm-live-blocks.ts` 的独立特性，未回移）。
+- **验证**：`cargo check` 通过（无代码警告，仅增量编译锁文件提示）、`vue-tsc --noEmit` 0 错误、`vite build` 成功、`pnpm test` **655/655**。
+
+### 表格：回移上游三处解析修复（#500 T08-9 / T09-4、引用块内表格）
+
+- **① 引用块内的表格**：`> | 列A | 列B | 列C |` 下一行 `> | :--- | ---: |` 列数不一致时，原逻辑的修复器把 `>` 当成单元格内容，列数算错 → 整块退化成段落。现在 `tableRowCells()` 先剥掉前导 `>`，fence 探测与重写出的分隔行都保留 `>` 前缀（`/^\s*(?:>\s*)*/`），表格留在引用块内且列数正确。
+- **② 表格后紧跟的无竖线段落**：markdown-it 会一路吃到空行为止，于是紧贴表格的普通文字被塞进 `<tbody>` 变成一个宽单元格。新增块级规则 `table_no_pipe_terminator`（注册在 `table` 之前，仅 silent 探测、不产 token）：父级是 table 且该行不含 `|` 时终止表格，文字照常成为 `<p>`。
+- **③ `<details>` 里的表格**：`<summary>` 后不留空行时，整个折叠块被当成 CommonMark Type-6 原始 HTML，表格保持字面文本。`unwrapInlineHtmlBlocks()` 现在给 `<details>` 内的表格前后补空行（仅当确实紧跟 `|` 表格行），折叠区内表格正常渲染且仍留在 `<details>` 内。
+- **测试**：三条上游用例（`#500 T08-9`、`#500 T09-4`、`#500 引用块`）已原样回移进 `markdown-tables.test.ts`；全量 **655/655**。
 
 ### 文件 → 快速记录：白框、一片空白、整个界面卡死
 

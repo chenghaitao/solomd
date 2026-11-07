@@ -156,6 +156,27 @@ if (tableBlockRule) {
 }
 (md.block.ruler as any).__cache__ = null;
 
+// #500 T08-9 — end a pipe table at the first following line that has no `|`.
+// markdown-it keeps consuming body rows until a blank line, so
+//   | a | b |
+//   |---|---|
+//   | 1 | 2 |
+//   prose directly under the table, no blank line
+// swallowed that prose into `<tbody>` (one wide cell). GFM ends the table
+// there. Registered *before* `table` so its silent probe runs while the table
+// rule is still eating rows; it never emits tokens, it only says "stop".
+md.block.ruler.before(
+  'table',
+  'table_no_pipe_terminator',
+  (state, startLine, _endLine, silent) => {
+    if (!silent || (state.parentType as string) !== 'table') return false;
+    const pos = state.bMarks[startLine] + state.tShift[startLine];
+    const max = state.eMarks[startLine];
+    return !state.src.slice(pos, max).includes('|');
+  },
+  { alt: ['blockquote'] },
+);
+
 // ---- Wikilink rule (`[[X]]`, `[[X|alias]]`, `[[X#heading]]`) ---------------
 // Used by F1 (v2.0). Renders into <a class="md-wikilink" data-wikilink-target="X">…</a>.
 // Preview.vue intercepts clicks and resolves through the workspace index.
@@ -908,7 +929,19 @@ function unwrapInlineHtmlBlocks(source: string): string {
     .map((seg) => {
       if (seg.isFence) return seg.text;
       return seg.text.replace(HTML_BLOCK_RE, (_match, _indent, html) => {
-        return `\n\n${html}\n\n`;
+        // #500 T09-4 — a `<details>` block whose first body line is a pipe
+        // table needs a blank line after `</summary>` (and one before
+        // `</details>`), otherwise markdown-it parses the whole fold as one
+        // CommonMark Type-6 raw HTML block and the table stays literal text.
+        const normalizedHtml = /^<details\b/i.test(html)
+          ? html
+              .replace(
+                /(<\/summary>[ \t]*)\n(?=[ \t]*\|[^\n]*\n[ \t]*\|?[\s:|-]+\|)/i,
+                '$1\n\n',
+              )
+              .replace(/(\n[ \t]*\|[^\n]*)\n(?=[ \t]*<\/details>)/i, '$1\n\n')
+          : html;
+        return `\n\n${normalizedHtml}\n\n`;
       });
     })
     .join('');
@@ -949,9 +982,12 @@ function splitTableRow(line: string): string[] {
 }
 
 /** Cell count as markdown-it sees it: split on `|`, drop the empty leading /
- *  trailing cells produced by an outer `| … |` border. */
+ *  trailing cells produced by an outer `| … |` border. Leading `>` blockquote
+ *  markers are stripped first, so a table inside a quote is normalized by its
+ *  own columns instead of counting the `>` as cell content. */
 function tableRowCells(line: string): string[] {
-  const cells = splitTableRow(line.trim());
+  const stripped = line.replace(/^\s*(?:>\s*)+/, '').trim();
+  const cells = splitTableRow(stripped);
   if (cells.length && cells[0].trim() === '') cells.shift();
   if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
   return cells;
@@ -995,7 +1031,9 @@ function normalizeTableDelimiters(source: string): string {
   const out: string[] = [];
   let inFence = false;
   let fenceChar = '';
-  const fenceRe = /^(\s*)(```+|~~~+)/;
+  // `(?:>\s*)*` — a fenced block inside a blockquote (`> ```) is still a fence;
+  // without it the repair pass would treat its contents as table candidates.
+  const fenceRe = /^(\s*(?:>\s*)*)(```+|~~~+)/;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const fm = fenceRe.exec(line);
@@ -1038,9 +1076,11 @@ function normalizeTableDelimiters(source: string): string {
         for (let k = 0; k < headerCells.length; k++) {
           fixed.push(normalizeDelimiterCell(delimCells[k]));
         }
-        const indent = (next.match(/^\s*/) as RegExpMatchArray)[0];
+        // Keep the quote/indent prefix: a repaired delimiter row inside a
+        // `>` blockquote must stay inside the quote, or the table splits in two.
+        const prefix = (next.match(/^\s*(?:>\s*)*/) as RegExpMatchArray)[0];
         out.push(line); // header unchanged
-        out.push(`${indent}| ${fixed.join(' | ')} |`); // corrected delimiter
+        out.push(`${prefix}| ${fixed.join(' | ')} |`); // corrected delimiter
         i++; // skip the original malformed delimiter
         continue;
       }
