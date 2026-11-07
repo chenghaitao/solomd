@@ -19,6 +19,42 @@
 
 ---
 
+## [5.0.19] — 2026-11-07
+
+### 同步上游 v5.0.14（a311fb55，6 个提交）
+
+- **合并**：23 处冲突，20 处取 ours（保留本地修复），3 处取上游（`mcp-server/Cargo.toml`、`mcp-server/Cargo.lock`、`mcpb/manifest.json`）；`web/` 全量取上游（35 个文件，含 6 个新增）；MCP 服务保持与上游同步，不再列入排除项。合并提交 `a94ffbcf`。
+- **补回被 ours 覆盖的 3 处契约**：
+  - **命令注册**：`cloud_vault_detect_local_dirs`、`cloud_api_build_quick_auth_url` 与 5 个 `sync_*_version*` 函数在 `webdav_sync.rs` 里已存在但从未注册，前端 `invoke()` 运行时会失败，crate 报 16 条 `never used`。`lib.rs` 与 `runner.rs`（辅助窗口的独立 invoke handler）各补 7 条，警告清零。
+  - **设置字段**：`cloudVaultEncrypted/AutoSubdir/CategorizeFiles`、`cloudApiSyncMode/Encrypted/AutoSubdir/CategorizeFiles`、`syncMaxVersions`(20)、`autoSnapshotOnSave`(true) 补进 `Settings` 接口与 `defaults()`，否则 `vue-tsc` 直接报错。
+  - **i18n**：15 个语言各出现两个 `tableToolbar` 块（ours + 上游），重复键破坏类型推导；保留第一个、删除第二个。
+  - 上游的 `TabBar.vue`「在新窗口打开」菜单项与 `cm-live-blocks.ts` 的 `dedentTableSource()` 已在合并提交内补回。
+- **未同步 `markdown.ts`**：本地渲染器带上游没有的修复（`sourceLine()` 规范化行→源行映射、#T09-4 未闭合 `<details>` 的锚点挂载、`file:` 链接放行、#493 `no-referrer`）。上游的表格解析重写没有叠加，因此回退 5 条断言**上游解析器**行为的上游测试（`markdown-tables.test.ts` 3 条、`cm-live-blocks.test.ts` 2 条）。
+  **已知差异（后续跟进）**：① 引用块内分隔行列数不一致的表格自动修复并保留 `>` 前缀；② 表格后无空行紧跟的无竖线普通段落不被吞入 `tbody` —— 两项目前仍只有上游具备。
+- **验证**：`cargo check` 通过（无代码警告，仅增量编译锁文件提示）、`vue-tsc --noEmit` 0 错误、`vite build` 成功、`pnpm test` **652/652**。
+
+### 文件 → 快速记录：白框、一片空白、整个界面卡死
+
+- **现象**：菜单「文件 → 快速记录」打开的窗口是纯白空框，且主界面同时失去响应；同一个窗口用全局热键（`Ctrl+Alt+Shift+M`）打开却完全正常。
+- **原因**：`quick_capture_open` 是**同步** `#[tauri::command]`，Tauri 在主线程执行它；`WebviewWindowBuilder::build()` 会在主线程上阻塞等待 `CreateWindow` 消息被处理 —— 自己等自己。事件循环回不来，新 webview 来不及导航（白屏），其它窗口也一起冻住。热键路径没事，是因为快捷键插件的回调跑在自己的线程上。
+- **修复**（`quick_capture.rs`）：命令改为 `async`，函数体丢进 `tauri::async_runtime::spawn_blocking`，与 Tauri 内置 `create_webview_window`（前端 `new WebviewWindow()` 走的就是它，所以别的「打开子窗口」菜单项都正常）同一种形状；窗口代码抽成 `quick_capture_open_inner`，热键回调直接调用，不绕 IPC、也不依赖主窗口的 JS 事件循环。
+- **没有**采用预创建 / 隐藏窗口池：窗口依旧按需一次性 `build()`。
+- **验证**：`cargo check` 通过；菜单路径实测可正常打开并输入，主界面不再冻结；热键路径回归正常。
+
+### #522：图形多的笔记打开卡死，重新打开又跳到文末
+
+- **现象**：含几十个 Mermaid 图的笔记打开时界面长时间无响应；压掉卡顿后，重新打开该笔记会**自动滚到页面最末尾**，记不住上次位置。
+- **原因**：① 装饰构建器覆盖整篇文档（state field 没有视口概念），每遇到一个 fence 就启动一次渲染，50 个图 = 50 次并发、每次完成又触发一次全文档装饰重建；② 滚动恢复落在「占位 DOM」上，高度被 clamp 到占位高度（实测 1863px，真实位置 8000px）并**写回**记忆，于是下次打开只剩这个假位置。
+- **修复**：
+  - `mermaid-lazy.ts` 统一持有**全页串行队列** + `theme+source` LRU 缓存（200 条）：`renderMermaidCached()` 每个任务之间让出主线程，`front: true` 让刚滚入视口的图插队；live 块 / 纯文本视图 / 预览 / 打印 / HTML 导出 / 图形导出 / PDF 与图片导出全部走同一条队列，不再争用 mermaid 的共享解析状态，相同图形只渲染一次。
+  - `cm-live-blocks.ts`：装饰构建阶段不再发起渲染，改为在 `MermaidWidget.toDOM()` 里按需渲染 —— CodeMirror 只对真正挂载的块调用它，**视口天然成为闸门**；渲染完成合并成一次 relayout（原来每张图各派发一次 `solomd:cm-relayout`）。
+  - `Preview.vue`：渲染未静默前不写回 `previewScrollMemory`（`canPersistScrollMemory`），占位高度不会再被当成真实位置；队列排空且静默 120ms 后恢复记忆位置，期间用户滚动/点击则放弃恢复。
+  - `Editor.vue`：`restoreCodeMirrorScroll` 的固定 760ms 窗口改为「每次 relayout 重新断言 + 静默 300ms 后停止」，另加 4s 硬上限，监听器不会比标签页活得更久。
+- **新增测试**：`app/src/lib/mermaid-lazy.test.ts` 6 条（队列串行与 FIFO、视口优先通道、任务间让出、单个任务抛错不阻塞队列、`yieldToMain` 落在宏任务、缓存键）。
+- **验证**：`vue-tsc --noEmit` 0 错误、`vite build` 成功、`pnpm test` 652/652；headless Edge 实测占位期不再写回（OLD=1863 → NEW=8000），重新打开定位到上次位置。
+
+---
+
 ## [5.0.18] — 2026-11-05
 
 ### Android 平板浮层：「更多」菜单关不掉（点外部 / 点按钮 / 返回键）
