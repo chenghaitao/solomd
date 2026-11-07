@@ -1,5 +1,5 @@
 ---
-// /admin — minimal dashboard for /api/admin/downloads.
+// /admin — minimal dashboard for /api/admin/stats.
 //
 // The page is fully static (Astro pre-render). The bearer token lives
 // in sessionStorage in the browser, never in the URL or in a cookie.
@@ -8,10 +8,6 @@
 // Why no SSR auth: the static Pages output is fronted by the same
 // project, so the token never leaves the user's browser. The /api/
 // route does the real auth check.
-//
-// Fork note: this fork removed anonymous app-usage telemetry (there is
-// no /api/track and no /api/admin/stats), so only the all-channel
-// download dashboard is kept here.
 
 const noindex = 'noindex,nofollow,noarchive,nosnippet';
 ---
@@ -20,7 +16,7 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content={noindex} />
-    <title>SoloMD admin · downloads</title>
+    <title>SoloMD admin · stats</title>
     <style is:global>
       :root {
         --bg: #0f1115;
@@ -93,19 +89,27 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
   <body>
     <div class="wrap">
       <header>
-        <h1>SoloMD downloads</h1>
+        <h1>SoloMD analytics</h1>
         <div class="controls">
+          <select id="range">
+            <option value="1h">1h</option>
+            <option value="24h">24h</option>
+            <option value="7d" selected>7d</option>
+            <option value="30d">30d</option>
+            <option value="90d">90d</option>
+          </select>
           <button id="reload">Reload</button>
           <button id="logout" title="Forget the admin token">Logout</button>
         </div>
       </header>
 
-      <div id="dl-status"></div>
+      <div id="status"></div>
 
       <!-- All-channel downloads (GET /api/admin/downloads; collected daily by
            .github/workflows/download-stats.yml). The first KPI is exactly
            the number the homepage shows. -->
       <h2>Downloads · all channels</h2>
+      <div id="dl-status"></div>
       <div class="grid grid--5" id="dl-kpis"></div>
       <div class="row">
         <div class="panel">
@@ -120,6 +124,42 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
       <div class="panel">
         <h2>Downloads per day (last 30 days)</h2>
         <div id="dl-daily"></div>
+      </div>
+
+      <!-- Promoter referral codes, from ref_visit / ref_download events. -->
+      <div class="panel">
+        <h2>Referrals (?ref= codes, selected range)</h2>
+        <div id="referrals"></div>
+      </div>
+
+      <h2 style="margin-top: 26px;">App usage</h2>
+      <div class="grid" id="kpis"></div>
+
+      <div class="panel">
+        <h2>Daily activity</h2>
+        <div id="daily"></div>
+      </div>
+
+      <div class="row">
+        <div class="panel">
+          <h2>Events</h2>
+          <div id="events"></div>
+        </div>
+        <div class="panel">
+          <h2>Versions</h2>
+          <div id="versions"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="panel">
+          <h2>OS</h2>
+          <div id="os"></div>
+        </div>
+        <div class="panel">
+          <h2>Locale</h2>
+          <div id="locales"></div>
+        </div>
       </div>
 
       <footer>
@@ -147,6 +187,15 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
           if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
           if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
           return String(n);
+        }
+
+        function renderKpis(t) {
+          $('kpis').innerHTML = `
+            <div class="kpi"><div class="label">Events (range)</div><div class="value">${fmt(t.events)}</div></div>
+            <div class="kpi"><div class="label">Unique devices (range)</div><div class="value">${fmt(t.unique_devices)}</div></div>
+            <div class="kpi"><div class="label">Active today (UTC)</div><div class="value">${fmt(t.active_today)}</div></div>
+            <div class="kpi"><div class="label">Active 7d</div><div class="value">${fmt(t.active_7d)}</div></div>
+          `;
         }
 
         function table(rows, cols) {
@@ -181,22 +230,76 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
           })[c]);
         }
 
-        async function loadDownloads() {
+        async function load() {
           const token = getToken();
           if (!token) {
-            $('dl-status').innerHTML = '<div class="err">No token. Reload to enter.</div>';
+            $('status').innerHTML = '<div class="err">No token. Reload to enter.</div>';
             return;
           }
+          $('status').innerHTML = '<div class="empty">Loading…</div>';
+          const range = $('range').value;
+          let res;
+          try {
+            res = await fetch('/api/admin/stats?range=' + encodeURIComponent(range), {
+              headers: { Authorization: 'Bearer ' + token },
+            });
+          } catch (e) {
+            $('status').innerHTML = '<div class="err">Network error: ' + escapeHtml(String(e)) + '</div>';
+            return;
+          }
+          if (res.status === 401) {
+            sessionStorage.removeItem(TOKEN_KEY);
+            $('status').innerHTML = '<div class="err">Unauthorized — reload to re-enter token.</div>';
+            return;
+          }
+          if (!res.ok) {
+            $('status').innerHTML = '<div class="err">HTTP ' + res.status + '</div>';
+            return;
+          }
+          const data = await res.json();
+          $('status').innerHTML = '';
+          renderKpis(data.totals);
+
+          $('daily').innerHTML = table(data.daily, [
+            { key: 'day', label: 'Day' },
+            { key: 'events', label: 'Events', num: true, bar: true },
+            { key: 'unique_devices', label: 'Devices', num: true },
+          ]);
+          $('events').innerHTML = table(data.events, [
+            { key: 'event', label: 'Event' },
+            { key: 'count', label: 'Count', num: true, bar: true },
+            { key: 'unique_devices', label: 'Devices', num: true },
+          ]);
+          $('versions').innerHTML = table(data.versions, [
+            { key: 'app_version', label: 'Version' },
+            { key: 'count', label: 'Events', num: true, bar: true },
+          ]);
+          $('os').innerHTML = table(data.os, [
+            { key: 'os', label: 'OS' },
+            { key: 'count', label: 'Events', num: true, bar: true },
+          ]);
+          $('referrals').innerHTML = (data.referrals || []).length
+            ? table(data.referrals, [
+                { key: 'ref', label: 'Code' },
+                { key: 'visits', label: 'Visits', num: true, bar: true },
+                { key: 'downloads', label: 'Downloads', num: true },
+                { key: 'devices', label: 'Browsers', num: true },
+              ])
+            : '<div class="empty">No referral visits in this range.</div>';
+          $('locales').innerHTML = table(data.locales, [
+            { key: 'locale', label: 'Locale' },
+            { key: 'count', label: 'Events', num: true, bar: true },
+          ]);
+        }
+
+        async function loadDownloads() {
+          const token = getToken();
+          if (!token) return;
           let res;
           try {
             res = await fetch('/api/admin/downloads', { headers: { Authorization: 'Bearer ' + token } });
           } catch (e) {
             $('dl-status').innerHTML = '<div class="err">Network error: ' + escapeHtml(String(e)) + '</div>';
-            return;
-          }
-          if (res.status === 401) {
-            sessionStorage.removeItem(TOKEN_KEY);
-            $('dl-status').innerHTML = '<div class="err">Unauthorized — reload to re-enter token.</div>';
             return;
           }
           if (!res.ok) {
@@ -244,12 +347,14 @@ const noindex = 'noindex,nofollow,noarchive,nosnippet';
           $('dl-status').innerHTML = '';
         }
 
-        $('reload').addEventListener('click', () => { loadDownloads(); });
+        $('reload').addEventListener('click', () => { load(); loadDownloads(); });
+        $('range').addEventListener('change', load);
         $('logout').addEventListener('click', () => {
           sessionStorage.removeItem(TOKEN_KEY);
           location.reload();
         });
 
+        load();
         loadDownloads();
       })();
     </script>

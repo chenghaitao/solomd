@@ -368,6 +368,23 @@ export function findTableCellOffsetInLine(
  */
 let pendingCellFocus: { from: number; row: number; col: number; at: number } | null = null;
 
+// Upstream 5.0.14 — a table nested in a list item is indented by four spaces;
+// slicing it out of the list context and feeding it to markdown-it would turn it
+// into an indented <pre><code> block instead of a <table>. Strip the common
+// leading indent before rendering the isolated source.
+function dedentTableSource(source: string): string {
+  const lines = source.split('\n');
+  let minIndent = Infinity;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const m = line.match(/^[ \t]*/);
+    const indent = m ? m[0].length : 0;
+    if (indent < minIndent) minIndent = indent;
+  }
+  if (!Number.isFinite(minIndent) || minIndent <= 0) return source;
+  return lines.map((line) => (line.length >= minIndent ? line.slice(minIndent) : line)).join('\n');
+}
+
 class TableWidget extends WidgetType {
   // Cells can hold math / code: a widget built before KaTeX or highlight.js
   // arrived must not count as equal to the one built after (render-deps.ts).
@@ -416,7 +433,7 @@ class TableWidget extends WidgetType {
     // Render the table source through the same markdown pipeline used by the
     // preview pane so we get GFM alignment, inline formatting, etc. for free.
     // We strip everything except the table rows from the rendered output.
-    const rawHtml = renderMarkdown(this.source);
+    const rawHtml = renderMarkdown(dedentTableSource(this.source));
     wrap.innerHTML = rewriteImageUrls(rawHtml, this.imageRoot, this.filePath);
     installSvgImageFallbacks(wrap);
     trackImageHeights(wrap);

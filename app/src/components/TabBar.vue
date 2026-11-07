@@ -70,13 +70,19 @@ async function closeMany(ids: string[]) {
   }
 }
 
-async function onMenu(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'copyPath') {
+async function onMenu(action: 'close' | 'closeLeft' | 'closeRight' | 'closeOthers' | 'closeSaved' | 'closeAll' | 'revealInFolder' | 'copyPath' | 'openInNewWindow') {
   const m = menu.value;
   closeMenu();
   if (!m) return;
   const list = tabs.tabs;
   const idx = list.findIndex((t) => t.id === m.tabId);
   if (idx < 0) return;
+  if (action === 'openInNewWindow') {
+    const path = list[idx]?.filePath;
+    if (!path) return;
+    files.spawnAuxWindow(path);
+    return;
+  }
   if (action === 'revealInFolder') {
     const path = list[idx]?.filePath;
     if (!path) return;
@@ -189,6 +195,7 @@ function onTabsWheel(e: WheelEvent) {
       <li><button :disabled="!menuFlags?.hasAll"   @mousedown.prevent="onMenu('closeAll')">{{ t('tabMenu.closeAll') }}</button></li>
       <li class="tab-menu__sep"></li>
       <li><button :disabled="!menuFlags?.hasFilePath" @mousedown.prevent="onMenu('copyPath')">📋 {{ t('explorer.copyPath') || 'Copy Path' }}</button></li>
+      <li><button :disabled="!menuFlags?.hasFilePath" @mousedown.prevent="onMenu('openInNewWindow')">{{ t('tabMenu.openInNewWindow') }}</button></li>
       <li><button :disabled="!menuFlags?.hasFilePath" @mousedown.prevent="onMenu('revealInFolder')">{{ t(revealLabelKey('tabMenu.revealInFolder')) }}</button></li>
     </ul>
   </div>
