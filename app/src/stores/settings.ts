@@ -308,6 +308,9 @@ interface Settings {
   cloudVaultDir: string;
   cloudVaultPassphrase: string;
   cloudVaultAutoSync: boolean;
+  cloudVaultEncrypted: boolean;
+  cloudVaultAutoSubdir: boolean;
+  cloudVaultCategorizeFiles: boolean;
   // Direct Personal Cloud Drive OpenAPI encrypted backup & sync (百度网盘 OpenAPI / 阿里云盘 OpenAPI / OneDrive / Dropbox).
   cloudApiProvider: 'baidu' | 'alipan' | 'onedrive' | 'dropbox';
   cloudApiToken: string;
@@ -316,6 +319,13 @@ interface Settings {
   cloudApiRemotePath: string;
   cloudApiPassphrase: string;
   cloudApiAutoSync: boolean;
+  cloudApiSyncMode: 'folder' | 'bundle';
+  cloudApiEncrypted: boolean;
+  cloudApiAutoSubdir: boolean;
+  cloudApiCategorizeFiles: boolean;
+  // Local & Cloud Sync version snapshot retention
+  syncMaxVersions: number;
+  autoSnapshotOnSave: boolean;
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
   // status bar. Off-by-default-ish: the pill stays inert unless the doc's
   // YAML front matter sets a `goal:` key, so this toggle is a hard kill
@@ -811,6 +821,9 @@ function defaults(): Settings {
     cloudVaultDir: '',
     cloudVaultPassphrase: '',
     cloudVaultAutoSync: false,
+    cloudVaultEncrypted: false,
+    cloudVaultAutoSubdir: true,
+    cloudVaultCategorizeFiles: true,
     cloudApiProvider: 'baidu',
     cloudApiToken: '',
     cloudApiClientId: '',
@@ -818,6 +831,12 @@ function defaults(): Settings {
     cloudApiRemotePath: '/apps/SoloMD',
     cloudApiPassphrase: '',
     cloudApiAutoSync: false,
+    cloudApiSyncMode: 'folder',
+    cloudApiEncrypted: false,
+    cloudApiAutoSubdir: true,
+    cloudApiCategorizeFiles: true,
+    syncMaxVersions: 20,
+    autoSnapshotOnSave: true,
     showWritingStats: true,
     showWorkspaceDailyTotal: false,
     pdfDefaults: defaultPdfDefaults(),
