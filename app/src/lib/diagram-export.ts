@@ -16,12 +16,8 @@
  * the Preview pane uses, so the page still shows it wherever that server is
  * reachable.
  */
-import { initMermaid } from './mermaid-lazy.ts';
+import { renderMermaidCached } from './mermaid-lazy.ts';
 import { isPlantumlLang, plantumlSvgUrl } from './plantuml.ts';
-
-// Ids must be unique per render across the whole session — mermaid keys
-// internal state off them and reusing one yields an empty diagram.
-let exportMermaidId = 0;
 
 export interface DiagramExportOptions {
   /** PlantUML server, only when the user has turned PlantUML on. */
@@ -58,23 +54,20 @@ export async function inlineDiagramsInHtml(
   if (hasMermaid) {
     const blocks = Array.from(root.querySelectorAll('pre > code.language-mermaid'));
     if (blocks.length) {
-      // The exported page is always the light paper palette.
-      const mermaid = await initMermaid({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: 'default',
-      });
+      // The exported page is always the light paper palette. #522 — the
+      // shared queue serialises these with anything the preview is doing.
       for (const code of blocks) {
         const pre = code.parentElement;
         if (!pre) continue;
         const source = (code.textContent || '').trim();
         try {
-          const { svg } = await mermaid.render(`export-mmd-${++exportMermaidId}`, source);
+          const result = await renderMermaidCached('default', source);
+          if (!result.svg) throw new Error(result.error || 'unknown error');
           const wrap = document.createElement('div');
           wrap.className = 'mermaid-block';
           if (opts.asPng) {
             // Fork addition: SVG → PNG, for surfaces that cannot take SVG.
-            const png = await svgToPng(svg);
+            const png = await svgToPng(result.svg);
             if (!png) throw new Error('could not rasterize the diagram');
             const img = document.createElement('img');
             // Empty alt: the surrounding prose carries the meaning, and
@@ -83,7 +76,7 @@ export async function inlineDiagramsInHtml(
             img.src = await pngDataUrl(png);
             wrap.appendChild(img);
           } else {
-            wrap.innerHTML = svg;
+            wrap.innerHTML = result.svg;
           }
           pre.replaceWith(wrap);
         } catch (e) {
@@ -142,13 +135,9 @@ export interface DiagramPng {
  */
 export async function mermaidToPng(source: string): Promise<DiagramPng | null> {
   try {
-    const mermaid = await initMermaid({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'default',
-    });
-    const { svg } = await mermaid.render(`export-mmd-${++exportMermaidId}`, source.trim());
-    return await svgToPng(svg);
+    const result = await renderMermaidCached('default', source.trim());
+    if (!result.svg) return null;
+    return await svgToPng(result.svg);
   } catch (e) {
     console.warn('[export] mermaid → png failed', e);
     return null;

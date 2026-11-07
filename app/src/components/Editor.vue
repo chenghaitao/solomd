@@ -9,7 +9,7 @@ import { tabCaretMemory, tabTopLineMemory, type TabCaretSnapshot } from '../lib/
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { cjkFriendlyEmphasis } from '../lib/cm-cjk-emphasis';
-import { bindMermaidInteractions, initMermaid } from '../lib/mermaid-lazy';
+import { bindMermaidInteractions, renderMermaidCached } from '../lib/mermaid-lazy';
 import { parseInsertSnippet } from '../lib/insert-snippet';
 // The grammar imports and the `codeLanguages` list they feed now live in
 // `lib/code-languages.ts`: the ``` fence-language picker (#297) derives its
@@ -556,7 +556,6 @@ const plainSelectAll = ref(false);
 // selection and must not be mistaken for "user collapsed it — exit".
 let plainSelectAllPending = false;
 const plainComposing = ref(false);
-let plainMermaidIdSeq = 0;
 const plainRenderCache = new Map<string, string>();
 // Bumps when KaTeX / highlight.js finish loading (lib/render-deps.ts). Part
 // of the cache key below, so blocks rendered with placeholder math / plain
@@ -851,33 +850,28 @@ async function processPlainLiveRenderedBlocks() {
   }
 
   const mermaidBlocks = hostEl.querySelectorAll('.plain-block__render pre > code.language-mermaid');
-  // Configure on demand rather than at setup: the theme is read here, so a
-  // theme switch between renders is picked up, and a vault with no diagrams
-  // never loads the renderer at all.
-  const mermaid = mermaidBlocks.length
-    ? await initMermaid({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: mermaidThemeFor(settings.theme),
-      })
-    : null;
+  // #522 — no eager `initMermaid` here. Each render goes through the shared
+  // page-wide queue (serialised, yielding between jobs) and the theme+source
+  // cache, so a 50-diagram note no longer blocks this pass for a minute and
+  // re-opening the same note costs nothing. The plain view has no viewport
+  // gating: all of its blocks are on screen at once and need their SVG.
+  const mermaidTheme = mermaidThemeFor(settings.theme);
   for (const block of Array.from(mermaidBlocks)) {
-    if (!mermaid) break;
     const pre = block.parentElement as HTMLElement | null;
     if (!pre || pre.dataset.rendered === '1') continue;
     pre.dataset.rendered = '1';
     const code = (block.textContent || '').trim();
-    const id = `plain-mmd-${++plainMermaidIdSeq}`;
-    try {
-      const { svg, bindFunctions } = await mermaid.render(id, code);
+    const result = await renderMermaidCached(mermaidTheme, code);
+    if (!pre.isConnected) continue; // the plain view was rebuilt while queued
+    if (result.svg) {
       const wrap = document.createElement('div');
       wrap.className = 'plain-mermaid-block';
-      wrap.innerHTML = svg;
+      wrap.innerHTML = result.svg;
       pre.replaceWith(wrap);
-      bindMermaidInteractions(wrap, bindFunctions);
-    } catch (e) {
+      bindMermaidInteractions(wrap, result.bindFunctions);
+    } else {
       pre.classList.add('plain-block__broken');
-      pre.textContent = `Mermaid error: ${(e as Error).message}`;
+      pre.textContent = `Mermaid error: ${result.error ?? 'unknown error'}`;
     }
   }
 
@@ -5556,12 +5550,27 @@ function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   let cancelled = false;
   const dom = view.scrollDOM;
   const intentEvents = ['wheel', 'pointerdown', 'keydown', 'touchstart'] as const;
+  // #522 — a note with dozens of diagrams keeps dispatching `cm-relayout`
+  // for ~1s while the shared render queue drains, well past the old fixed
+  // 760ms window. Keep reasserting until relayout goes quiet instead, with
+  // a hard cap so the listener can never outlive the tab.
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
   const onRelayout = () => {
     requestAnimationFrame(reassert);
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleTimer = null;
+      reassert();
+      stop();
+    }, 300);
   };
   const stop = () => {
     if (cancelled) return;
     cancelled = true;
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
     for (const ev of intentEvents) dom.removeEventListener(ev, stop);
     window.removeEventListener('solomd:cm-relayout', onRelayout);
     if (cancelCmScrollRestore === stop) cancelCmScrollRestore = null;
@@ -5577,10 +5586,13 @@ function restoreCodeMirrorScroll(saved?: TabCaretSnapshot) {
   setTimeout(reassert, 60);
   setTimeout(reassert, 160);
   setTimeout(reassert, 400);
+  // Hard cap: if a render stalls (or a widget never settles) the reassert
+  // listener must not live forever. Normal completion happens 300ms after the
+  // last relayout, so this is only a safety net.
   setTimeout(() => {
     reassert();
     stop();
-  }, 760);
+  }, 4000);
 }
 
 // #169 (Windows) — one synchronous scrollTop assignment is not enough on the
