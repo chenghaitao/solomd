@@ -19,6 +19,31 @@
 
 ---
 
+## [5.0.20] — 2026-11-11
+
+### 同步上游 v5.0.15 – v5.0.18（9c6986db，20 个提交）
+
+- **合并**：46 处冲突，合并提交 `2d236c38`。起点为 5.0.19（`f1a3d1a6`），把上游 v5.0.15 / v5.0.16 / v5.0.17 / v5.0.18 四个版本一次性拉齐。
+- **过程说明**：本次合并最初从 11-05 的旧检出（`8d3c3dc8`）起手，等于把 11-07 的 12 个本地提交甩在外面。已重置到 5.0.19 重做，旧解保留在分支 `wip/merge-upstream-5.0.18-stale`。
+- **上游新功能全量接入**：行内单元格编辑（#500/#382/#526，抽取为共享的 `bindDomTableCellEditor`）、图片精细缩放（#499）、高亮自定义色与当前行颜色（#327/#358/#384）、原生 PDF 书签（#515）、Mermaid 实时预览与模板（#372/#497）、富 HTML 粘贴（#308）、上标/下标（#284）、Lucius 主题、独立标签栏一行（#519）、平板菜单收起（#518）、跨视图撤销（#512）、AI 模型选择（#299）、列表 Tab 缩进（#110/#159）、Google Drive 与 Cloudflare R2 直连同步、菜单返回键。
+
+### 关键冲突处理
+
+| 文件 | 处理 |
+| --- | --- |
+| `app/src/lib/cm-live-blocks.ts` | 取上游。本地这份行内单元格编辑器就是上游旧实现的副本，上游已抽成共享函数，并补上行尾 Tab 追加行、方向键跨行 |
+| `TableEditor.vue` | 保持删除：本地用浮动的 `TableToolbar` 代替网格弹窗，因此 `openTableAtCursor` 不再导出、`editor.tableEditor` 命令不下沉 |
+| `InsertTableDialog.vue` | 取上游（8×8 悬停网格 + 行×列输入 + 初始对齐）；`onInsertTableConfirm` 改收 `(rows, cols, align)` 并走 `buildInsertTableSnippet` |
+| `FormatBar.vue` | 上游的高亮色板 / Mermaid 模板 / `flex-wrap` 布局与本地「列表续行 / 自动编号」两个开关并存 |
+| `list-continuation.ts` | 取上游实现（覆盖引用块惰性续行、fence 与标题/分隔线排除），本地两条 #521 用例仍全绿 |
+| `App.vue` / `Toolbar.vue` | 平板遮罩继续用本地 `toolbar-floating-state`，同时接上游的菜单 history 返回；不引入 `TelemetryBanner`（本仓库无遥测） |
+| `stores/settings.ts` | `formatBar` 与上游 `showFormattingBar` 合成一个开关，去掉重复的 `toggleFormatBar` |
+| `i18n` ×15 | 保留本地 `tableToolbar.align*/more`，补上游新增的 `tableEditor` 段落 |
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **681/681**；`vite build` 成功；`cargo check`（`app/src-tauri`、`mcp-server`）均通过。
+
 ## [5.0.19] — 2026-11-07
 
 ### 同步上游 v5.0.14（a311fb55，6 个提交）
