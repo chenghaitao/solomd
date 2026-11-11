@@ -23,6 +23,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Icon from './Icons.vue';
 import { useI18n } from '../i18n';
 import { isMobile } from '../lib/platform';
+import { isImeComposingActive } from '../lib/cm-ime-guard';
 import { placeBubble, type Box } from '../lib/selection-bubble';
 import { tableActionEnabled, type TableAction, type TableToolbarState } from '../lib/table-toolbar';
 import { tableIconPaths, type TableIcon } from '../lib/table-toolbar-icons';
@@ -57,7 +58,7 @@ function hide() {
 }
 
 function usable(): TableToolbarState | null {
-  if (!props.enabled || touchPlatform || composing) return null;
+  if (!props.enabled || touchPlatform || composing || isImeComposingActive()) return null;
   return props.read();
 }
 
@@ -144,7 +145,6 @@ function onCompositionStart() {
 }
 function onCompositionEnd() {
   composing = false;
-  schedule();
 }
 function onFocusOut() {
   // Focus moving between the plain editor's block textareas stays inside.
@@ -176,7 +176,6 @@ function bind(host: HTMLElement | null) {
   if (!host || touchPlatform) return;
   bound = host;
   host.addEventListener('keyup', schedule, true);
-  host.addEventListener('input', schedule, true);
   host.addEventListener('mouseup', schedule, true);
   host.addEventListener('scroll', schedule, true);
   host.addEventListener('keydown', onKeyDown, true);
@@ -184,6 +183,7 @@ function bind(host: HTMLElement | null) {
   host.addEventListener('compositionend', onCompositionEnd, true);
   host.addEventListener('focusout', onFocusOut, true);
   document.addEventListener('selectionchange', onDocSelectionChange);
+  window.addEventListener('solomd:table-cell-session', schedule);
   window.addEventListener('blur', hide);
   window.addEventListener('resize', schedule);
 }
@@ -192,7 +192,6 @@ function unbind() {
   if (!host) return;
   bound = null;
   host.removeEventListener('keyup', schedule, true);
-  host.removeEventListener('input', schedule, true);
   host.removeEventListener('mouseup', schedule, true);
   host.removeEventListener('scroll', schedule, true);
   host.removeEventListener('keydown', onKeyDown, true);
@@ -200,6 +199,7 @@ function unbind() {
   host.removeEventListener('compositionend', onCompositionEnd, true);
   host.removeEventListener('focusout', onFocusOut, true);
   document.removeEventListener('selectionchange', onDocSelectionChange);
+  window.removeEventListener('solomd:table-cell-session', schedule);
   window.removeEventListener('blur', hide);
   window.removeEventListener('resize', schedule);
 }
@@ -234,7 +234,21 @@ function enabled(action: TableAction): boolean {
 }
 
 /** Alignment currently on the caret's column, so the buttons show pressed. */
-const align = computed(() => state.value?.model.aligns[state.value.col] ?? null);
+const alignAllCols = ref(false);
+const align = computed(() => {
+  const s = state.value;
+  if (!s) return null;
+  if (alignAllCols.value && s.model.aligns.length > 0) {
+    const first = s.model.aligns[0] ?? null;
+    return s.model.aligns.every((a) => (a ?? null) === first) ? first : null;
+  }
+  return s.model.aligns[s.col] ?? null;
+});
+
+function runAlign(b: { action: TableAction; allAction: TableAction }, e?: MouseEvent) {
+  const useAll = alignAllCols.value || Boolean(e?.shiftKey);
+  run(useAll ? b.allAction : b.action);
+}
 
 interface PrimaryButton {
   action: TableAction;
@@ -252,10 +266,10 @@ const colButtons: PrimaryButton[] = [
   { action: 'col-right', icon: 'col-right', label: 'tableToolbar.colRight' },
   { action: 'col-delete', icon: 'col-delete', label: 'tableToolbar.colDelete', danger: true },
 ];
-const alignButtons: Array<PrimaryButton & { value: 'left' | 'center' | 'right' }> = [
-  { action: 'align-left', value: 'left', icon: 'align-left', label: 'tableToolbar.alignLeft' },
-  { action: 'align-center', value: 'center', icon: 'align-center', label: 'tableToolbar.alignCenter' },
-  { action: 'align-right', value: 'right', icon: 'align-right', label: 'tableToolbar.alignRight' },
+const alignButtons: Array<PrimaryButton & { allAction: TableAction; value: 'left' | 'center' | 'right' }> = [
+  { action: 'align-left', allAction: 'align-all-left', value: 'left', icon: 'align-left', label: 'tableToolbar.alignLeft' },
+  { action: 'align-center', allAction: 'align-all-center', value: 'center', icon: 'align-center', label: 'tableToolbar.alignCenter' },
+  { action: 'align-right', allAction: 'align-all-right', value: 'right', icon: 'align-right', label: 'tableToolbar.alignRight' },
 ];
 const moreButtons: PrimaryButton[] = [
   { action: 'row-up', icon: 'move-row-up', label: 'tableToolbar.rowUp' },
@@ -333,6 +347,15 @@ defineExpose({ hide, refresh });
       <span class="tbl-bar__sep" aria-hidden="true" />
 
       <button
+        class="tbl-bar__btn tbl-bar__btn--allcols"
+        :class="{ 'is-on': alignAllCols }"
+        :title="alignAllCols ? '当前：对齐全部列（点击切换为仅当前列）' : '点击开启：对齐全部列（或按住 Shift 点击对齐按钮）'"
+        :aria-pressed="alignAllCols"
+        data-action="toggle-align-all"
+        @click="alignAllCols = !alignAllCols"
+      >∀</button>
+
+      <button
         v-for="b in alignButtons"
         :key="b.action"
         class="tbl-bar__btn"
@@ -342,7 +365,7 @@ defineExpose({ hide, refresh });
         :aria-pressed="align === b.value"
         :disabled="!enabled(b.action)"
         :data-action="b.action"
-        @click="run(b.action)"
+        @click="runAlign(b, $event)"
       >
         <svg class="tbl-bar__icon" viewBox="0 0 30 30" aria-hidden="true" focusable="false">
           <path

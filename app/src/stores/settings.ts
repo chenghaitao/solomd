@@ -259,7 +259,21 @@ interface Settings {
   aiEnabled: boolean;
   aiProvider: string;
   aiModel: string;
+  aiModels: Record<string, string>;
   aiBaseUrl: string;
+  // #327: Optional custom background, text, highlight & active-line color overrides for light and dark theme families.
+  customBgLight: string;
+  customTextLight: string;
+  customBgDark: string;
+  customTextDark: string;
+  customHighlightLight: string;
+  customHighlightDark: string;
+  customActiveLineLight: string;
+  customActiveLineDark: string;
+  // #415 / #497: Optional persistent Markdown formatting toolbar row.
+  showFormattingBar: boolean;
+  // #519: Optional dedicated full-width row for the tab bar instead of sharing the header row.
+  separateTabBarRow: boolean;
   // v2.0 F5: Pandoc + citations
   workspaceBibliography: string;
   workspaceCsl: string;
@@ -304,6 +318,8 @@ interface Settings {
   webdavEncrypted: boolean;
   webdavPassphrase: string;
   webdavAutoSync: boolean;
+  webdavAutoSubdir: boolean;
+  webdavCategorizeFiles: boolean;
   // Local personal cloud drive encrypted backup & sync directory (百度网盘 / 阿里云盘 / 夸克网盘 / OneDrive / iCloud / 坚果云).
   cloudVaultDir: string;
   cloudVaultPassphrase: string;
@@ -311,8 +327,8 @@ interface Settings {
   cloudVaultEncrypted: boolean;
   cloudVaultAutoSubdir: boolean;
   cloudVaultCategorizeFiles: boolean;
-  // Direct Personal Cloud Drive OpenAPI encrypted backup & sync (百度网盘 OpenAPI / 阿里云盘 OpenAPI / OneDrive / Dropbox).
-  cloudApiProvider: 'baidu' | 'alipan' | 'onedrive' | 'dropbox';
+  // Direct Personal Cloud Drive OpenAPI backup & sync (百度网盘 / 阿里云盘 / OneDrive / Dropbox / Google Drive / Cloudflare R2).
+  cloudApiProvider: 'baidu' | 'alipan' | 'onedrive' | 'dropbox' | 'gdrive' | 'r2';
   cloudApiToken: string;
   cloudApiClientId: string;
   cloudApiClientSecret: string;
@@ -323,7 +339,11 @@ interface Settings {
   cloudApiEncrypted: boolean;
   cloudApiAutoSubdir: boolean;
   cloudApiCategorizeFiles: boolean;
-  // Local & Cloud Sync version snapshot retention
+  cloudR2Endpoint: string;
+  cloudR2Bucket: string;
+  cloudR2AccessKeyId: string;
+  cloudR2SecretAccessKey: string;
+  // Local & Cloud Sync version snapshot retention settings
   syncMaxVersions: number;
   autoSnapshotOnSave: boolean;
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
@@ -522,7 +542,7 @@ interface Settings {
    *    changes). Better when notes get reshuffled often; clutters the file
    *    tree if every note has images. Issue: user feedback 2026-05-26.
    */
-  attachmentMode: 'shared' | 'per-file' | 'custom';
+  attachmentMode: 'shared' | 'per-file' | 'custom' | 'base64';
   // #7 (顾河) — Typora-style custom path template for `custom` attachment mode.
   // Supports `${filename}` (the note's name without extension). Relative
   // templates (`./images/${filename}/`, `assets/`) resolve against the note's
@@ -694,7 +714,7 @@ function defaults(): Settings {
     showLineNumbers: false,
     solidCursor: false,
     selectionBubble: true,
-    formatBar: true,
+    formatBar: false,
     alwaysShowMarkers: false,
     highlightCurrentLine: true,
     tabTitleFromFirstLine: false,
@@ -795,7 +815,18 @@ function defaults(): Settings {
     aiEnabled: false,
     aiProvider: 'openai',
     aiModel: '',
+    aiModels: {},
     aiBaseUrl: '',
+    customBgLight: '',
+    customTextLight: '',
+    customBgDark: '',
+    customTextDark: '',
+    customHighlightLight: '',
+    customHighlightDark: '',
+    customActiveLineLight: '',
+    customActiveLineDark: '',
+    showFormattingBar: true,
+    separateTabBarRow: false,
     workspaceBibliography: '',
     workspaceCsl: '',
     autoGitEnabled: false,
@@ -818,6 +849,8 @@ function defaults(): Settings {
     webdavEncrypted: false,
     webdavPassphrase: '',
     webdavAutoSync: false,
+    webdavAutoSubdir: true,
+    webdavCategorizeFiles: true,
     cloudVaultDir: '',
     cloudVaultPassphrase: '',
     cloudVaultAutoSync: false,
@@ -835,6 +868,10 @@ function defaults(): Settings {
     cloudApiEncrypted: false,
     cloudApiAutoSubdir: true,
     cloudApiCategorizeFiles: true,
+    cloudR2Endpoint: '',
+    cloudR2Bucket: '',
+    cloudR2AccessKeyId: '',
+    cloudR2SecretAccessKey: '',
     syncMaxVersions: 20,
     autoSnapshotOnSave: true,
     showWritingStats: true,
@@ -996,6 +1033,15 @@ function load(): Settings {
           if (isTreeSortMode(v)) merged.explorerSortByFolder[k] = v;
         }
       }
+      merged.aiModels = {};
+      if (parsed.aiModels && typeof parsed.aiModels === 'object') {
+        for (const [k, v] of Object.entries(parsed.aiModels)) {
+          if (typeof v === 'string' && v.trim() !== '') merged.aiModels[k] = v;
+        }
+      }
+      if (merged.aiProvider && merged.aiModel && !merged.aiModels[merged.aiProvider]) {
+        merged.aiModels[merged.aiProvider] = merged.aiModel;
+      }
       merged.splitRatio = clampSplitRatio(merged.splitRatio);
       if (!LT_MODES.includes(merged.ltMode)) merged.ltMode = 'off';
       if (merged.ltLevel !== 'picky') merged.ltLevel = 'default';
@@ -1063,10 +1109,14 @@ function load(): Settings {
       // default) while the preview is still at its own old default (15) —
       // untouched installs keep their 14/15 pair unchanged.
       if (!parsed.v4810PreviewFontSynced) {
-        if ((parsed.previewFontSize ?? 15) === 15 && merged.fontSize !== 14) {
+        if ((parsed.previewFontSize ?? 15) === 15) {
           merged.previewFontSize = Math.max(10, Math.min(32, merged.fontSize));
         }
         merged.v4810PreviewFontSynced = true;
+      } else if (parsed.previewFontSize === 15 && merged.fontSize === 14) {
+        // #384 — Ensure legacy 14/15 split defaults align so Reading / Preview
+        // mode font size matches Live Edit mode out of the box.
+        merged.previewFontSize = 14;
       }
       // #148 (mobile) — one-time: existing phone installs had the right sidebar
       // on, squeezing the editor. Hide it once; desktop untouched. User can
@@ -1103,7 +1153,7 @@ function load(): Settings {
 }
 
 const THEMES: readonly Theme[] = [
-  'light', 'dark', 'nord', 'solarized-light', 'solarized-dark', 'monokai', 'github-light', 'dracula',
+  'light', 'dark', 'lucius', 'nord', 'solarized-light', 'solarized-dark', 'monokai', 'github-light', 'dracula',
 ];
 export function isTheme(v: unknown): v is Theme {
   return typeof v === 'string' && (THEMES as readonly string[]).includes(v);
@@ -1282,6 +1332,9 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleFormatBar() {
       this.formatBar = !this.formatBar;
+      // `showFormattingBar` is the upstream name for the same switch; keep both
+      // in step so either settings surface reads the right value.
+      this.showFormattingBar = this.formatBar;
       this.persist();
     },
     toggleAlwaysShowMarkers() {
@@ -1423,12 +1476,12 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
     toggleLivePreview() {
-      if (this.viewMode === 'split') {
-        this.livePreview = !this.livePreview;
-        this.persist();
-        return;
+      this.livePreview = !this.livePreview;
+      if (this.viewMode !== 'split' && (this.viewMode === 'edit' || this.viewMode === 'liveEdit')) {
+        this.viewMode = this.livePreview ? 'liveEdit' : 'edit';
+        this.lastNonReadingViewMode = this.viewMode;
       }
-      this.setViewMode(this.viewMode === 'liveEdit' ? 'edit' : 'liveEdit');
+      this.persist();
     },
     toggleSpellCheck() {
       this.spellCheck = !this.spellCheck;
@@ -1597,11 +1650,64 @@ export const useSettingsStore = defineStore('settings', {
       this.persist();
     },
     setAiProvider(p: string) {
+      if (this.aiProvider && this.aiModel) {
+        this.aiModels = { ...(this.aiModels || {}), [this.aiProvider]: this.aiModel };
+      }
       this.aiProvider = p;
+      const savedModel = this.aiModels?.[p];
+      if (typeof savedModel === 'string' && savedModel.trim() !== '') {
+        this.aiModel = savedModel;
+      }
       this.persist();
     },
     setAiModel(m: string) {
       this.aiModel = m;
+      if (this.aiProvider) {
+        this.aiModels = { ...(this.aiModels || {}), [this.aiProvider]: m };
+      }
+      this.persist();
+    },
+    setCustomThemeColors(
+      patch: Partial<
+        Pick<
+          Settings,
+          | 'customBgLight'
+          | 'customTextLight'
+          | 'customBgDark'
+          | 'customTextDark'
+          | 'customHighlightLight'
+          | 'customHighlightDark'
+          | 'customActiveLineLight'
+          | 'customActiveLineDark'
+        >
+      >,
+    ) {
+      if (patch.customBgLight !== undefined) this.customBgLight = patch.customBgLight;
+      if (patch.customTextLight !== undefined) this.customTextLight = patch.customTextLight;
+      if (patch.customBgDark !== undefined) this.customBgDark = patch.customBgDark;
+      if (patch.customTextDark !== undefined) this.customTextDark = patch.customTextDark;
+      if (patch.customHighlightLight !== undefined) this.customHighlightLight = patch.customHighlightLight;
+      if (patch.customHighlightDark !== undefined) this.customHighlightDark = patch.customHighlightDark;
+      if (patch.customActiveLineLight !== undefined) this.customActiveLineLight = patch.customActiveLineLight;
+      if (patch.customActiveLineDark !== undefined) this.customActiveLineDark = patch.customActiveLineDark;
+      this.persist();
+    },
+    resetCustomThemeColors() {
+      this.customBgLight = '';
+      this.customTextLight = '';
+      this.customBgDark = '';
+      this.customTextDark = '';
+      this.customHighlightLight = '';
+      this.customHighlightDark = '';
+      this.customActiveLineLight = '';
+      this.customActiveLineDark = '';
+      this.persist();
+    },
+    toggleFormattingBar() {
+      this.toggleFormatBar();
+    },
+    toggleSeparateTabBarRow() {
+      this.separateTabBarRow = !this.separateTabBarRow;
       this.persist();
     },
     setAiBaseUrl(u: string) {
@@ -1913,9 +2019,15 @@ export const useSettingsStore = defineStore('settings', {
     resetPreviewFontSize() { this.setPreviewFontSize(defaults().previewFontSize); },
     /** v4.3.5 — flip between `shared` (`_assets/`) and `per-file`
      *  (`<basename>.assets/`) attachment storage layouts. */
-    setAttachmentMode(mode: 'shared' | 'per-file' | 'custom') {
+    setAttachmentMode(mode: 'shared' | 'per-file' | 'custom' | 'base64') {
       this.attachmentMode =
-        mode === 'per-file' ? 'per-file' : mode === 'custom' ? 'custom' : 'shared';
+        mode === 'per-file'
+          ? 'per-file'
+          : mode === 'custom'
+            ? 'custom'
+            : mode === 'base64'
+              ? 'base64'
+              : 'shared';
       this.persist();
     },
     setDefaultExportDir(dir: string) {

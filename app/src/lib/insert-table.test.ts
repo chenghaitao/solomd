@@ -1,5 +1,5 @@
 /**
- * Unit tests for the "Insert table" numbers (#387).
+ * Unit tests for the "Insert table" numbers (#387 / #500).
  *
  * Run from `app/`:
  *   node --experimental-strip-types --test src/lib/insert-table.test.ts
@@ -25,6 +25,7 @@ import {
 } from './insert-table.ts';
 import { parseInsertSnippet } from './insert-snippet.ts';
 import { parseTable, type TableModel } from './markdown-table.ts';
+import { buildInsertTableSnippet } from './table-cell-edit.ts';
 
 /** The table as it enters the note: marker stripped, leading blank line gone. */
 function inserted(cols: number, rows: number): string {
@@ -52,14 +53,10 @@ test('#387 sizes are clamped into range', () => {
 });
 
 test('#387 what the number fields hand back is not always a number', () => {
-  // A cleared field, a lone minus sign, a number input's exponent scratch pad.
-  // None of these may reach `Array.from({ length })`, which throws on NaN.
   assert.deepEqual(clampTableSize('', ''), { cols: INSERT_TABLE_DEFAULT_COLS, rows: INSERT_TABLE_DEFAULT_ROWS });
   assert.deepEqual(clampTableSize('-', 'e'), { cols: INSERT_TABLE_DEFAULT_COLS, rows: INSERT_TABLE_DEFAULT_ROWS });
   assert.deepEqual(clampTableSize(null, undefined), { cols: INSERT_TABLE_DEFAULT_COLS, rows: INSERT_TABLE_DEFAULT_ROWS });
-  // Strings are what a <input type=number> v-model actually carries.
   assert.deepEqual(clampTableSize('6', '4'), { cols: 6, rows: 4 });
-  // Spinners can be typed through: 4.7 columns is 4 columns.
   assert.deepEqual(clampTableSize('4.7', '3.2'), { cols: 4, rows: 3 });
   assert.deepEqual(clampTableSize('12abc', 2), { cols: 12, rows: 2 });
 });
@@ -69,7 +66,6 @@ test('#387 the inserted Markdown is a real table of the requested shape', () => 
   assert.equal(parsed.header.length, 4);
   assert.equal(parsed.rows.length, 3);
   assert.deepEqual(parsed.aligns, [null, null, null, null]);
-  // Every cell empty, so the dialog promises a blank grid, not a template.
   assert.deepEqual(parsed.header, ['', '', '', '']);
   assert.deepEqual(parsed.rows[2], ['', '', '', '']);
 });
@@ -88,8 +84,6 @@ test('#387 a one-column table is still a table', () => {
   const parsed = insertedTable(1, 1);
   assert.equal(parsed.header.length, 1);
   assert.equal(parsed.rows.length, 1);
-  // The delimiter row must carry its dashes in *every* column, or the line is
-  // not a delimiter row and the whole thing degrades to a paragraph.
   assert.equal(inserted(1, 1).trimEnd(), '|  |\n| --- |\n|  |');
 });
 
@@ -102,4 +96,17 @@ test('#387 the generator clamps too — it does not trust its caller', () => {
 test('#387 every row has the same number of cells as the header', () => {
   const parsed = insertedTable(6, 2);
   for (const row of parsed.rows) assert.equal(row.length, 6);
+});
+
+test('#526 tableMarkdown and buildInsertTableSnippet apply initial column alignment', () => {
+  const centerMd = parseInsertSnippet(tableMarkdown(3, 2, 'center')).text.replace(/^\n/, '');
+  const centerParsed = parseTable(centerMd);
+  assert.ok(centerParsed);
+  assert.deepEqual(centerParsed.aligns, ['center', 'center', 'center']);
+
+  const rightSnippet = parseInsertSnippet(buildInsertTableSnippet(4, 3, 'right')).text.replace(/^\n/, '');
+  const rightParsed = parseTable(rightSnippet);
+  assert.ok(rightParsed);
+  assert.deepEqual(rightParsed.aligns, ['right', 'right', 'right']);
+  assert.equal(rightParsed.rows.length, 3);
 });

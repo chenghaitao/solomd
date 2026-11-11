@@ -1,5 +1,5 @@
 /**
- * The numbers behind "Insert table" (#387).
+ * The numbers behind "Insert table" (#387 / #500).
  *
  * Until now the Insert menu dropped a fixed 2×2 table into the document and
  * left the writer to add the rows and columns they actually wanted — five
@@ -62,12 +62,16 @@ function clampOne(value: unknown, lo: number, hi: number, fallback: number): num
  * leading `\n` puts the table on a line of its own, and `$|$` puts the caret
  * in the first header cell — the cell a writer fills first.
  */
-export function tableMarkdown(cols: number, rows: number): string {
+export type InsertTableAlign = 'left' | 'center' | 'right' | null;
+
+export function tableMarkdown(cols: number, rows: number, align: InsertTableAlign = null): string {
   const size = clampTableSize(cols, rows);
   const line = (cells: string[]): string => `| ${cells.join(' | ')} |`;
   const filled = (value: string): string[] => Array.from({ length: size.cols }, () => value);
   const header = filled('');
   header[0] = CARET_MARKER;
+  const delimToken =
+    align === 'center' ? ':---:' : align === 'right' ? '---:' : align === 'left' ? ':---' : '---';
   const body = line(filled(''));
-  return ['', line(header), line(filled('---')), ...Array.from({ length: size.rows }, () => body), ''].join('\n');
+  return ['', line(header), line(filled(delimToken)), ...Array.from({ length: size.rows }, () => body), ''].join('\n');
 }

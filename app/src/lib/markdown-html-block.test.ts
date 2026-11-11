@@ -61,3 +61,16 @@ test('未插入空行的普通文档行号保持原样', () => {
   const html = renderMarkdown('# 标题\n\n| A | B |\n| --- | --- |\n| 1 | 2 |');
   assert.match(html, /<table data-source-line="3">/);
 });
+
+test('#500 T08-9: terminates a GFM pipe table when followed immediately by a non-pipe prose line', () => {
+  const md = [
+    '| Col1 | Col2 |',
+    '| --- | --- |',
+    '| a | b |',
+    '普通段落文字（没有空行也没有竖线）',
+  ].join('\n');
+
+  const html = renderMarkdown(md);
+  assert.ok(html.includes('</tbody>\n</table>'));
+  assert.match(html, /<p[^>]*>普通段落文字（没有空行也没有竖线）<\/p>/);
+});

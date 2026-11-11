@@ -1138,9 +1138,8 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content) table {
   border-collapse: collapse;
   margin: 1em 0;
-}
-:where(.preview-content--fit) table {
   width: 100%;
+  max-width: 100%;
 }
 /* #384 — zebra striping: across a wide reading column a bare grid makes it
    easy to lose the row you are on. `tbody` only, so the header never takes a
@@ -1148,22 +1147,10 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content) tbody tr:nth-child(even) {
   background: color-mix(in srgb, var(--text) 4.5%, transparent);
 }
-/* #367 — a table wider than the column scrolls on its own instead of
-   pushing the whole preview sideways (where the headings and prose scroll
-   away with it). `display: block` turns the table itself into the scroll
-   container: the anonymous table box generated inside it fills the block, so
-   a normal table spans the column and a too-wide one is capped at the column
-   and gets its own horizontal scrollbar.
-   #384 — the block used to be sized `max-content`, which shrank *every*
-   table to its content and left a short table floating mid-column once the
-   reader turned "fit width" off and pinned the column to a fixed width. It
-   is `100%` now, so tables line up with the prose; the anonymous box still
-   measures its columns by content, and `overflow-x` still catches a table
-   that cannot fit.
-   On screen only and only in the preview pane — print/PDF overlays reuse
-   `.preview-content` and must not clip. Fit-width mode keeps its full-width
-   tables (the block box would stop them stretching); there the pane itself
-   still scrolls. */
+/* #367 — a table wider than the column scrolls on its own instead of pushing
+   the whole preview sideways. `display: block` turns the table into the scroll
+   container; print/PDF overlays reuse `.preview-content` and must not clip, so
+   this is screen-only. Fit-width mode keeps its full-width tables. */
 @media screen {
   .preview-host .preview-content:not(.preview-content--fit) table {
     display: block;
@@ -1176,6 +1163,7 @@ defineExpose({ scrollToLine, openSearch });
 :where(.preview-content) td {
   border: 1px solid var(--border);
   padding: 6px 12px;
+  overflow-wrap: break-word;
 }
 :where(.preview-content) hr {
   border: none;

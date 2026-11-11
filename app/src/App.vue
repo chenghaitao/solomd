@@ -12,6 +12,7 @@ import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-mana
 import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQuotes } from './lib/markdown';
 import { openNewWindow } from './lib/new-window';
 import { ensureSpellDict } from './lib/spell-suggest';
+import { buildInsertTableSnippet } from './lib/table-cell-edit';
 import Toolbar from './components/Toolbar.vue';
 import TileRoot from './components/TileRoot.vue';
 import StatsPill from './components/StatsPill.vue';
@@ -201,21 +202,19 @@ function onImageUrlConfirm(url: string, alt: string) {
     }),
   );
 }
-// "Insert Table" dialog (#387). Reached from the toolbar's Insert menu, the
-// Paragraph menu, the command palette and Ctrl+Alt+Shift+I — all four funnel
-// through the one window event, which the bindable action `insert.table`
-// dispatches. On confirm the generated Markdown rides the same
-// `solomd:insert-markdown` channel the Insert menu's own snippets use, so it
-// lands at the caret in whichever editor the focused pane hosts.
+// #500 — "Insert Table" dialog (with 8x8 hover grid + Rows × Columns inputs).
 const insertTableDialogOpen = ref(false);
 function onOpenInsertTableDialog() {
   insertTableDialogOpen.value = true;
 }
-function onInsertTableConfirm(markdown: string) {
+function onInsertTableConfirm(rows: number, cols: number, align: 'left' | 'center' | 'right' | null = null) {
   insertTableDialogOpen.value = false;
   window.dispatchEvent(
     new CustomEvent('solomd:insert-markdown', {
-      detail: { snippet: markdown, paneId: tiles.focusedPaneId },
+      detail: {
+        snippet: buildInsertTableSnippet(rows, cols, align),
+        paneId: tiles.focusedPaneId,
+      },
     }),
   );
 }
@@ -721,7 +720,7 @@ watchEffect(() => {
 watchEffect(() => {
   document.documentElement.style.setProperty(
     '--content-font-size',
-    `${settings.previewFontSize || 15}px`,
+    `${settings.previewFontSize || settings.fontSize || 16}px`,
   );
 });
 
@@ -805,8 +804,46 @@ watchEffect(() => {
   document.documentElement.setAttribute('data-theme', dataThemeFor(settings.theme, !!settings.customCssPath));
   // 5.0 tokens: the exact default palette stays out of a marketplace theme's way.
   document.documentElement.toggleAttribute('data-custom-theme', !!settings.customCssPath);
+  const dark = themeFamily(settings.theme) === 'dark';
+  const customBg = (dark ? settings.customBgDark : settings.customBgLight)?.trim() || '';
+  const customText = (dark ? settings.customTextDark : settings.customTextLight)?.trim() || '';
+  const customHighlight = (dark ? settings.customHighlightDark : settings.customHighlightLight)?.trim() || '';
+  const customActiveLine = (dark ? settings.customActiveLineDark : settings.customActiveLineLight)?.trim() || '';
+  const rootStyle = document.documentElement.style;
+  if (customBg && !settings.customCssPath) {
+    rootStyle.setProperty('--bg', customBg);
+    rootStyle.setProperty('--custom-bg', customBg);
+    rootStyle.setProperty('--bg-elev', `color-mix(in srgb, ${customBg} 94%, ${dark ? '#ffffff' : '#000000'})`);
+    rootStyle.setProperty('--bg-sidebar', `color-mix(in srgb, ${customBg} 96%, #000000)`);
+  } else {
+    rootStyle.removeProperty('--bg');
+    rootStyle.removeProperty('--custom-bg');
+    rootStyle.removeProperty('--bg-elev');
+    rootStyle.removeProperty('--bg-sidebar');
+  }
+  if (customText && !settings.customCssPath) {
+    rootStyle.setProperty('--text', customText);
+    rootStyle.setProperty('--custom-text', customText);
+  } else {
+    rootStyle.removeProperty('--text');
+    rootStyle.removeProperty('--custom-text');
+  }
+  if (customHighlight) {
+    rootStyle.setProperty('--custom-highlight', customHighlight);
+    rootStyle.setProperty('--mark-bg', `color-mix(in srgb, ${customHighlight} ${dark ? '52%' : '62%'}, transparent)`);
+  } else {
+    rootStyle.removeProperty('--custom-highlight');
+    rootStyle.removeProperty('--mark-bg');
+  }
+  if (customActiveLine) {
+    rootStyle.setProperty('--custom-active-line', customActiveLine);
+    rootStyle.setProperty('--active-line-bg', `color-mix(in srgb, ${customActiveLine} ${dark ? '30%' : '38%'}, transparent)`);
+  } else {
+    rootStyle.removeProperty('--custom-active-line');
+    rootStyle.removeProperty('--active-line-bg');
+  }
   if (isIOS()) {
-    invoke('ios_set_appearance', { dark: themeFamily(settings.theme) === 'dark' }).catch(() => {});
+    invoke('ios_set_appearance', { dark }).catch(() => {});
   }
   const overriddenBy = settings.customCssPath;
   if (!themeAppliedOnce) {
@@ -1050,6 +1087,10 @@ function dispatchMenuAction(id: string) {
   }
   if (id.startsWith('theme.set:')) {
     settings.setTheme(id.slice('theme.set:'.length) as Theme);
+    return;
+  }
+  if (id === 'insert.table') {
+    insertTableDialogOpen.value = true;
     return;
   }
   if (INSERT_SNIPPETS[id]) {
@@ -1536,7 +1577,11 @@ onMounted(async () => {
       // Editors sync their document into the store on a debounce; text typed
       // just before the close would otherwise miss the persist below.
       flushPendingEdits();
-      if (!(await confirmCloseWithUnsavedTabs(me === 'main'))) return;
+      const needsPrompt =
+        me !== 'main' ||
+        !settings.restoreSession ||
+        tabs.tabs.some((t) => t.content !== t.savedContent && (t as any).saveFailed);
+      if (needsPrompt && !(await confirmCloseWithUnsavedTabs(me === 'main'))) return;
       if (me !== 'main') {
         if (isAuxLabel(me)) windowsStore.unregister(me);
       } else {
@@ -2008,6 +2053,9 @@ watch(
     }
   },
 );
+window.addEventListener('solomd:menu-history-back', () => {
+  phoneHistoryOps++;
+});
 window.addEventListener('popstate', () => {
   if (phoneHistoryOps > 0) {
     phoneHistoryOps--;
@@ -2304,19 +2352,10 @@ const viewOpen = ref(false);
  */
 const savedViewsStore = useSavedViewsStore();
 const viewPaneVisible = computed(() => viewOpen.value && !!savedViewsStore.activeView);
-
-/**
- * 5.0 — the formatting toolbar above the editor (`components/FormatBar.vue`).
- *
- * It belongs to the editor, so it follows the same rules the editor's own
- * chrome does: nothing to format in a side view (bases / inbox / a type lens /
- * a saved view) or in preview-only mode, and no Markdown tab, no Markdown
- * toolbar — a `.txt` or `.csv` note has no markers to write. Desktop only:
- * the phone gets `KeyboardBar`, and SettingsPanel hides the switch there too.
- */
 const showFormatBar = computed(
   () =>
-    settings.formatBar &&
+    (settings.formatBar || settings.showFormattingBar) &&
+    !settings.toolbarHidden &&
     !isMobile() &&
     tabs.activeTab?.language === 'markdown' &&
     settings.viewMode !== 'preview' &&
@@ -2482,7 +2521,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
           <TypeLensView v-else-if="typeLensOpen" :type-name="typeLensName" />
           <ViewNoteList v-else-if="viewPaneVisible" />
           <TileRoot v-else :node="tiles.root" @cursor="onCursor" @selection="onSelection" />
-          <StatsPill v-if="!basesOpen && !inboxViewOpen && !typeLensOpen && !viewPaneVisible" :line="cursorLine" :col="cursorCol" :selection-text="selectionText" />
+          <StatsPill v-if="!basesOpen && !inboxViewOpen && !typeLensOpen && !viewPaneVisible && settings.showWritingStats" :line="cursorLine" :col="cursorCol" :selection-text="selectionText" />
         </div>
         <aside
           v-if="showRightSidebar && settings.outlineSide !== 'left'"

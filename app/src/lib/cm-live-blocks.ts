@@ -45,13 +45,17 @@ import {
   rewriteImageUrls,
 } from './image-resolve';
 import { renderMarkdown, extractImageRoot } from './markdown';
-import { parseTable } from './markdown-table';
+import { parseTable, type TableModel } from './markdown-table';
 import {
   HEADER_ROW,
   applyCellEdit,
+  applyCellEditAndAppendRow,
   cellText,
+  normalizeCellInput,
   stepCell,
+  stepCellVertical,
 } from './table-cell-edit';
+import { undo as cmUndo, redo as cmRedo } from '@codemirror/commands';
 import { findHtmlBlockEnd } from './html-live-render';
 import { openRenderedLink } from './link-open';
 import {
@@ -104,23 +108,61 @@ function quoteDepth(line: string): number {
 function stripQuotePrefix(line: string): string {
   return line.replace(/^\s*(?:>\s*)+/, '');
 }
+function hasUnescapedPipe(text: string): boolean {
+  const n = text.length;
+  let p = 0;
+  while (p < n) {
+    if (text[p] === '`') {
+      let ticks = 1;
+      while (p + ticks < n && text[p + ticks] === '`') ticks++;
+      let q = p + ticks;
+      let closed = -1;
+      while (q < n) {
+        if (text[q] === '`') {
+          let ticks2 = 1;
+          while (q + ticks2 < n && text[q + ticks2] === '`') ticks2++;
+          if (ticks2 === ticks) {
+            closed = q + ticks2;
+            break;
+          }
+          q += ticks2;
+        } else {
+          q++;
+        }
+      }
+      p = closed >= 0 ? closed : p + ticks;
+      continue;
+    }
+    if (text[p] === '\\' && p + 1 < n) {
+      p += 2;
+      continue;
+    }
+    if (text[p] === '|') return true;
+    p++;
+  }
+  return false;
+}
 function isPipeRow(line: string, expectedQuoteDepth?: number): boolean {
   if (expectedQuoteDepth !== undefined && quoteDepth(line) !== expectedQuoteDepth) return false;
   const trimmed = stripQuotePrefix(line).trim();
-  return trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2;
+  if (!trimmed || trimmed === '|') return false;
+  if (/^(?:[-+*]\s|\d+[.)]\s|#{1,6}\s|```|~~~)/.test(trimmed)) return false;
+  return hasUnescapedPipe(trimmed);
 }
 function isSeparatorRow(line: string, expectedQuoteDepth?: number): boolean {
+  if (expectedQuoteDepth !== undefined && quoteDepth(line) !== expectedQuoteDepth) return false;
   const trimmed = stripQuotePrefix(line).trim();
-  // `| --- | :---: |` etc. Only `:`, `-`, ` `, `|` characters allowed,
-  // and at least one `-` per cell.
-  return (
-    isPipeRow(line, expectedQuoteDepth) &&
-    // `-` must be last in the class so it's a literal, not the range `:`..`|`
-    // (which excludes `-` at 0x2D and made every real separator row fail —
-    // tables never collapsed to a widget in live-edit).
-    /^\|[\s:|-]+\|$/.test(trimmed) &&
-    /-{3,}/.test(trimmed)
-  );
+  if (!trimmed.includes('|')) return false;
+  const inner = trimmed.replace(/^\|/, '').replace(/\|$/, '');
+  const cells = inner.split('|');
+  if (cells.length === 0) return false;
+  let hasRealCell = false;
+  for (const c of cells) {
+    if (c.trim() === '') continue;
+    if (!/^\s*:?-+:?\s*$/.test(c)) return false;
+    hasRealCell = true;
+  }
+  return hasRealCell;
 }
 
 // Images report their real height only after they load, and CM6 does not
@@ -239,10 +281,6 @@ class ImageWidget extends WidgetType {
     img.alt = this.cleanAlt;
     img.loading = 'lazy';
     img.draggable = false;
-    // #493 — same rule as the preview renderer: Windows' WebView origin is
-    // `http://tauri.localhost`, which Gitee's hot-link protection answers with
-    // 403. No referrer, no block.
-    img.referrerPolicy = 'no-referrer';
     if (this.width) img.style.width = this.width;
     if (this.height) img.style.height = this.height;
     if (this.lineNumber > 0) img.dataset.solomdLine = String(this.lineNumber);
@@ -315,10 +353,20 @@ export function findTableCellOffsetInLine(
     p++;
   }
   if (pipes.length === 0) return n;
-  const maxCellIdx = Math.max(0, pipes.length - 2);
+  const prefixLen = (lineText.match(/^\s*(?:>\s*)*/)?.[0] ?? '').length;
+  const trimmedEnd = lineText.trimEnd().length;
+  const bounds: number[] = [];
+  if (pipes[0] !== prefixLen) {
+    bounds.push(prefixLen - 1);
+  }
+  bounds.push(...pipes);
+  if (pipes[pipes.length - 1] !== trimmedEnd - 1) {
+    bounds.push(n);
+  }
+  const maxCellIdx = Math.max(0, bounds.length - 2);
   const cellIdx = Math.max(0, Math.min(colIdx, maxCellIdx));
-  const cellStart = pipes[cellIdx] + 1;
-  const cellEnd = pipes[cellIdx + 1] ?? n;
+  const cellStart = bounds[cellIdx] + 1;
+  const cellEnd = bounds[cellIdx + 1] ?? n;
   const rawCell = lineText.slice(cellStart, cellEnd);
   const firstNonSpace = rawCell.search(/\S/);
   if (firstNonSpace < 0) {
@@ -331,20 +379,6 @@ export function findTableCellOffsetInLine(
   return contentStart + Math.round((contentEnd - contentStart) * ratio);
 }
 
-/**
- * The cell a rebuilt table widget should re-open after a write-back.
- *
- * Committing a cell replaces the whole widget, so the DOM holding the caret is
- * destroyed and cannot be focused again. The replacement reads this at build
- * time and puts the caret back — which is why it is module state and not a
- * field on the widget being thrown away.
- */
-let pendingCellFocus: { from: number; row: number; col: number; at: number } | null = null;
-
-// Upstream 5.0.14 — a table nested in a list item is indented by four spaces;
-// slicing it out of the list context and feeding it to markdown-it would turn it
-// into an indented <pre><code> block instead of a <table>. Strip the common
-// leading indent before rendering the isolated source.
 function dedentTableSource(source: string): string {
   const lines = source.split('\n');
   let minIndent = Infinity;
@@ -357,6 +391,447 @@ function dedentTableSource(source: string): string {
   if (!Number.isFinite(minIndent) || minIndent <= 0) return source;
   return lines.map((line) => (line.length >= minIndent ? line.slice(minIndent) : line)).join('\n');
 }
+
+/**
+ * The cell a rebuilt table widget should re-open after a write-back.
+ *
+ * Committing a cell replaces the whole widget, so the DOM holding the caret is
+ * destroyed and cannot be focused again. The replacement reads this at build
+ * time and puts the caret back — which is why it is module state and not a
+ * field on the widget being thrown away.
+ */
+let pendingCellFocus: { from: number; row: number; col: number; at: number } | null = null;
+
+export interface ActiveTableCellSession {
+  from: number;
+  to: number;
+  row: number;
+  col: number;
+  cellEl: HTMLTableCellElement;
+  tableEl: HTMLTableElement;
+  wrapEl: HTMLElement;
+  /** Returns the up-to-date TableModel including any un-flushed edits in the active cell. */
+  getCurrentModel: () => TableModel | null;
+  /** Cancels pending blur commit (e.g. when a TableToolbar button is about to replace the whole table). */
+  cancelCommit: () => void;
+}
+
+let activeTableCellSession: ActiveTableCellSession | null = null;
+
+export function getActiveTableCellSession(
+  root?: HTMLElement | null,
+): ActiveTableCellSession | null {
+  if (!activeTableCellSession || !activeTableCellSession.cellEl.isConnected) {
+    activeTableCellSession = null;
+    return null;
+  }
+  if (root && !root.contains(activeTableCellSession.cellEl)) {
+    return null;
+  }
+  return activeTableCellSession;
+}
+
+export function requestTableCellFocus(from: number, row: number, col: number): void {
+  pendingCellFocus = { from, row, col, at: Date.now() };
+}
+
+export interface DomTableEditorAdapter {
+  source: string;
+  from: number;
+  to: number;
+  isReadOnly: () => boolean;
+  commitMarkdown: (markdown: string, nextFocus: { row: number; col: number } | null) => void;
+  exitTable: (direction: 'before' | 'after' | 'stay') => void;
+  onUndo?: () => boolean;
+  onRedo?: () => boolean;
+}
+
+export interface DomTableEditorHandle {
+  begin: (ev: MouseEvent, cell: HTMLTableCellElement) => boolean;
+  focusCell: (row: number, col: number, caret?: 'start' | 'end') => boolean;
+}
+
+function isCaretAtCellBoundary(cell: HTMLElement, boundary: 'start' | 'end'): boolean {
+  const sel = window.getSelection();
+  if (!sel || !sel.isCollapsed || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+  if (!cell.contains(range.startContainer)) return false;
+  const testRange = document.createRange();
+  testRange.selectNodeContents(cell);
+  if (boundary === 'start') {
+    testRange.setEnd(range.startContainer, range.startOffset);
+  } else {
+    testRange.setStart(range.endContainer, range.endOffset);
+  }
+  return (testRange.toString() ?? '').length === 0;
+}
+
+function wrapCellSelectionWithMarkdown(cell: HTMLElement, marker: string): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  if (!cell.contains(range.commonAncestorContainer)) return;
+  const selected = range.toString();
+  const replacement = `${marker}${selected}${marker}`;
+  range.deleteContents();
+  const textNode = document.createTextNode(replacement);
+  range.insertNode(textNode);
+  const nextRange = document.createRange();
+  if (selected.length > 0) {
+    nextRange.setStart(textNode, marker.length);
+    nextRange.setEnd(textNode, marker.length + selected.length);
+  } else {
+    nextRange.setStart(textNode, marker.length);
+    nextRange.collapse(true);
+  }
+  sel.removeAllRanges();
+  sel.addRange(nextRange);
+}
+
+/**
+ * #500 — Shared in-place DOM table cell editor used by both CodeMirror's
+ * `TableWidget` and the Windows Plain Live Block Editor.
+ */
+export function bindDomTableCellEditor(
+  wrap: HTMLElement,
+  adapter: DomTableEditorAdapter,
+): DomTableEditorHandle | null {
+  const table = wrap.querySelector('table');
+  if (!table || adapter.from < 0 || adapter.to < 0) return null;
+
+  wrap.dataset.tableFrom = String(adapter.from);
+  wrap.dataset.tableTo = String(adapter.to);
+
+  const head = table.tHead;
+  let bodyRow = 0;
+  for (const row of Array.from(table.rows)) {
+    const r = head && row.parentElement === head ? HEADER_ROW : bodyRow++;
+    for (const cell of Array.from(row.cells)) {
+      cell.dataset.row = String(r);
+      cell.dataset.col = String(cell.cellIndex);
+    }
+  }
+
+  let active: { cell: HTMLTableCellElement; row: number; col: number; html: string } | null = null;
+  let written = false;
+  let suppressCommit = false;
+
+  const model = () => parseTable(adapter.source) ?? null;
+
+  const getCurrentModel = (): TableModel | null => {
+    const m = model();
+    if (!m) return null;
+    if (!active) return m;
+    const text = normalizeCellInput(active.cell.textContent ?? '');
+    if (active.row === HEADER_ROW) {
+      if (active.col >= 0 && active.col < m.header.length) {
+        const header = m.header.slice();
+        header[active.col] = text;
+        return { ...m, header };
+      }
+      return m;
+    }
+    if (active.row >= 0 && active.row < m.rows.length && active.col >= 0 && active.col < m.header.length) {
+      const rows = m.rows.map((r, idx) => {
+        if (idx !== active!.row) return r;
+        const copy = r.slice();
+        copy[active!.col] = text;
+        return copy;
+      });
+      return { ...m, rows };
+    }
+    return m;
+  };
+
+  const notifySession = () => {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('solomd:table-cell-session'));
+    }
+  };
+
+  const syncSession = () => {
+    if (active) {
+      activeTableCellSession = {
+        from: adapter.from,
+        to: adapter.to,
+        row: active.row,
+        col: active.col,
+        cellEl: active.cell,
+        tableEl: table,
+        wrapEl: wrap,
+        getCurrentModel,
+        cancelCommit: () => {
+          suppressCommit = true;
+          leave();
+        },
+      };
+    } else if (activeTableCellSession?.wrapEl === wrap) {
+      activeTableCellSession = null;
+    }
+    notifySession();
+  };
+
+  const caretToEdge = (cell: HTMLElement, edge: 'start' | 'end' = 'end') => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(edge === 'start');
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  };
+
+  const leave = (): { row: number; col: number; text: string } | null => {
+    const a = active;
+    if (!a) return null;
+    active = null;
+    const text = a.cell.textContent ?? '';
+    a.cell.classList.remove('cm-live-table__cell--editing');
+    a.cell.removeAttribute('contenteditable');
+    a.cell.removeAttribute('spellcheck');
+    if (!written) {
+      a.cell.innerHTML = a.html;
+    }
+    syncSession();
+    return { row: a.row, col: a.col, text };
+  };
+
+  const commit = (
+    focus: { row: number; col: number } | null,
+    appendRow = false,
+  ): boolean => {
+    const done = leave();
+    if (!done || written || suppressCommit) return false;
+    if (appendRow) {
+      const appended = applyCellEditAndAppendRow(adapter.source, done.row, done.col, done.text);
+      if (!appended) return false;
+      written = true;
+      const targetFocus = focus ?? { row: appended.nextRow, col: appended.nextCol };
+      pendingCellFocus = {
+        from: adapter.from,
+        row: targetFocus.row,
+        col: targetFocus.col,
+        at: Date.now(),
+      };
+      adapter.commitMarkdown(appended.markdown, targetFocus);
+      return true;
+    }
+    const markdown = applyCellEdit(adapter.source, done.row, done.col, done.text);
+    if (!markdown) return false;
+    written = true;
+    if (focus) {
+      pendingCellFocus = { from: adapter.from, row: focus.row, col: focus.col, at: Date.now() };
+    }
+    adapter.commitMarkdown(markdown, focus);
+    return true;
+  };
+
+  const start = (cell: HTMLTableCellElement): boolean => {
+    if (adapter.isReadOnly()) return false;
+    const m = model();
+    if (!m) return false;
+    const row = Number(cell.dataset.row ?? HEADER_ROW);
+    const col = Number(cell.dataset.col ?? cell.cellIndex);
+    if (col < 0 || col >= m.header.length) return false;
+    if (row !== HEADER_ROW && (row < 0 || row >= m.rows.length)) return false;
+    active = { cell, row, col, html: cell.innerHTML };
+    cell.textContent = cellText(m, row, col);
+    cell.classList.add('cm-live-table__cell--editing');
+    cell.setAttribute('contenteditable', 'true');
+    cell.setAttribute('spellcheck', 'false');
+    cell.focus({ preventScroll: true });
+    syncSession();
+    return true;
+  };
+
+  const focusCell = (row: number, col: number, caret: 'start' | 'end' = 'end'): boolean => {
+    const cell = wrap.querySelector<HTMLTableCellElement>(
+      `[data-row="${row}"][data-col="${col}"]`,
+    );
+    if (!cell || !start(cell)) return false;
+    caretToEdge(cell, caret);
+    return true;
+  };
+
+  const begin = (ev: MouseEvent, cell: HTMLTableCellElement): boolean => {
+    if (adapter.isReadOnly()) return false;
+    const row = Number(cell.dataset.row ?? HEADER_ROW);
+    const col = Number(cell.dataset.col ?? cell.cellIndex);
+    if (active && active.cell === cell) {
+      return true;
+    }
+    if (active) commit({ row, col });
+    if (written) return true;
+    if (!start(cell)) return false;
+
+    const range = caretRangeAt(ev.clientX, ev.clientY);
+    const sel = window.getSelection();
+    if (range && cell.contains(range.startContainer)) {
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    } else {
+      caretToEdge(cell, 'end');
+    }
+    return true;
+  };
+
+  wrap.addEventListener(
+    'keydown',
+    (ev: KeyboardEvent) => {
+      if (!active) return;
+      const here = { row: active.row, col: active.col };
+      const isMod = ev.metaKey || ev.ctrlKey;
+
+      // Formatting & Undo/Redo shortcuts inside cell
+      if (isMod && !ev.altKey) {
+        const lower = ev.key.toLowerCase();
+        if (lower === 'b' && !ev.shiftKey) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          wrapCellSelectionWithMarkdown(active.cell, '**');
+          notifySession();
+          return;
+        }
+        if (lower === 'i' && !ev.shiftKey) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          wrapCellSelectionWithMarkdown(active.cell, '*');
+          notifySession();
+          return;
+        }
+        if (lower === 'e' && !ev.shiftKey) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          wrapCellSelectionWithMarkdown(active.cell, '`');
+          notifySession();
+          return;
+        }
+        if (lower === 'z' && !ev.shiftKey && adapter.onUndo) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          leave();
+          pendingCellFocus = { from: adapter.from, row: here.row, col: here.col, at: Date.now() };
+          adapter.onUndo();
+          return;
+        }
+        if (((lower === 'z' && ev.shiftKey) || (lower === 'y' && !ev.shiftKey)) && adapter.onRedo) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          leave();
+          pendingCellFocus = { from: adapter.from, row: here.row, col: here.col, at: Date.now() };
+          adapter.onRedo();
+          return;
+        }
+      }
+
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        leave();
+        adapter.exitTable('stay');
+        return;
+      }
+
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (isMod) {
+          commit(null);
+          adapter.exitTable('after');
+          return;
+        }
+        const m = model();
+        const next = m ? stepCellVertical(m, here.row, here.col, ev.shiftKey ? -1 : 1) : null;
+        const target = next ?? here;
+        if (commit(target)) return;
+        if (next && focusCell(next.row, next.col, 'end')) return;
+        return;
+      }
+
+      if (ev.key === 'Tab') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const m = model();
+        const next = m ? stepCell(m, here.row, here.col, ev.shiftKey ? -1 : 1) : null;
+        if (!next && !ev.shiftKey && m) {
+          // Pressing Tab on the very last cell of the table appends a new row like Excel.
+          commit({ row: m.rows.length, col: 0 }, true);
+          return;
+        }
+        if (commit(next)) return;
+        if (next && focusCell(next.row, next.col, 'end')) return;
+        leave();
+        adapter.exitTable(ev.shiftKey ? 'before' : 'after');
+        return;
+      }
+
+      if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+        if (ev.shiftKey || ev.altKey || isMod) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const dir: -1 | 1 = ev.key === 'ArrowUp' ? -1 : 1;
+        const m = model();
+        const next = m ? stepCellVertical(m, here.row, here.col, dir) : null;
+        if (next) {
+          if (commit(next)) return;
+          focusCell(next.row, next.col, 'end');
+          return;
+        }
+        commit(null);
+        adapter.exitTable(dir < 0 ? 'before' : 'after');
+        return;
+      }
+
+      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+        if (ev.shiftKey || ev.altKey || isMod) return;
+        const isLeft = ev.key === 'ArrowLeft';
+        if (!isCaretAtCellBoundary(active.cell, isLeft ? 'start' : 'end')) {
+          return;
+        }
+        const m = model();
+        const next = m ? stepCell(m, here.row, here.col, isLeft ? -1 : 1) : null;
+        if (!next) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (commit(next)) return;
+        focusCell(next.row, next.col, isLeft ? 'end' : 'start');
+      }
+    },
+    true,
+  );
+
+  wrap.addEventListener('focusout', (ev: FocusEvent) => {
+    if (!active) return;
+    if (ev.target !== active.cell) return;
+    const next = ev.relatedTarget as Node | null;
+    if (next && wrap.contains(next)) return;
+    commit(null);
+  });
+
+  if (pendingCellFocus && pendingCellFocus.from === adapter.from) {
+    const pending = pendingCellFocus;
+    pendingCellFocus = null;
+    if (Date.now() - pending.at < 1500) {
+      const m = model();
+      const clampedRow = m
+        ? pending.row < 0
+          ? HEADER_ROW
+          : m.rows.length > 0
+            ? Math.min(pending.row, m.rows.length - 1)
+            : HEADER_ROW
+        : pending.row;
+      const clampedCol = m
+        ? Math.max(0, Math.min(pending.col, m.header.length - 1))
+        : pending.col;
+      requestAnimationFrame(() => {
+        if (wrap.isConnected) focusCell(clampedRow, clampedCol, 'end');
+      });
+    }
+  }
+
+  return { begin, focusCell };
+}
+
+const tableEditorHandles = new WeakMap<HTMLElement, DomTableEditorHandle>();
 
 class TableWidget extends WidgetType {
   // Cells can hold math / code: a widget built before KaTeX or highlight.js
@@ -405,12 +880,17 @@ class TableWidget extends WidgetType {
     wrap.className = 'cm-live-block cm-live-block--table';
     // Render the table source through the same markdown pipeline used by the
     // preview pane so we get GFM alignment, inline formatting, etc. for free.
-    // We strip everything except the table rows from the rendered output.
+    // Dedent common leading spaces/tabs so a 4-space indented table nested
+    // inside a list item is rendered as a <table> rather than an indented
+    // <pre><code> block when sliced out of its parent list context.
     const rawHtml = renderMarkdown(dedentTableSource(this.source));
     wrap.innerHTML = rewriteImageUrls(rawHtml, this.imageRoot, this.filePath);
     installSvgImageFallbacks(wrap);
     trackImageHeights(wrap);
     const cellEditor = this.createCellEditor(wrap, view);
+    if (cellEditor) {
+      tableEditorHandles.set(wrap, cellEditor);
+    }
 
     // #504 — Clicking a rendered table cell in Live mode places the caret at
     // the exact Markdown table row (header or body row) and column cell offset,
@@ -492,219 +972,64 @@ class TableWidget extends WidgetType {
 
   /**
    * #500 — edit a table cell where it is, instead of falling back to the source.
-   *
-   * The rendered cell shows formatted HTML, which cannot be written back as
-   * Markdown without an HTML→Markdown conversion that would quietly drop or
-   * mangle what was in there. So a focused cell swaps its formatted content for
-   * the cell's Markdown *source*; typing stays local to the DOM (no transaction
-   * per keystroke, no decoration rebuild under the caret), and the write-back
-   * happens once on Enter / Tab / blur — one edit, one undo step.
-   *
-   * Returns null when there is nothing to write to (read-only pane, or a widget
-   * built without a document range): the caller then keeps the old
-   * "click → caret in the source line" behaviour.
    */
   private createCellEditor(
     wrap: HTMLElement,
     view?: EditorView,
-  ): { begin: (ev: MouseEvent, cell: HTMLTableCellElement) => boolean } | null {
-    const table = wrap.querySelector('table');
-    if (!table || !view || this.from < 0 || this.to < 0) return null;
-
-    // Coordinates ride on the DOM: the write-back throws this widget away and
-    // rebuilds it, so the *new* DOM has to be findable by the same numbers.
-    const head = table.tHead;
-    let bodyRow = 0;
-    for (const row of Array.from(table.rows)) {
-      const r = head && row.parentElement === head ? HEADER_ROW : bodyRow++;
-      for (const cell of Array.from(row.cells)) {
-        cell.dataset.row = String(r);
-        cell.dataset.col = String(cell.cellIndex);
-      }
-    }
-
-    let active: { cell: HTMLTableCellElement; row: number; col: number; html: string } | null = null;
-    // Set once a write-back has been dispatched: this DOM is on its way out.
-    let written = false;
-
-    const model = () => parseTable(this.source) ?? null;
-
-    const caretToEnd = (cell: HTMLElement) => {
-      const range = document.createRange();
-      range.selectNodeContents(cell);
-      range.collapse(false);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    };
-
-    /** Leave edit mode and put the formatted content back. */
-    const leave = (): { row: number; col: number; text: string } | null => {
-      const a = active;
-      if (!a) return null;
-      active = null;
-      const text = a.cell.textContent ?? '';
-      a.cell.classList.remove('cm-live-table__cell--editing');
-      a.cell.removeAttribute('contenteditable');
-      a.cell.removeAttribute('spellcheck');
-      a.cell.innerHTML = a.html;
-      return { row: a.row, col: a.col, text };
-    };
-
-    /**
-     * Write the cell back. `focus` names the cell the rebuilt widget should
-     * re-open — the DOM that is being replaced has no cells left to focus.
-     */
-    const commit = (focus: { row: number; col: number } | null): boolean => {
-      const done = leave();
-      if (!done || written) return false;
-      const markdown = applyCellEdit(this.source, done.row, done.col, done.text);
-      if (!markdown) return false;
-      written = true;
-      if (focus) {
-        pendingCellFocus = { from: this.from, row: focus.row, col: focus.col, at: Date.now() };
-      }
-      view.dispatch({
-        changes: { from: this.from, to: this.to, insert: markdown },
-        userEvent: 'input.table-cell',
-      });
-      return true;
-    };
-
-    /** Turn one rendered cell into an editor. False when the cell is off-model. */
-    const start = (cell: HTMLTableCellElement): boolean => {
-      const m = model();
-      if (!m) return false;
-      const row = Number(cell.dataset.row ?? HEADER_ROW);
-      const col = Number(cell.dataset.col ?? cell.cellIndex);
-      if (col < 0 || col >= m.header.length) return false;
-      if (row !== HEADER_ROW && (row < 0 || row >= m.rows.length)) return false;
-      active = { cell, row, col, html: cell.innerHTML };
-      cell.textContent = cellText(m, row, col);
-      cell.classList.add('cm-live-table__cell--editing');
-      cell.setAttribute('contenteditable', 'true');
-      cell.setAttribute('spellcheck', 'false');
-      cell.focus({ preventScroll: true });
-      return true;
-    };
-
-    const focusCell = (row: number, col: number): boolean => {
-      const cell = wrap.querySelector<HTMLTableCellElement>(
-        `[data-row="${row}"][data-col="${col}"]`,
-      );
-      if (!cell || !start(cell)) return false;
-      caretToEnd(cell);
-      return true;
-    };
-
-    const begin = (ev: MouseEvent, cell: HTMLTableCellElement): boolean => {
-      if (view.state.readOnly) return false;
-      const row = Number(cell.dataset.row ?? HEADER_ROW);
-      const col = Number(cell.dataset.col ?? cell.cellIndex);
-      // Clicking a different cell while one is open commits the first one; that
-      // rebuild arrives before this handler returns, hence the early exit.
-      if (active) commit({ row, col });
-      if (written) return true;
-      if (!start(cell)) return false;
-
-      const range = caretRangeAt(ev.clientX, ev.clientY);
-      const sel = window.getSelection();
-      if (range && cell.contains(range.startContainer)) {
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-      } else {
-        caretToEnd(cell);
-      }
-      return true;
-    };
-
-    wrap.addEventListener(
-      'keydown',
-      (ev: KeyboardEvent) => {
-        if (!active) return;
-        const here = { row: active.row, col: active.col };
-        if (ev.key === 'Escape') {
-          ev.preventDefault();
-          ev.stopPropagation();
-          leave();
-          view.focus();
-          return;
-        }
-        if (ev.key === 'Enter') {
-          ev.preventDefault();
-          ev.stopPropagation();
-          // Commit and stay in the cell: Enter ending the edit *and* dropping
-          // the caret somewhere else reads as "my table vanished".
-          commit(here);
-          return;
-        }
-        if (ev.key === 'Tab') {
-          ev.preventDefault();
-          ev.stopPropagation();
-          const m = model();
-          const next = m ? stepCell(m, here.row, here.col, ev.shiftKey ? -1 : 1) : null;
-          if (commit(next)) return;
-          // Nothing changed, so this DOM survived — move within it.
-          if (next && focusCell(next.row, next.col)) return;
-          leave();
-          view.focus();
-        }
-      },
-      true,
-    );
-
-    wrap.addEventListener('focusout', (ev: FocusEvent) => {
-      if (!active) return;
-      // Focus moving from one cell to the next fires a focusout on the *old*
-      // cell after `begin` has already opened the new one — committing then
-      // would immediately close the editor the click just opened.
-      if (ev.target !== active.cell) return;
-      const next = ev.relatedTarget as Node | null;
-      if (next && wrap.contains(next)) return;
-      // Moving between cells never lands here (mousedown is prevented and the
-      // next cell is focused explicitly), so this means "left the table".
-      commit(null);
-    });
-
-    // A widget rebuilt by the previous commit may owe the caret to a cell.
-    if (pendingCellFocus && pendingCellFocus.from === this.from) {
-      const pending = pendingCellFocus;
-      pendingCellFocus = null;
-      // Stale markers would otherwise grab the caret on some unrelated rebuild.
-      if (Date.now() - pending.at < 1000) {
-        requestAnimationFrame(() => {
-          if (wrap.isConnected) focusCell(pending.row, pending.col);
+  ): DomTableEditorHandle | null {
+    if (!view || this.from < 0 || this.to < 0) return null;
+    return bindDomTableCellEditor(wrap, {
+      source: this.source,
+      from: this.from,
+      to: this.to,
+      isReadOnly: () => view.state.readOnly,
+      commitMarkdown: (markdown) => {
+        view.dispatch({
+          changes: { from: this.from, to: this.to, insert: markdown },
+          userEvent: 'input.table-cell',
         });
-      }
-    }
-
-    return { begin };
+      },
+      exitTable: (direction) => {
+        const doc = view.state.doc;
+        if (direction === 'before') {
+          const startLineNo = doc.lineAt(Math.max(0, Math.min(this.from, doc.length))).number;
+          if (startLineNo > 1) {
+            const prevLine = doc.line(startLineNo - 1);
+            view.dispatch({ selection: { anchor: prevLine.to }, scrollIntoView: true });
+          } else {
+            view.dispatch({ selection: { anchor: 0 }, scrollIntoView: true });
+          }
+        } else if (direction === 'after') {
+          const endLineNo = doc.lineAt(Math.max(0, Math.min(this.to, doc.length))).number;
+          if (endLineNo < doc.lines) {
+            const nextLine = doc.line(endLineNo + 1);
+            view.dispatch({ selection: { anchor: nextLine.from }, scrollIntoView: true });
+          } else {
+            view.dispatch({
+              changes: { from: doc.length, to: doc.length, insert: '\n' },
+              selection: { anchor: doc.length + 1 },
+              scrollIntoView: true,
+            });
+          }
+        }
+        view.focus();
+      },
+      onUndo: () => cmUndo(view),
+      onRedo: () => cmRedo(view),
+    });
   }
 
   ignoreEvent(event: Event): boolean {
     const target = event.target as Element | null;
-    // Everything that happens inside a cell belongs to the cell editor: the
-    // caret, the IME, typing, and the write-back. Letting CodeMirror see those
-    // events would make it treat typing in a contenteditable widget as editor
-    // input. Links stay visible to the editor so clicking one still opens it.
     if (target?.closest?.('a')) return false;
-    return !!target?.closest?.('th, td');
+    return !!target?.closest?.('th, td, tr');
   }
 
-  // The editor must not interpret the widget's own DOM writes as a document
-  // change — the cell editor dispatches an explicit transaction instead.
   ignoreMutation(): boolean {
     return true;
   }
 }
 
-/**
- * Pointer position → collapsed range, across engines.
- *
- * WebKit/Blink ship `caretRangeFromPoint`, Gecko ships `caretPositionFromPoint`
- * and no `caretRangeFromPoint`, so a click in a table cell would otherwise put
- * the caret at the end on Firefox.
- */
 function caretRangeAt(x: number, y: number): Range | null {
   const doc = document as Document & {
     caretRangeFromPoint?: (px: number, py: number) => Range | null;
@@ -1317,6 +1642,35 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             }
           },
         });
+        // CodeMirror's Lezer parser only parses the first ~3KB synchronously on
+        // initial state creation, so FencedCode nodes past that viewport horizon
+        // may not exist in `syntaxTree(state)` yet. Run a fast line-level fence
+        // pass across `sourceLines` so fenced code blocks anywhere in a long
+        // document never have their inner tables/math/HTML replaced by widgets.
+        let activeFenceChar = '';
+        let activeFenceLen = 0;
+        for (let idx = 0; idx < lastLine; idx += 1) {
+          const stripped = stripQuotePrefix(sourceLines[idx]);
+          if (!activeFenceChar) {
+            const openMatch = stripped.match(/^\s*(`{3,}|~{3,})(.*)$/);
+            if (openMatch) {
+              const marker = openMatch[1];
+              const info = openMatch[2];
+              // Backtick fences cannot contain backticks in their info string.
+              if (marker[0] !== '`' || !info.includes('`')) {
+                activeFenceChar = marker[0];
+                activeFenceLen = marker.length;
+              }
+            }
+          } else {
+            fenceBody[idx] = true;
+            const closeRe = new RegExp(`^\\s*${activeFenceChar}{${activeFenceLen},}\\s*$`);
+            if (closeRe.test(stripped)) {
+              activeFenceChar = '';
+              activeFenceLen = 0;
+            }
+          }
+        }
         const imageRefs = extractImageReferenceDefinitions(sourceLines, fenceBody);
         let i = 1;
         while (i <= lastLine) {
@@ -1564,38 +1918,52 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             }
           }
 
-          // v4.3.0 issue #57a — ```mermaid fenced block. Pre-render to SVG
+          // v4.3.0 issue #57a / #372 — ```mermaid fenced block. Pre-render to SVG
           // via the mermaid cache; the widget waits for the SVG and asks
           // CM to rebuild decorations once ready.
-          if (/^\s*```\s*mermaid\s*$/i.test(line.text)) {
+          if (/^\s*(`{3,}|~{3,})\s*mermaid\s*$/i.test(line.text)) {
             let endI = i + 1;
             while (endI <= lastLine) {
               const next = doc.line(endI);
-              if (/^\s*```\s*$/.test(next.text)) break;
+              if (/^\s*(`{3,}|~{3,})\s*$/.test(next.text)) break;
               endI += 1;
             }
             if (endI <= lastLine) {
+              // Body is between the opening and closing fence.
+              let body = '';
+              for (let k = i + 1; k < endI; k++) {
+                body += (k > i + 1 ? '\n' : '') + doc.line(k).text;
+              }
+              const blockFrom = doc.line(i).from;
+              const blockTo = doc.line(endI).to;
+              // #522 — no render kick-off here. This loop covers the whole
+              // document (state fields have no viewport), so calling it
+              // once per fence meant every diagram rendered on open. The
+              // widget's toDOM() starts the render for visible blocks only.
+              const mermaidTheme = opts.getMermaidTheme?.() ?? 'default';
               const cursorInside = keepSource || (cursorLine >= i && cursorLine <= endI);
               const cursorInsideEnd = cursorLineEnd >= i && cursorLineEnd <= endI;
               if (!cursorInside && !cursorInsideEnd) {
-                // Body is between the opening and closing fence.
-                let body = '';
-                for (let k = i + 1; k < endI; k++) {
-                  body += (k > i + 1 ? '\n' : '') + doc.line(k).text;
-                }
-                const blockFrom = doc.line(i).from;
-                const blockTo = doc.line(endI).to;
-                // #522 — no render kick-off here. This loop covers the whole
-                // document (state fields have no viewport), so calling it
-                // once per fence meant every diagram rendered on open. The
-                // widget's toDOM() starts the render for visible blocks only.
-                const mermaidTheme = opts.getMermaidTheme?.() ?? 'default';
                 builder.add(
                   blockFrom,
                   blockTo,
                   Decoration.replace({
                     widget: new MermaidWidget(body, mermaidTheme, opts.getFilePath?.()),
                     block: true,
+                  }),
+                );
+              } else {
+                // #372 — When the cursor is inside the ```mermaid code block or
+                // `alwaysShowMarkers` (`keepSource`) is enabled, keep the code
+                // block editable and render the live Mermaid diagram directly
+                // below the closing fence (just like standalone images).
+                builder.add(
+                  blockTo,
+                  blockTo,
+                  Decoration.widget({
+                    widget: new MermaidWidget(body, mermaidTheme, opts.getFilePath?.()),
+                    block: true,
+                    side: 1,
                   }),
                 );
               }
@@ -1641,29 +2009,48 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             }
           }
 
-          // Table block — header + separator + ≥1 body row (including inside blockquotes, #480).
+          // Table block — header + separator + ≥0 body rows (including inside blockquotes, #480).
           const tableQuoteDepth = quoteDepth(line.text);
-          if (isPipeRow(line.text, tableQuoteDepth) && i + 1 <= lastLine) {
+          if (
+            isPipeRow(line.text, tableQuoteDepth) &&
+            !isSeparatorRow(line.text, tableQuoteDepth) &&
+            i + 1 <= lastLine
+          ) {
             const sepLine = doc.line(i + 1);
-            if (isSeparatorRow(sepLine.text, tableQuoteDepth) && i + 2 <= lastLine) {
-              // Walk forward as long as we keep seeing pipe rows at the same quote depth.
+            if (isSeparatorRow(sepLine.text, tableQuoteDepth)) {
+              // Walk forward as long as we keep seeing pipe rows at the same quote depth,
+              // stopping if a new adjacent table (header + separator row) begins immediately.
               let endI = i + 2;
               while (endI <= lastLine) {
                 const next = doc.line(endI);
                 if (!isPipeRow(next.text, tableQuoteDepth)) break;
+                if (
+                  !isSeparatorRow(next.text, tableQuoteDepth) &&
+                  endI + 1 <= lastLine &&
+                  isSeparatorRow(doc.line(endI + 1).text, tableQuoteDepth)
+                ) {
+                  break;
+                }
                 endI += 1;
               }
-              const tableEnd = endI - 1; // last pipe row
-              if (tableEnd >= i + 2) {
+              const tableEnd = endI - 1; // last pipe row (or separator row for header-only tables)
+              if (tableEnd >= i + 1) {
+                const blockFrom = doc.line(i).from;
+                const blockTo = doc.line(tableEnd).to;
+                const source = doc.sliceString(blockFrom, blockTo);
+                // #500 — Standard and list-indented GFM tables stay rendered in
+                // Live Edit mode so cells are edited in place like Excel (Nomo,
+                // NoteGen, VNote, Typora). Only reveal raw pipe source when
+                // `alwaysShowMarkers` (`keepSource`) is on, or for blockquote
+                // tables where `parseTable` does not apply.
+                const canInlineEdit = tableQuoteDepth === 0 && parseTable(source) !== null;
                 const cursorInside =
                   keepSource ||
-                  (cursorLine >= i && cursorLine <= tableEnd
-                    ? true
-                    : cursorLineEnd >= i && cursorLineEnd <= tableEnd);
+                  (!canInlineEdit &&
+                    (cursorLine >= i && cursorLine <= tableEnd
+                      ? true
+                      : cursorLineEnd >= i && cursorLineEnd <= tableEnd));
                 if (!cursorInside) {
-                  const blockFrom = doc.line(i).from;
-                  const blockTo = doc.line(tableEnd).to;
-                  const source = doc.sliceString(blockFrom, blockTo);
                   builder.add(
                     blockFrom,
                     blockTo,
@@ -1854,13 +2241,33 @@ export function liveBlocksExtension(opts: BlockOptions = {}) {
       // tldraw boards never reveal their source (no cursor-inside gating in
       // buildBlockDecorations), so parking the caret inside one just hides
       // it — let the default motion hop over the fence instead.
-      if ((d.spec as { widget?: unknown }).widget instanceof TldrawWidget) return;
+      const widget = (d.spec as { widget?: unknown }).widget;
+      if (widget instanceof TldrawWidget) return;
       const a = doc.lineAt(from).number;
       const b = doc.lineAt(to).number;
       const jumpedOver = forward
         ? fromLine.number < a && toLineNo > b
         : fromLine.number > b && toLineNo < a;
       if (!jumpedOver) return;
+      if (widget instanceof TableWidget) {
+        const wrapEl = view.dom.querySelector<HTMLElement>(
+          `.cm-live-block--table[data-table-from="${from}"]`,
+        );
+        const handle = wrapEl ? tableEditorHandles.get(wrapEl) : null;
+        if (handle) {
+          const parsed = parseTable(doc.sliceString(from, to));
+          const targetRow = forward
+            ? HEADER_ROW
+            : parsed && parsed.rows.length > 0
+              ? parsed.rows.length - 1
+              : HEADER_ROW;
+          if (handle.focusCell(targetRow, 0, 'end')) {
+            handled = true;
+            return false;
+          }
+        }
+        return;
+      }
       const edge = doc.line(forward ? a : b);
       const col = Math.min(sel.head - fromLine.from, edge.length);
       view.dispatch({
@@ -1906,7 +2313,8 @@ export function liveBlocksExtension(opts: BlockOptions = {}) {
     let retarget: number | null = null;
     deco.between(0, doc.length, (from, to, d) => {
       if (!(d.spec as { block?: boolean }).block) return;
-      if ((d.spec as { widget?: unknown }).widget instanceof TldrawWidget) return;
+      const widget = (d.spec as { widget?: unknown }).widget;
+      if (widget instanceof TldrawWidget || widget instanceof TableWidget) return;
       const a = doc.lineAt(from).number;
       const b = doc.lineAt(to).number;
       const forwardHop = fromNo === a - 1 && toNo === b + 1;
@@ -1986,14 +2394,12 @@ export const liveBlocksTheme = EditorView.theme({
     border: '1px solid var(--border)',
     padding: '6px 12px',
     textAlign: 'left',
+    minWidth: '48px',
   },
   '.cm-live-block--table thead th': {
     background: 'var(--bg-elev)',
     fontWeight: '600',
   },
-  // #500 — the cell currently being edited in place. The ring is drawn inside
-  // the cell (negative offset) so the row does not shift by 2px when it appears,
-  // and pre-wrap keeps a long value on one line while it is being typed.
   '.cm-live-block--table .cm-live-table__cell--editing': {
     outline: '2px solid var(--accent)',
     outlineOffset: '-2px',

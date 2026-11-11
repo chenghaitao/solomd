@@ -9,7 +9,7 @@ import { useToastsStore } from '../stores/toasts';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useRagStore } from '../stores/rag';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
-import { themeOptions } from '../lib/themes';
+import { themeOptions, themeFamily } from '../lib/themes';
 import { useI18n } from '../i18n';
 import { quickCaptureError } from '../lib/quick-capture-status';
 import {
@@ -46,7 +46,7 @@ import IntegrationsSettings from './IntegrationsSettings.vue';
 // than a brand-new top-level category.
 import RecipesSettings from './RecipesSettings.vue';
 import GithubSyncSettings from './GithubSyncSettings.vue';
-import WebdavSyncSettings from './WebdavSyncSettings.vue';
+import WebdavSyncSettings, { type SyncSubTab } from './WebdavSyncSettings.vue';
 import CloudFolderBanner from './CloudFolderBanner.vue';
 import ProxySettings from './ProxySettings.vue';
 import LanguageToolSettings from './LanguageToolSettings.vue';
@@ -106,11 +106,26 @@ type SettingsCategory =
   | 'keys'
   | 'advanced';
 const activeCategory = ref<SettingsCategory>('basics');
+const activeSyncBranch = ref<SyncSubTab>(gitBackend ? 'git' : 'cloud_api');
+const syncBranches = computed<Array<{ id: SyncSubTab; label: string }>>(() => {
+  const zh = isZhLocale.value;
+  const items: Array<{ id: SyncSubTab; label: string }> = [];
+  if (gitBackend) {
+    items.push({ id: 'git', label: zh ? 'Git 同步' : 'Git Sync' });
+  }
+  items.push(
+    { id: 'cloud_api', label: zh ? '网盘直连 API' : 'Direct Cloud API' },
+    { id: 'local_vault', label: zh ? '本地网盘目录' : 'Local Cloud Folder' },
+    { id: 'webdav', label: zh ? 'WebDAV 同步' : 'WebDAV Sync' },
+    { id: 'history', label: zh ? '历史版本快照' : 'Version Snapshots' },
+  );
+  return items;
+});
 // #144 — all six category pages share the single scrolling `.settings__body`
 // (pages are toggled via CSS display), so one page's scrollTop leaked into
 // every other page. Reset to top on each category switch.
 const bodyEl = ref<HTMLElement | null>(null);
-watch(activeCategory, () => {
+watch([activeCategory, activeSyncBranch], () => {
   bodyEl.value?.scrollTo({ top: 0 });
 });
 // ---------------------------------------------------------------------------
@@ -642,7 +657,7 @@ function markGroups() {
 }
 let groupObserver: MutationObserver | null = null;
 watch(
-  [() => props.open, activeCategory, searchQuery, () => settings.language],
+  [() => props.open, activeCategory, activeSyncBranch, searchQuery, () => settings.language],
   async () => {
     await nextTick();
     markGroups();
@@ -660,6 +675,12 @@ onUnmounted(() => groupObserver?.disconnect());
 function pickCategory(id: SettingsCategory) {
   searchQuery.value = '';
   activeCategory.value = id;
+}
+
+function pickSyncBranch(branch: SyncSubTab) {
+  searchQuery.value = '';
+  activeCategory.value = 'sync';
+  activeSyncBranch.value = branch;
 }
 
 /** Esc clears a query before it closes the dialog, and ⌘F / Ctrl+F jumps to
@@ -1119,17 +1140,17 @@ function onSelectPdfFont(v: string) {
         <!-- v3.0 — left-side category nav. Click switches the right-side
              content panel; only one category visible at a time. -->
         <nav class="settings__nav">
-          <button
-            v-for="c in categories"
-            v-show="navVisible(c.id)"
-            :key="c.id"
-            class="settings__nav-item"
-            :class="{ 'settings__nav-item--active': !searching && activeCategory === c.id }"
-            @click="pickCategory(c.id)"
-          >
-            <Icons class="settings__nav-icon" :name="c.icon" :size="16" />
-            <span class="settings__nav-label">{{ t(c.labelKey) }}</span>
-          </button>
+          <template v-for="c in categories" :key="c.id">
+            <button
+              v-show="navVisible(c.id)"
+              class="settings__nav-item"
+              :class="{ 'settings__nav-item--active': !searching && activeCategory === c.id }"
+              @click="pickCategory(c.id)"
+            >
+              <Icons class="settings__nav-icon" :name="c.icon" :size="16" />
+              <span class="settings__nav-label">{{ t(c.labelKey) }}</span>
+            </button>
+          </template>
           <button
             type="button"
             class="settings__nav-item settings__nav-supporter"
@@ -1153,6 +1174,26 @@ function onSelectPdfFont(v: string) {
         :data-searching="searching ? '' : undefined"
       >
         <h2 v-if="!searching" class="settings__page-title">{{ t(activeCategoryLabelKey) }}</h2>
+        <!-- #528 — Single top-level Sync category tab bar right below the page title -->
+        <nav
+          v-if="!searching && activeCategory === 'sync'"
+          class="settings__sync-subnav"
+          role="tablist"
+          aria-label="Sync mode navigation"
+        >
+          <button
+            v-for="sub in syncBranches"
+            :key="sub.id"
+            type="button"
+            role="tab"
+            class="settings__sync-subnav-tab"
+            :class="{ 'settings__sync-subnav-tab--active': activeSyncBranch === sub.id }"
+            :aria-selected="activeSyncBranch === sub.id"
+            @click="pickSyncBranch(sub.id)"
+          >
+            {{ sub.label }}
+          </button>
+        </nav>
         <template v-if="searching">
           <h2
             v-for="(c, i) in categories"
@@ -1197,6 +1238,52 @@ function onSelectPdfFont(v: string) {
           >
             <option v-for="th in themeOptions(t)" :key="th.value" :value="th.value">{{ th.label }}</option>
           </select>
+          <div class="settings__custom-colors" style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;font-size:12px;">
+            <label style="display:inline-flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
+              <span>{{ settings.language === 'zh' ? '背景色' : 'Background' }}</span>
+              <input
+                type="color"
+                :value="themeFamily(settings.theme) === 'dark' ? (settings.customBgDark || '#1e1e1e') : (settings.customBgLight || '#ffffff')"
+                style="width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;"
+                @input="settings.setCustomThemeColors(themeFamily(settings.theme) === 'dark' ? { customBgDark: ($event.target as HTMLInputElement).value } : { customBgLight: ($event.target as HTMLInputElement).value })"
+              />
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
+              <span>{{ settings.language === 'zh' ? '文字色' : 'Text' }}</span>
+              <input
+                type="color"
+                :value="themeFamily(settings.theme) === 'dark' ? (settings.customTextDark || '#d4d4d4') : (settings.customTextLight || '#1f2328')"
+                style="width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;"
+                @input="settings.setCustomThemeColors(themeFamily(settings.theme) === 'dark' ? { customTextDark: ($event.target as HTMLInputElement).value } : { customTextLight: ($event.target as HTMLInputElement).value })"
+              />
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
+              <span>{{ settings.language === 'zh' ? '高亮色' : 'Highlight' }}</span>
+              <input
+                type="color"
+                :value="themeFamily(settings.theme) === 'dark' ? (settings.customHighlightDark || '#ffd43b') : (settings.customHighlightLight || '#ffd400')"
+                style="width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;"
+                @input="settings.setCustomThemeColors(themeFamily(settings.theme) === 'dark' ? { customHighlightDark: ($event.target as HTMLInputElement).value } : { customHighlightLight: ($event.target as HTMLInputElement).value })"
+              />
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
+              <span>{{ settings.language === 'zh' ? '当前行色' : 'Active line' }}</span>
+              <input
+                type="color"
+                :value="themeFamily(settings.theme) === 'dark' ? (settings.customActiveLineDark || '#f48fb1') : (settings.customActiveLineLight || '#f48fb1')"
+                style="width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;"
+                @input="settings.setCustomThemeColors(themeFamily(settings.theme) === 'dark' ? { customActiveLineDark: ($event.target as HTMLInputElement).value } : { customActiveLineLight: ($event.target as HTMLInputElement).value })"
+              />
+            </label>
+            <button
+              v-if="settings.customBgLight || settings.customTextLight || settings.customBgDark || settings.customTextDark || settings.customHighlightLight || settings.customHighlightDark || settings.customActiveLineLight || settings.customActiveLineDark"
+              type="button"
+              class="hint-btn"
+              @click="settings.resetCustomThemeColors()"
+            >
+              {{ settings.language === 'zh' ? '恢复默认配色' : 'Reset colors' }}
+            </button>
+          </div>
           <!-- #282 — the reporter picked "Dark (One Dark)" and the app stayed
                light (his screenshots read #e6e5e0, which is Soft UI's --bg to
                the byte). It was doing exactly what it was told: 14 of the 15
@@ -1337,11 +1424,33 @@ function onSelectPdfFont(v: string) {
           <div class="hint">{{ t('settings.alwaysShowMarkersHint') }}</div>
         </section>
 
-        <section data-cat="editing">
-          <label>
-            <input type="checkbox" :checked="settings.highlightCurrentLine" @change="settings.toggleHighlightCurrentLine()" />
-            {{ t('settings.highlightCurrentLine') }}
-          </label>
+        <section data-cat="basics">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <label style="margin:0;">
+              <input type="checkbox" :checked="settings.highlightCurrentLine" @change="settings.toggleHighlightCurrentLine()" />
+              {{ t('settings.highlightCurrentLine') }}
+            </label>
+            <label
+              v-if="settings.highlightCurrentLine"
+              style="display:inline-flex;align-items:center;gap:6px;margin:0;font-size:12px;cursor:pointer;"
+            >
+              <span>{{ settings.language === 'zh' ? '自定义颜色' : 'Custom color' }}</span>
+              <input
+                type="color"
+                :value="themeFamily(settings.theme) === 'dark' ? (settings.customActiveLineDark || '#f48fb1') : (settings.customActiveLineLight || '#f48fb1')"
+                style="width:22px;height:22px;padding:0;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;"
+                @input="settings.setCustomThemeColors(themeFamily(settings.theme) === 'dark' ? { customActiveLineDark: ($event.target as HTMLInputElement).value } : { customActiveLineLight: ($event.target as HTMLInputElement).value })"
+              />
+            </label>
+            <button
+              v-if="settings.highlightCurrentLine && (settings.customActiveLineLight || settings.customActiveLineDark)"
+              type="button"
+              class="hint-btn"
+              @click="settings.setCustomThemeColors({ customActiveLineLight: '', customActiveLineDark: '' })"
+            >
+              {{ settings.language === 'zh' ? '恢复默认' : 'Reset' }}
+            </button>
+          </div>
           <div class="hint">{{ t('settings.highlightCurrentLineHint') }}</div>
         </section>
 
@@ -1647,6 +1756,13 @@ function onSelectPdfFont(v: string) {
           </label>
         </section>
 
+        <section v-if="!isMobile()" data-cat="basics">
+          <label>
+            <input type="checkbox" :checked="settings.separateTabBarRow" @change="settings.toggleSeparateTabBarRow()" />
+            {{ settings.language === 'zh' ? '独立标签栏行（将标签页置于顶栏下方独立一行）' : 'Separate Tab Bar Row (show tabs in a dedicated row below header)' }}
+          </label>
+        </section>
+
         <!-- 5.0 — the floating format bar over a selection. Desktop only:
              phones and tablets use the bar above the keyboard instead. -->
         <section v-if="!isMobile()" data-cat="writing">
@@ -1705,7 +1821,7 @@ function onSelectPdfFont(v: string) {
           </p>
         </section>
 
-        <section v-if="gitBackend" data-cat="sync">
+        <section v-if="gitBackend" v-show="searching || activeSyncBranch === 'git'" data-cat="sync">
           <h3 class="settings__group-title">
             {{ t('settings.versionHistoryHeading') }}
           </h3>
@@ -1720,19 +1836,25 @@ function onSelectPdfFont(v: string) {
 
         <!-- v2.6.1 cloud-folder banner. Self-hides if the workspace isn't
              inside a known cloud-sync folder. -->
-        <div v-if="gitBackend" data-cat="sync"><CloudFolderBanner /></div>
+        <div v-if="gitBackend" v-show="searching || activeSyncBranch === 'git'" data-cat="sync"><CloudFolderBanner /></div>
 
         <!-- v2.6 GitHub sync — sits right under AutoGit since it pushes the
              same commits AutoGit produces; reads top-down as one story. -->
-        <div v-if="gitBackend" data-cat="sync"><GithubSyncSettings /></div>
-
-        <!-- #458 — WebDAV workspace sync (Nextcloud /堅果云 / Synology / ownCloud). -->
-        <div data-cat="sync"><WebdavSyncSettings /></div>
+        <div v-if="gitBackend" v-show="searching || activeSyncBranch === 'git'" data-cat="sync"><GithubSyncSettings /></div>
 
         <!-- v3.0 — proxy URL (network-level, applies to libgit2 push/pull
              across GitHub / GitLab / Gitea). Pulled out of GithubSyncSettings
              so users hitting timeouts find it at the top of the Sync tab. -->
-        <div v-if="gitBackend" data-cat="sync"><ProxySettings /></div>
+        <div v-if="gitBackend" v-show="searching || activeSyncBranch === 'git'" data-cat="sync"><ProxySettings /></div>
+
+        <!-- #458 / #524 / #525 — Cloud API, Local Cloud Folder, WebDAV, and Version Snapshots. -->
+        <div v-show="searching || activeSyncBranch !== 'git'" data-cat="sync">
+          <WebdavSyncSettings
+            v-model:active-tab="activeSyncBranch"
+            :searching="searching"
+            :include-git-tab="gitBackend"
+          />
+        </div>
 
         <section data-cat="writing">
           <label>
@@ -2072,11 +2194,12 @@ function onSelectPdfFont(v: string) {
           <label>{{ t('settings.attachmentMode') }}</label>
           <select
             :value="settings.attachmentMode"
-            @change="settings.setAttachmentMode(($event.target as HTMLSelectElement).value as 'shared' | 'per-file' | 'custom')"
+            @change="settings.setAttachmentMode(($event.target as HTMLSelectElement).value as 'shared' | 'per-file' | 'custom' | 'base64')"
           >
             <option value="shared">{{ t('settings.attachmentModeShared') }}</option>
             <option value="per-file">{{ t('settings.attachmentModePerFile') }}</option>
             <option value="custom">{{ t('settings.attachmentModeCustom') }}</option>
+            <option value="base64">{{ settings.language === 'zh' ? '内联 Base64（直接嵌入文档，单文件免外部图库）' : 'Inline Base64 (embed directly in .md file)' }}</option>
           </select>
           <p class="setting-hint">{{ t('settings.attachmentModeHint') }}</p>
         </section>
@@ -2915,6 +3038,86 @@ function onSelectPdfFont(v: string) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.settings__nav-sublist {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1.5px solid var(--border, rgba(128, 128, 128, 0.22));
+}
+.settings__nav-subitem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 430;
+  color: var(--text-2);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: default;
+  text-align: left;
+}
+.settings__nav-subitem:hover {
+  background: var(--fill-1);
+  color: var(--text);
+}
+.settings__nav-subitem--active,
+.settings__nav-subitem--active:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 520;
+}
+.settings__nav-subitem-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+.settings__nav-subitem--active .settings__nav-subitem-dot {
+  opacity: 1;
+}
+.settings__sync-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--bg-muted, rgba(128, 128, 128, 0.08));
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.16));
+}
+.settings__sync-subnav-tab {
+  flex: 1 1 auto;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted, var(--text-2));
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+.settings__sync-subnav-tab:hover {
+  color: var(--text);
+  background: rgba(128, 128, 128, 0.08);
+}
+.settings__sync-subnav-tab--active {
+  background: var(--bg-elevated, var(--bg, #fff));
+  color: var(--accent, #2563eb);
+  border-color: var(--border, rgba(37, 99, 235, 0.28));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  font-weight: 600;
+}
 
 /* v3.0 — single-source-of-truth visibility: each section/component
    gets data-cat="basics|writing|sync|integrations|export|keys|advanced",
@@ -3553,6 +3756,9 @@ input[type='range']:disabled {
   /* 12px total gap to the search row; 6px of it lives in .settings__search
      so the focus ring is not clipped by the scrolling body. */
   padding-bottom: 6px;
+}
+:root.narrow-viewport .ds-modal.settings-modal .ds-modal__head {
+  padding-top: max(16px, calc(env(safe-area-inset-top, 0px) + 10px));
 }
 .ds-modal.settings-modal .ds-modal__body {
   flex: 1;

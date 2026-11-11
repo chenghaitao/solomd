@@ -21,15 +21,23 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import Preview from './Preview.vue';
 import Icon from './Icons.vue';
 import { useTabsStore } from '../stores/tabs';
+import { useTilesStore } from '../stores/tiles';
 import { useSettingsStore } from '../stores/settings';
 import { useI18n } from '../i18n';
-import { forceWinChromePreview, isWindowsDesktop } from '../lib/platform';
+import { forceWinChromePreview, isMacOS, isWindowsDesktop } from '../lib/platform';
 
 const tabs = useTabsStore();
+const tiles = useTilesStore();
 const settings = useSettingsStore();
 const { t } = useI18n();
 
 const tab = computed(() => tabs.activeTab);
+const isMac = isMacOS();
+
+function selectReadingTab(id: string) {
+  tabs.activate(id);
+  tiles.setActiveTab(tiles.focusedPaneId, id);
+}
 
 function exit() {
   settings.exitReadingMode();
@@ -84,6 +92,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="reading-view" data-reading-view>
+    <div
+      v-if="tabs.tabs.length > 1"
+      class="reading-view__tabs"
+      :class="{ 'reading-view__tabs--mac': isMac }"
+      data-tauri-drag-region
+    >
+      <div class="reading-view__tab-strip">
+        <button
+          v-for="item in tabs.tabs"
+          :key="item.id"
+          type="button"
+          class="reading-view__tab"
+          :class="{ 'reading-view__tab--active': item.id === tabs.activeId }"
+          :title="item.filePath || item.fileName"
+          @click="selectReadingTab(item.id)"
+        >
+          <span class="reading-view__tab-title">{{ item.fileName.replace(/\.md$/i, '') || item.fileName }}</span>
+        </button>
+      </div>
+    </div>
     <div class="reading-view__controls">
       <button
         v-if="winControls"
@@ -148,6 +176,48 @@ onBeforeUnmount(() => {
   min-width: 0;
   background: var(--bg);
 }
+.reading-view__tabs {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 4px 140px 4px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-sidebar, var(--bg)) 70%, transparent);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.reading-view__tabs--mac {
+  padding-left: 80px;
+}
+.reading-view__tab-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.reading-view__tab {
+  max-width: 180px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.reading-view__tab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.reading-view__tab--active {
+  color: var(--text);
+  font-weight: 600;
+  background: var(--bg-elev);
+  border-color: var(--border);
+}
 .reading-view__doc {
   flex: 1;
   display: flex;
@@ -164,7 +234,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   /* Stay clear of iOS notch / home-indicator areas */
-  top: max(14px, env(safe-area-inset-top, 0px));
+  top: max(14px, env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
   right: max(18px, env(safe-area-inset-right, 0px));
 }
 .reading-view__winbtn {

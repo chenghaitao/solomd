@@ -421,5 +421,11 @@ defineProps<{ name: string; size?: number }>();
       <polyline points="14 3 14 8 19 8" />
       <path d="M9.5 15.5a3 3 0 0 0 5-1.5M14.5 12.5a3 3 0 0 0-5 1.5" />
     </template>
+    <template v-else-if="name === 'diagram'">
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <rect x="3" y="16" width="6" height="4" rx="1" />
+      <rect x="15" y="16" width="6" height="4" rx="1" />
+      <path d="M12 7v4M6 16v-3a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3" />
+    </template>
   </svg>
 </template>

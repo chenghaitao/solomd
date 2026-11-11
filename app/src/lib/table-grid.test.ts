@@ -16,7 +16,6 @@ import {
 test('the corner cells are the ends of the range', () => {
   assert.deepEqual(gridSizeAt(0, 0), { cols: 1, rows: 1 });
   assert.deepEqual(gridSizeAt(TABLE_GRID_ROWS - 1, TABLE_GRID_COLS - 1), { cols: 6, rows: 4 });
-  // …and the shape the screenshot shows: 6 wide, 4 tall.
   assert.equal(TABLE_GRID_COLS, 6);
   assert.equal(TABLE_GRID_ROWS, 4);
 });

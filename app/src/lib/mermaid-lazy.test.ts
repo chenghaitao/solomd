@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { queueMermaidJob, yieldToMain, peekMermaidSvg } from './mermaid-lazy';
+import { queueMermaidJob, yieldToMain, peekMermaidSvg } from './mermaid-lazy.ts';
 
 /**
  * #522 — the scheduling guarantees behind "render in background". mermaid's
