@@ -183,6 +183,15 @@ export function useCommands(): Command[] {
         requestNewFileInTree();
       },
     },
+    {
+      // #322 — New Note from Template…
+      id: 'file.newFromTemplate',
+      title: 'New Note from Template…',
+      shortcut: kb('file.newFromTemplate'),
+      run: () => {
+        window.dispatchEvent(new CustomEvent('solomd:open-template-picker'));
+      },
+    },
     { id: 'file.open', title: 'Open File…', shortcut: kb('file.open'), run: () => files.openFile() },
     { id: 'file.save', title: 'Save', shortcut: kb('file.save'), run: () => files.saveActive() },
     { id: 'file.saveAs', title: 'Save As…', shortcut: kb('file.saveAs'), run: () => files.saveActiveAs() },
@@ -292,6 +301,7 @@ export function useCommands(): Command[] {
     { id: 'view.toggleSpellCheck', title: 'View: Toggle Spell Check', run: () => settings.toggleSpellCheck() },
     { id: 'view.toggleFocusMode', title: 'View: Toggle Focus Mode', shortcut: kb('view.toggleFocusMode'), run: () => settings.toggleFocusMode() },
     { id: 'view.toggleToolbar', title: 'View: Show / Hide Toolbar Buttons', shortcut: kb('view.toggleToolbar'), run: () => settings.toggleToolbarHidden() },
+    { id: 'view.toggleMenuBar', title: 'View: Show / Hide Menu Bar', run: () => settings.toggleHideMenuBar() },
     { id: 'view.toggleTypewriter', title: 'View: Toggle Typewriter Mode', shortcut: kb('view.toggleTypewriter'), run: () => settings.toggleTypewriterMode() },
     { id: 'view.zoomUiIn', title: 'UI: Zoom In', shortcut: kb('view.zoomUiIn'), run: () => settings.zoomIn() },
     { id: 'view.zoomUiOut', title: 'UI: Zoom Out', shortcut: kb('view.zoomUiOut'), run: () => settings.zoomOut() },
@@ -339,9 +349,10 @@ export function useCommands(): Command[] {
       title: 'Theme: Set Custom CSS File…',
       hint: 'Pick a .css file to override SoloMD styles',
       run: async () => {
+        const themesDir = await invoke<string>('theme_get_dir').catch(() => undefined);
         const path = await openFileDialog({
           multiple: false,
-          defaultPath: await files.filePickerStartDir(),
+          defaultPath: themesDir || (await files.filePickerStartDir()),
           filters: [{ name: 'CSS', extensions: ['css'] }],
         });
         if (path && typeof path === 'string') {
@@ -664,6 +675,7 @@ export function useCommands(): Command[] {
     { id: 'file.print', title: 'Print…', hint: 'Open the system print dialog', shortcut: kb('file.print'), run: () => exporter.printDocument() },
     { id: 'export.pdf', title: 'Export to PDF (image)…', hint: 'rasterised, text not selectable', run: () => exporter.exportPdf() },
     { id: 'export.image', title: 'Export to Image (PNG)…', run: () => exporter.exportImage() },
+    { id: 'export.custom', title: 'Custom / Batch Export…', hint: 'export current file or entire folder to a custom directory', shortcut: kb('export.custom'), run: () => exporter.openCustomExportDialog() },
     { id: 'export.epub', title: 'Export to EPUB…', hint: 'via Pandoc', run: () => pandoc.exportTo('epub') },
     { id: 'export.odt', title: 'Export to ODT…', hint: 'via Pandoc', run: () => pandoc.exportTo('odt') },
     { id: 'export.latex', title: 'Export to LaTeX…', hint: 'via Pandoc', run: () => pandoc.exportTo('latex') },

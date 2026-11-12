@@ -47,6 +47,7 @@ import { usePhoneStore } from './stores/phone';
 // v4.6 F5 — Saved filtered views (sidebar panel + filtered list + editor).
 import ViewNoteList from './components/ViewNoteList.vue';
 import ViewEditorDialog from './components/ViewEditorDialog.vue';
+import TemplatePickerDialog from './components/TemplatePickerDialog.vue';
 import { VIEW_OPEN_EVENT, VIEW_CLOSE_EVENT } from './composables/useSavedViews';
 import GlobalSearch from './components/GlobalSearch.vue';
 import ReadingView from './components/ReadingView.vue';
@@ -207,6 +208,11 @@ const insertTableDialogOpen = ref(false);
 function onOpenInsertTableDialog() {
   insertTableDialogOpen.value = true;
 }
+// #535 & #359 — "Custom / Batch Export" dialog
+const customExportDialogOpen = ref(false);
+function onOpenCustomExportDialog() {
+  customExportDialogOpen.value = true;
+}
 function onInsertTableConfirm(rows: number, cols: number, align: 'left' | 'center' | 'right' | null = null) {
   insertTableDialogOpen.value = false;
   window.dispatchEvent(
@@ -349,6 +355,8 @@ const { component: ImageUrlDialogC, open: imageUrlLazyOpen } = useLazyComponent(
   () => import('./components/ImageUrlDialog.vue'), () => imageUrlDialogOpen.value);
 const { component: InsertTableDialogC, open: insertTableLazyOpen } = useLazyComponent(
   () => import('./components/InsertTableDialog.vue'), () => insertTableDialogOpen.value);
+const { component: CustomExportDialogC, open: customExportLazyOpen } = useLazyComponent(
+  () => import('./components/CustomExportDialog.vue'), () => customExportDialogOpen.value);
 const { component: AndroidFolderPickerC, open: androidPickerLazyOpen } = useLazyComponent(
   () => import('./components/AndroidFolderPicker.vue'), () => androidPickerOpen.value);
 
@@ -1348,9 +1356,21 @@ onMounted(async () => {
     try {
       androidInsetsCache = await invoke<SystemInsetsPx>('android_system_insets');
       applyAndroidInsets();
-      const reapply = () => applyAndroidInsets();
-      window.addEventListener('resize', reapply);
-      window.addEventListener('orientationchange', reapply);
+      // A rotation changes the bar heights themselves, not just the viewport,
+      // so re-read them natively — after the rotation has settled, since
+      // `orientationchange` fires while the old insets are still reported.
+      const remeasure = async () => {
+        try {
+          androidInsetsCache = await invoke<SystemInsetsPx>('android_system_insets');
+        } catch {
+          // Keep the cached insets; the viewport padding still gets recomputed.
+        }
+        applyAndroidInsets();
+      };
+      window.addEventListener('resize', () => applyAndroidInsets());
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => void remeasure(), 150);
+      });
     } catch (e) {
       console.warn('android_system_insets failed', e);
     }
@@ -1559,6 +1579,7 @@ onMounted(async () => {
   // #387 — the bindable action / palette / toolbar all ask for the dialog
   // through this one event.
   window.addEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
+  window.addEventListener('solomd:open-custom-export', onOpenCustomExportDialog);
 
   // Initialize tile layout: validate persisted state or create default
   tiles.validate(tabs.tabs);
@@ -1849,6 +1870,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('solomd:open-agent-wizard', onOpenAgentWizard);
   window.removeEventListener('solomd:open-image-url-dialog', onOpenImageUrlDialog);
   window.removeEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
+  window.removeEventListener('solomd:open-custom-export', onOpenCustomExportDialog);
   if (unlistenOpened) {
     unlistenOpened();
     unlistenOpened = null;
@@ -2705,9 +2727,16 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @confirm="onInsertTableConfirm"
       @cancel="insertTableDialogOpen = false"
     />
+    <component
+      :is="CustomExportDialogC"
+      v-if="CustomExportDialogC"
+      :open="customExportLazyOpen"
+      @close="customExportDialogOpen = false"
+    />
     <SessionRestoreDialog />
     <!-- v4.6 F5 — saved-view create/edit modal (self-mounts via window events). -->
     <ViewEditorDialog />
+    <TemplatePickerDialog />
     <WhiteboardOverlay />
     <FileChangedDialog
       :open="fileChangedOpen"

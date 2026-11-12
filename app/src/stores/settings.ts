@@ -43,6 +43,75 @@ export function buildEditorFontStack(face: string): string {
  *  YaHei on Windows via buildEditorFontStack's CJK tail. */
 export const DEFAULT_EDITOR_FONT = '-apple-system, "Segoe UI", system-ui, sans-serif';
 
+export interface SyncVaultEntry {
+  id: string;
+  name: string;
+  localPath: string;
+  enabled: boolean;
+}
+
+function normalizeVaultPath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+export function isPathInsideFolder(fileOrDirPath: string, folderPath: string): boolean {
+  const f = normalizeVaultPath(fileOrDirPath);
+  const d = normalizeVaultPath(folderPath);
+  if (!f || !d) return false;
+  return f === d || f.startsWith(`${d}/`);
+}
+
+/**
+ * #531 — Resolve which Vault folder (if any) owns `filePath` or `currentFolder`
+ * for auto-sync and save-triggered sync:
+ * 1. If `filePath` is inside a registered enabled Vault in `syncVaults`, return
+ *    that Vault's `localPath` (even if `currentFolder` is a different folder or null).
+ * 2. If `syncOnlyRegisteredVaults` is enabled (or `syncVaults` has entries and
+ *    `syncOnlyRegisteredVaults` is true), only registered enabled Vaults can sync;
+ *    files or folders outside registered Vaults return `null`.
+ * 3. Otherwise, if `filePath` is provided, only return `currentFolder` when
+ *    `filePath` is actually inside `currentFolder` (saving an external file on
+ *    Desktop/Downloads never triggers workspace sync).
+ */
+export function resolveSyncTargetFolder(
+  filePath: string | undefined,
+  currentFolder: string | null | undefined,
+  syncVaults: SyncVaultEntry[] = [],
+  syncOnlyRegisteredVaults = false,
+): string | null {
+  const validVaults = (syncVaults || []).filter((v) => v && v.localPath?.trim());
+  const enabledVaults = validVaults.filter((v) => v.enabled);
+  if (filePath) {
+    // Match the most specific (longest path) registered vault containing filePath
+    const matchingVaults = validVaults
+      .filter((v) => isPathInsideFolder(filePath, v.localPath))
+      .sort((a, b) => b.localPath.length - a.localPath.length);
+    if (matchingVaults.length > 0) {
+      return matchingVaults[0].enabled ? matchingVaults[0].localPath : null;
+    }
+    if (syncOnlyRegisteredVaults || validVaults.length > 0) {
+      return null;
+    }
+    if (currentFolder && isPathInsideFolder(filePath, currentFolder)) {
+      return currentFolder;
+    }
+    return null;
+  }
+  if (currentFolder) {
+    const matchingVaults = validVaults
+      .filter((v) => isPathInsideFolder(currentFolder, v.localPath))
+      .sort((a, b) => b.localPath.length - a.localPath.length);
+    if (matchingVaults.length > 0) {
+      return matchingVaults[0].enabled ? matchingVaults[0].localPath : null;
+    }
+    if (syncOnlyRegisteredVaults || enabledVaults.length > 0 || validVaults.length > 0) {
+      return null;
+    }
+    return currentFolder;
+  }
+  return null;
+}
+
 interface Settings {
   theme: Theme;
   /** D6 — follow the OS light/dark appearance. While on, `theme` holds the
@@ -70,6 +139,10 @@ interface Settings {
   // live views instead of hiding them off the caret line, so clicking a line
   // doesn't reflow it. Styling (heading size, bold) still applies.
   alwaysShowMarkers: boolean;
+  // Separate toggle for block-level live rendering (tables, Mermaid, PlantUML,
+  // math blocks, etc.): when true (default), table and diagram source code is
+  // hidden/collapsed into rendered widgets even if `alwaysShowMarkers` is on.
+  collapseBlockSource: boolean;
   // #344 — tint the caret line's background in the CodeMirror editor.
   highlightCurrentLine: boolean;
   /** Use the document's first non-empty line as the tab title instead of the
@@ -131,6 +204,9 @@ interface Settings {
    *  Windows menubar) stays. Where the OS draws the title bar, the whole
    *  toolbar goes. */
   toolbarHidden: boolean;
+  /** #208: hide the in-window top menubar (`File Edit Paragraph ...`) on
+   *  custom-titlebar platforms (Windows). */
+  hideMenuBar: boolean;
   typewriterMode: boolean;
   /** One-time tips when Markdown formatting is typed by hand (useFormatHints). */
   formatHints: boolean;
@@ -280,6 +356,8 @@ interface Settings {
   // v2.2: AutoGit per-note version history
   autoGitEnabled: boolean;
   autoGitDebounceSeconds: number;
+  /** #129: generate concise AI commit messages for AutoGit snapshots when AI is configured. */
+  autoGitAiMessage: boolean;
   /** Show the History pane in the right sidebar. v4.0.2: decoupled from
    *  autoGitEnabled so users can hide just the panel without disabling git
    *  sync entirely (issue #55 — Agent + History fighting for vertical space
@@ -346,6 +424,13 @@ interface Settings {
   // Local & Cloud Sync version snapshot retention settings
   syncMaxVersions: number;
   autoSnapshotOnSave: boolean;
+  // #531 — Registered sync vaults ("笔记库管理") so auto-sync only runs for
+  // designated vault folders and saving an external file never triggers sync.
+  syncVaults: SyncVaultEntry[];
+  syncOnlyRegisteredVaults: boolean;
+  // #535 / #359 — Custom export dialog remembered directory & format.
+  lastCustomExportDir: string;
+  lastCustomExportFormat: 'pdf' | 'html' | 'docx' | 'png';
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
   // status bar. Off-by-default-ish: the pill stays inert unless the doc's
   // YAML front matter sets a `goal:` key, so this toggle is a hard kill
@@ -716,6 +801,7 @@ function defaults(): Settings {
     selectionBubble: true,
     formatBar: false,
     alwaysShowMarkers: false,
+    collapseBlockSource: true,
     highlightCurrentLine: true,
     tabTitleFromFirstLine: false,
     confirmSaveMissingFile: false,
@@ -744,6 +830,7 @@ function defaults(): Settings {
     spellCheck: true,
     focusMode: false,
     toolbarHidden: false,
+    hideMenuBar: false,
     typewriterMode: false,
     formatHints: true,
     formatHintsSeen: [],
@@ -831,6 +918,7 @@ function defaults(): Settings {
     workspaceCsl: '',
     autoGitEnabled: false,
     autoGitDebounceSeconds: 30,
+    autoGitAiMessage: false,
     showHistoryPanel: true,
     showInspector: false,
     rightSidebarPaneHeights: {},
@@ -874,6 +962,10 @@ function defaults(): Settings {
     cloudR2SecretAccessKey: '',
     syncMaxVersions: 20,
     autoSnapshotOnSave: true,
+    syncVaults: [],
+    syncOnlyRegisteredVaults: false,
+    lastCustomExportDir: '',
+    lastCustomExportFormat: 'pdf',
     showWritingStats: true,
     showWorkspaceDailyTotal: false,
     pdfDefaults: defaultPdfDefaults(),
@@ -1341,6 +1433,10 @@ export const useSettingsStore = defineStore('settings', {
       this.alwaysShowMarkers = !this.alwaysShowMarkers;
       this.persist();
     },
+    toggleCollapseBlockSource() {
+      this.collapseBlockSource = !this.collapseBlockSource;
+      this.persist();
+    },
     toggleHighlightCurrentLine() {
       this.highlightCurrentLine = !this.highlightCurrentLine;
       this.persist();
@@ -1493,6 +1589,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleToolbarHidden() {
       this.toolbarHidden = !this.toolbarHidden;
+      this.persist();
+    },
+    toggleHideMenuBar() {
+      this.hideMenuBar = !this.hideMenuBar;
       this.persist();
     },
     toggleFormatHints() {
@@ -1730,6 +1830,10 @@ export const useSettingsStore = defineStore('settings', {
       if (this.autoGitEnabled && !this.showHistoryPanel) this.showHistoryPanel = true;
       this.persist();
     },
+    toggleAutoGitAiMessage() {
+      this.autoGitAiMessage = !this.autoGitAiMessage;
+      this.persist();
+    },
     toggleHistoryPanel() {
       this.showHistoryPanel = !this.showHistoryPanel;
       if (this.showHistoryPanel) this.ensureRightSidebarVisible();
@@ -1782,6 +1886,49 @@ export const useSettingsStore = defineStore('settings', {
     },
     setCustomCssPath(p: string) {
       this.customCssPath = p;
+      this.persist();
+    },
+    setLastCustomExportDir(dir: string) {
+      this.lastCustomExportDir = dir;
+      this.persist();
+    },
+    setLastCustomExportFormat(fmt: 'pdf' | 'html' | 'docx' | 'png') {
+      this.lastCustomExportFormat = fmt;
+      this.persist();
+    },
+    addSyncVault(localPath: string, name?: string) {
+      const trimmed = localPath.trim();
+      if (!trimmed) return;
+      const norm = trimmed.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      if (this.syncVaults.some((v) => v.localPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === norm)) {
+        return;
+      }
+      const fallbackName = trimmed.replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop() || trimmed;
+      this.syncVaults.push({
+        id: `vault-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: (name || fallbackName).trim(),
+        localPath: trimmed,
+        enabled: true,
+      });
+      this.syncOnlyRegisteredVaults = true;
+      this.persist();
+    },
+    removeSyncVault(id: string) {
+      this.syncVaults = this.syncVaults.filter((v) => v.id !== id);
+      if (this.syncVaults.length === 0) {
+        this.syncOnlyRegisteredVaults = false;
+      }
+      this.persist();
+    },
+    toggleSyncVault(id: string) {
+      const v = this.syncVaults.find((x) => x.id === id);
+      if (v) {
+        v.enabled = !v.enabled;
+        this.persist();
+      }
+    },
+    toggleSyncOnlyRegisteredVaults() {
+      this.syncOnlyRegisteredVaults = !this.syncOnlyRegisteredVaults;
       this.persist();
     },
     togglePreviewFitWidth() {

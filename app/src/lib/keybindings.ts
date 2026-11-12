@@ -127,6 +127,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   // #338 — a note in the folder selected in the file tree (or the selected
   // file's folder).
   { id: 'file.newInFolder', label: 'New Note in Selected Folder', category: 'file', defaults: ['Mod+Alt+Shift+N'] },
+  { id: 'file.newFromTemplate', label: 'New Note from Template…', category: 'file', defaults: [] },
   { id: 'window.new', label: 'New Window', category: 'file', defaults: ['Mod+Shift+N'] },
   { id: 'capture.quick', label: 'Quick Capture…', category: 'file', defaults: [] },
   { id: 'file.open', label: 'Open File…', category: 'file', defaults: ['Mod+O'] },
@@ -146,6 +147,7 @@ export const KEY_ACTIONS: KeyActionDef[] = [
   { id: 'export.pdfPrint', label: 'Print / PDF', category: 'file', defaults: ['Mod+Alt+Shift+P'] },
   { id: 'export.pdf', label: 'Export as PDF (Image)', category: 'file', defaults: [] },
   { id: 'export.image', label: 'Export as Image', category: 'file', defaults: [] },
+  { id: 'export.custom', label: 'Custom / Batch Export…', category: 'file', defaults: [] },
   { id: 'export.copyHtml', label: 'Copy as HTML', category: 'file', defaults: ['Mod+Shift+C'] },
   { id: 'export.copyWord', label: 'Copy as Word', category: 'file', defaults: [] },
   { id: 'export.copyMd', label: 'Copy as Markdown', category: 'file', defaults: ['Mod+Alt+C'] },

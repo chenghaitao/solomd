@@ -573,12 +573,14 @@ const TITLEBAR_TITLE_GAP = 12;
 function measureTitlebarTitle() {
   if (!isTitlebar.value) return;
   const bar = toolbarRef.value;
-  const menu = menubarEl.value;
-  if (!bar || !menu) return;
+  if (!bar) return;
   const barRect = bar.getBoundingClientRect();
   const width = barRect.width;
   if (!width) return;
-  const menuRight = menu.getBoundingClientRect().right - barRect.left;
+  // The menu bar can be hidden (#536 `hideMenuBar`); the title then starts from
+  // the left edge instead of bailing out of the measurement entirely.
+  const menu = menubarEl.value;
+  const menuRight = menu ? menu.getBoundingClientRect().right - barRect.left : 0;
   const controlsLeft = winControlsEl.value
     ? winControlsEl.value.getBoundingClientRect().left - barRect.left
     : width;
@@ -880,7 +882,7 @@ onBeforeUnmount(() => {
     @dblclick="onTitleBarDblClick"
   >
     <span class="titlebar__icon" aria-hidden="true"><BrandMark :size="18" /></span>
-    <nav ref="menubarEl" class="menubar" data-no-drag :aria-label="t('menubar.file')">
+    <nav v-if="!settings.hideMenuBar" ref="menubarEl" class="menubar" data-no-drag :aria-label="t('menubar.file')">
       <button
         v-for="m in menubarTree"
         :key="m.id"
@@ -1090,6 +1092,10 @@ onBeforeUnmount(() => {
             </button>
             <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.exportImage())">
               <span class="dropdown__name">{{ t('toolbar.exportImage') }}</span>
+            </button>
+            <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.openCustomExportDialog())">
+              <span class="dropdown__name">{{ t('toolbar.exportCustom') }}</span>
+              <span v-if="chord('export.custom')" class="dropdown__shortcut">{{ chord('export.custom') }}</span>
             </button>
             <div class="dropdown__sep"></div>
             <button class="dropdown__item dropdown__item--single" role="menuitem" tabindex="-1" @mousedown.prevent="act(() => exporter.copyAsHtml())">
