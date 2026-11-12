@@ -19,6 +19,38 @@
 
 ---
 
+## [5.0.21] — 2026-11-12
+
+### 同步上游 v5.0.19 – v5.0.20（1ea2d4e8，7 个提交）
+
+- **合并**：4 处冲突，合并提交 `cff5c73e`。起点为 5.0.20（`ad51c64d`）；上游这次自己也发到 5.0.20，因此版本号顺延到 **5.0.21**（同号会与上游 release 撞名）。
+- **上游新功能全量接入**：笔记模板系统（`TemplatePickerDialog` + `note-templates.ts`，内置 5 套模板、可读工作区 `templates/`、支持 `{{date}}` / `{{time}}` / `{{title}}` 变量）、自定义与批量导出（`CustomExportDialog` + `useExport` 扩展：整目录保留子目录结构导出 PDF/HTML/DOCX/PNG、记住输出目录、一键打开输出文件夹）、Vault 管理与同步作用域守卫（#531，只对已登记 Vault 自动同步）、Mermaid / PlantUML 源码手动折叠与零跳动标记（#530 / #536）、Windows 实时编辑行号（#532）、表格行高统一（#533）、自定义 CSS 选择器默认指向主题目录（#534）、代码块光标与首行渲染修复（#537）、大纲全部展开 / 折叠（#124）、markdown-it 定义列表（Pandoc / PHP Markdown Extra 风格 `<dl>`）、文件树多选与全库标签重命名、Git 空闲防抖自动提交。
+
+### 关键冲突处理
+
+| 文件 | 处理 |
+| --- | --- |
+| `app/src/lib/markdown.ts` | 两条 block rule 在同一个锚点相撞，**两条都保留**：本地 #500 `table_no_pipe_terminator`（管道表在首个不含 `\|` 的行终止）在前，上游 `deflist` 在后。上游仍未修表格吞段落的问题 |
+| `app/src/components/Editor.vue` | 取上游：表格块范围识别换成 `isTableStartAt` + 分隔行判定，能跨 `\|` 段落继续、遇到新表头即停。本地那份是同一段循环的旧窄版本 |
+| `app/src/components/Toolbar.vue` | 合成：上游 `v-if="!settings.hideMenuBar"` + 本地 `ref="menubarEl"`（标题测量要用）。另把 `measureTitlebarTitle()` 里 `if (!menu) return` 改成隐藏时按左边缘算 —— 否则一开隐藏菜单栏，标题测量每次都直接退出 |
+| `app/src/App.vue` | 保留本地 `androidInsetsCache` + `systemInsetPadding` 视口重叠判定（#479 的本地方案），补上游的一点：旋转会改变状态栏/导航栏自身高度，`orientationchange` 后延迟 150 ms 重新原生读取 insets 再套用 |
+
+### 合并后的契约核对（本轮新增的自动检查）
+
+| 检查 | 结果 |
+| --- | --- |
+| `Settings` 接口字段 vs `defaults()` 字段 | 218 = 218，无缺项 |
+| 前端 `invoke()` 命令 vs `generate_handler!` | 207 条全部已注册，无遗漏 |
+| 15 个语言的 i18n 键 | 全部以 `I18n = typeof en` 约束，`vue-tsc` 0 错误即键齐平 |
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **689/689**（上游带来 8 条新用例）；`vite build` 成功；`cargo check`（`app/src-tauri`、`mcp-server`）均通过。
+
+### 已知小遗留（未在本版改）
+
+- `settings.formatBar`（本地开关）与上游 `showFormattingBar` 仍是两个字段，`defaults()` 分别是 `false` / `true`，`App.vue` 用 `formatBar || showFormattingBar` 判断，新装用户勾选框显示"关"但工具条实际显示。5.0.20 起就是这个状态，属既有问题，留待单独处理。
+
 ## [5.0.20] — 2026-11-11
 
 ### 同步上游 v5.0.15 – v5.0.18（9c6986db，20 个提交）
