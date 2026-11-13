@@ -19,6 +19,30 @@
 
 ---
 
+## [5.0.23] — 2026-11-13
+
+### 本地修复
+
+| issue | 现象 | 处理 |
+| --- | --- | --- |
+| #556 / #557 | 打开「仅收件箱」或按扩展名筛选后，右键重命名 / 新建的输入框跳到侧栏最上方，而不是停在被点的那一行 | `editInTree` 不再因为筛选器存在就无条件退回树顶，只判断目标节点是否还存在、父目录是否已展开；新增 `editingFallbackTop` 作为「树里确实渲染不出编辑行」时的显式兜底；三处启动编辑合并为 `focusInlineEdit()`（等渲染完再聚焦、保留 `preventScroll`） |
+| #559 | `<details>` 折叠块内部的空行被当成块边界，整段切成 7 个碎片块：渲染出空的 ▶、图表跑到框外、点开后整块变成源码 | `splitPlainMarkdownBlocks` 抽到 `lib/plain-blocks.ts` 并新增 raw HTML 容器分支（`findHtmlBlockEnd` 命中即整段一块，未闭合才落回原规则）；`activatePlainBlockFromClick` 忽略 summary 上的点击且不拦默认行为；CodeMirror 侧 `HtmlBlockWidget` 接管 summary 的 mousedown / click 自行翻转并 `scheduleRelayout()`，`ignoreEvent` 对其返回 true |
+| #558 | 助手面板把回答当纯文本，`**加粗**`、`### 标题`、代码块原样露出符号 | 改走编辑器同一套管线：`renderMarkdown` → `sanitizeRenderedHtml` → `v-html`，结果按内容 LRU 缓存 40 条；点击统一委托，`.md-wikilink` 库里跳转、其余走 `openRenderedLink` |
+| #560 | pandoc 导出（DOCX / ODT / LaTeX）里相对路径的图片整片消失，命令却返回成功、没有任何提示 | 新增 `lib/pandoc-resource-paths.ts`：笔记目录在前、库根在后，去重并跳过 SAF / `content://`；`pandoc.rs` 用 `std::env::join_paths` 拼 `--resource-path=`，空列表不加该参数 |
+| #561 | Windows plain block 编辑器里，图片块点进去跳一次、退出来再跳一次，块高 297 ↔ 29 来回弹 | `isStandaloneImageLine()` 标记「整行只有一个图片引用」的块；这类块激活时在 textarea 下方继续显示图片，未激活时在图片上方画源码行，盒模型（padding / 字体 / 行高 / `white-space: pre`）与 textarea 逐项对齐 |
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **724/724**（新增 13 条：#559 5 条、#560 5 条、#561 3 条）；`vite build` 成功；`cargo check` 通过。
+- 逐项在真实 Tauri dev 窗口验证：
+  - **#559**：plain 引擎 `open:false / h:29` → 点击 `open:true / h:282`（mermaid 出图、块未变 textarea）→ 再点回 29；CodeMirror 引擎 `h:48` → `h:224` → `48`，`sourceVisible` 全程 false；两套引擎点正文都仍正常揭示源码。
+  - **#558**：用火山方舟 `doubao-seed-2-1-pro-260915` 实跑，回答渲染出 `h3×1 / ul×1 / strong×1 / pre×1`；末位篡改密钥后 401 全文 207 字符完整显示，窄容器下 `scrollWidth == clientWidth` 无溢出。
+  - **#561**：图片块高度 297 → 301（单次极小差值），图片 `height` 恒为 256，不再是两次大跳。
+  - **#556 / #557**：筛选器开启时编辑行停在目标行（实测 157px / 241px 缩进），不再回树顶。
+- 按 issue 拆分提交：#556/#557、#558、#560、#561、本 CHANGELOG 与版本号各自独立。
+
+---
+
 ## [5.0.22] — 2026-11-13
 
 ### 同步上游至 4b50586d（13 个提交）
