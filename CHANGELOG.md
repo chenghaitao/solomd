@@ -19,12 +19,11 @@
 
 ---
 
-## [未发布] — 2026-11-13（工作区改动，未提交）
+## [5.0.22] — 2026-11-13
 
 ### 同步上游至 4b50586d（13 个提交）
 
-- 用 `git merge --no-commit --no-ff upstream/main` 把上游改动放进工作区，解完冲突后
-  `git reset` 清掉 MERGE_HEAD，**HEAD 保持在 7c4e7a40，未产生任何提交**。
+- 合并提交 `Merge upstream/main (13 commits): v5.0.20–v5.0.21`，上游 tip `4b50586d`。
 - **3 处冲突**，沿用 5.0.21 的处理原则（保留 fork 自有实现 + 补上游新增）：
   | 文件 | 处理 |
   | --- | --- |
@@ -47,8 +46,8 @@
 
 ### 验证
 
-- `vue-tsc --noEmit` 0 错误；`node:test` **711/711**（新增 6 条：#554 3 条、#553 DOCX 模板 3 条）；`vite build` 成功。
-- 未执行任何 `git commit`，所有改动留在工作区。
+- `vue-tsc --noEmit` 0 错误；`node:test` **711/711**（新增 6 条：#554 3 条、#553 DOCX 模板 3 条）；`vite build` 成功；`cargo check`（`app/src-tauri`、`mcp-server`）通过。
+- 按 issue 拆分提交：上游合并 1 个 + 本地修复 6 个 + CHANGELOG / 版本号各 1 个。
 
 ---
 
