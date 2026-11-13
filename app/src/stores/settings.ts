@@ -494,6 +494,10 @@ interface Settings {
   // academic) a Word export starts from. A per-document `docx:` front-matter
   // block overrides individual keys, the same way `pdf:` does.
   docxPreset: 'plain' | 'report' | 'academic';
+  // #553 — Optional user-supplied .docx used as a Word "reference doc".
+  // Its styles / theme / page setup are merged into every generated DOCX.
+  // Empty means the built-in presets alone decide the look.
+  docxReferenceDoc: string;
   // #503 — Optional default export directory. When empty, exports default to
   // the current note's own directory (#260).
   defaultExportDir: string;
@@ -992,6 +996,7 @@ function defaults(): Settings {
     quickCaptureEnabled: true,
     quickCaptureShortcut: QUICK_CAPTURE_DEFAULT_SHORTCUT,
     docxPreset: 'plain',
+    docxReferenceDoc: '',
     printTheme: 'light',
     foldingEnabled: true,
     codeBlockLineNumbers: false,
@@ -2048,6 +2053,11 @@ export const useSettingsStore = defineStore('settings', {
     },
     setDocxPreset(preset: 'plain' | 'report' | 'academic') {
       this.docxPreset = preset;
+      this.persist();
+    },
+    /** #553 — path to a .docx whose styles should be reused on Word exports. */
+    setDocxReferenceDoc(path: string) {
+      this.docxReferenceDoc = path.trim();
       this.persist();
     },
     setPrintTheme(mode: 'light' | 'dark' | 'follow') {
