@@ -5,11 +5,9 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { DsModal } from '../ui';
 import BrandMark from './BrandMark.vue';
 import Icons from './Icons.vue';
-import SupportDialog from './SupportDialog.vue';
 import { useI18n } from '../i18n';
 import {
   supporterRecord,
-  iapUseStoreFlow,
   badgeInfo,
   initSupporterState,
 } from '../lib/supporter';
@@ -20,7 +18,6 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 const { lang } = useI18n();
 const isZh = computed(() => String(lang.value || '').startsWith('zh'));
 
-const supportOpen = ref(false);
 const activeBadge = computed(() => badgeInfo(supporterRecord.value.active, isZh.value));
 
 const VERSION = ref('…');
@@ -74,7 +71,6 @@ const links = {
   // site serves mainland users (Cloudflare edge + Gitee mirror links) where
   // github.com often doesn't resolve. Same policy as the update toast (#154).
   releases: 'https://solomd.app/whats-new',
-  sponsor: 'https://solomd.app/#sponsor',
 };
 
 // NOTE: this function intentionally is NOT named `open` because that
@@ -107,15 +103,13 @@ async function visit(url: string) {
       <h2 class="about__name">SoloMD</h2>
       <div class="about__version-row">
         <span class="about__version">v{{ VERSION }}</span>
-        <button
+        <span
           v-if="activeBadge"
-          type="button"
           class="about__supporter-badge"
-          @click="supportOpen = true"
         >
           <span>{{ activeBadge.icon }}</span>
           <span>{{ activeBadge.label }}</span>
-        </button>
+        </span>
       </div>
 
       <p class="about__tagline">
@@ -153,22 +147,6 @@ async function visit(url: string) {
           </div>
           <Icons class="about__link-chev" name="chevron-right" :size="14" />
         </button>
-        <button class="about__link" @click="supportOpen = true">
-          <Icons class="about__link-icon" name="heart" :size="16" />
-          <div>
-            <div class="about__link-title">Support / 支持开发者</div>
-            <div class="about__link-url">
-              {{
-                activeBadge
-                  ? `${activeBadge.icon} ${activeBadge.label}`
-                  : iapUseStoreFlow
-                    ? '☕ · 🍜 · 🚀 · 点亮支持者徽章'
-                    : 'GitHub · Alipay · WeChat · 支持者徽章'
-              }}
-            </div>
-          </div>
-          <Icons class="about__link-chev" name="chevron-right" :size="14" />
-        </button>
       </div>
 
       <div v-if="sponsors.length" class="about__sponsors">
@@ -186,7 +164,6 @@ async function visit(url: string) {
       </div>
     </div>
   </DsModal>
-  <SupportDialog :open="supportOpen" @close="supportOpen = false" />
 </template>
 
 <style scoped>
@@ -240,7 +217,6 @@ async function visit(url: string) {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
-  cursor: pointer;
 }
 .about__supporter-badge--super {
   color: #d97706;
