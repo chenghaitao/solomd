@@ -293,10 +293,6 @@ export interface PdfOutlineHeading {
   pageNumber: number;
 }
 
-export interface JsPdfOutlineLike {
-  add(parent: unknown, title: string, options: { pageNumber: number }): unknown;
-}
-
 /**
  * #515 — Map a heading's raster Y coordinate to a 1-based PDF page number.
  * When `buildPagedCanvas` re-paginated the raster, `breaks` holds the ascending
@@ -320,6 +316,63 @@ export function rasterRowToPageNumber(
   return 1;
 }
 
+export interface JsPdfOutlineLike {
+  add(parent: unknown, title: string, options: { pageNumber: number }): unknown;
+  /**
+   * #563 — jsPDF renders each `/Title` through this hook. Optional because the
+   * unit tests hand in plain mocks; `patchOutlineTitleEncoding()` only acts
+   * when the real jsPDF method is there.
+   */
+  makeString?(val: string): string;
+}
+
+/**
+ * #563 — jsPDF writes a bookmark title as a *literal* string:
+ *
+ *     /Title (pdfEscape(title))
+ *
+ * By then `to8bitStream()` has recast the title as UTF-16BE bytes (BOM
+ * included), and `pdfEscape()` only escapes `\`, `(` and `)` — it leaves 0x0D
+ * alone. A bare CR inside a literal string is an end-of-line marker, which a
+ * reader must read back as 0x0A (ISO 32000-1, 7.3.4.2), so every character
+ * whose low byte is 0x0D comes back 3 lower: 名 U+540D arrives as 吊 U+540A
+ * and 不 U+4E0D as 上 U+4E0A.
+ *
+ * Encoding the title as a hex string (`<FEFF…>`) takes the escape rules out of
+ * play: every byte is a hex digit, and no hex digit can be mistaken for a
+ * delimiter or an EOL marker.
+ */
+export function utf16BeHexString(text: string): string {
+  let hex = 'FEFF';
+  for (let i = 0; i < text.length; i++) {
+    // charCodeAt yields the UTF-16 code unit, and surrogate pairs are exactly
+    // what UTF-16BE wants, so no codePointAt gymnastics are needed here.
+    hex += text.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0');
+  }
+  return `<${hex}>`;
+}
+
+const HEX_TITLES_PATCHED = Symbol.for('solomd.pdfOutlineHexTitles');
+
+type PatchableOutline = JsPdfOutlineLike & { [HEX_TITLES_PATCHED]?: boolean };
+
+/**
+ * #563 — Swap the document's `makeString` for one that emits a UTF-16BE hex
+ * string as soon as the title leaves printable ASCII. Latin-only titles keep
+ * the original path, so documents without CJK are byte-for-byte unchanged.
+ */
+export function patchOutlineTitleEncoding(
+  outline: JsPdfOutlineLike | null | undefined,
+): void {
+  if (!outline || typeof outline.makeString !== 'function') return;
+  const target = outline as PatchableOutline;
+  if (target[HEX_TITLES_PATCHED]) return;
+  const original = outline.makeString.bind(outline);
+  target.makeString = (val: string) =>
+    /[^\x20-\x7E]/.test(val) ? utf16BeHexString(val) : original(val);
+  target[HEX_TITLES_PATCHED] = true;
+}
+
 /**
  * #515 — Populate jsPDF's document outline (PDF left-sidebar bookmarks) with a
  * properly nested H1–H6 hierarchy so PDF readers show a collapsible TOC tree.
@@ -329,6 +382,7 @@ export function populatePdfOutline(
   headings: PdfOutlineHeading[],
 ): void {
   if (!outline || typeof outline.add !== 'function' || !headings.length) return;
+  patchOutlineTitleEncoding(outline);
   const stack: Array<{ level: number; node: unknown }> = [];
   for (const h of headings) {
     const title = h.text.replace(/\s+/g, ' ').trim();
