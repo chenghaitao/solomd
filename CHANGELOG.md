@@ -19,6 +19,39 @@
 
 ---
 
+## [未发布] — 2026-11-13（工作区改动，未提交）
+
+### 同步上游至 4b50586d（13 个提交）
+
+- 用 `git merge --no-commit --no-ff upstream/main` 把上游改动放进工作区，解完冲突后
+  `git reset` 清掉 MERGE_HEAD，**HEAD 保持在 7c4e7a40，未产生任何提交**。
+- **3 处冲突**，沿用 5.0.21 的处理原则（保留 fork 自有实现 + 补上游新增）：
+  | 文件 | 处理 |
+  | --- | --- |
+  | `app/src/lib/markdown.ts` | 保留 fork 的 `.ts` 后缀导入，补上游 `renderMarkmapSvg` / `renderExcalidrawSvg`（Markmap / Excalidraw 代码块） |
+  | `app/src/components/Editor.vue` | 取上游：删掉已不再使用的 `readText` 导入和重复的 `list-continuation` 导入；保留 fork 前置那条带 `ListContinuationOptions` 的导入 |
+  | `app/src/App.vue` | 保留 fork 的 `androidInsetsCache` / `systemInsetPadding`（#479 重叠判定），补上游 `mobileHideStatusBar` 监听：隐藏状态栏时顶部 padding 归零 |
+- 上游新增内容全量接入：Excalidraw / Markmap / TextPack / vimrc / 虚拟工作区别名（#205）、
+  Pure Black OLED Soft 主题、遥测开关、导出与粘贴修复（#539–#547 等）、5.0.21 各语言发布说明。
+
+### 本轮本地修复与优化
+
+| 项 | 改动 |
+| --- | --- |
+| 文件树重命名窄侧栏顶格 | `startRename` / `startNewFile` / `startNewFolder` 改用 `focus({ preventScroll: true })`；编辑行 `position: sticky; left: 0` 保留缩进；去掉 `.ftree__body` / `.sb__scroll` 上的 `scrollbar-width/color`（它们会让 WebView2 关掉全站 `::-webkit-scrollbar` 规则，横向滚动条因此不可见） |
+| #555 同步页签顺序 | `syncBranches` 把「笔记库管理」移到最前，Git 同步及其他同步动作随其后；默认选中项不变 |
+| #551 拖选文本误关窗口 | 自定义导出弹窗与 `DsModal` 的 backdrop 关闭改为要求 `pointerdown` / `pointerup` / `click` 三者都落在背景上，避免从输入框拖到窗口外时合成 click 关窗 |
+| #553 导出增强 | 导出成功 toast 增加「打开所在文件夹 / 打开输出目录」按钮（toast 支持多动作）；新增全局设置 `docxReferenceDoc`，Word 导出可套用自有 .docx 的字体、标题/正文样式、主题与页面尺寸页边距 |
+| #554 导出源路径联动导航树 | `sourceFolderFor()` 读取 `treeSelection()`：选中文件夹取其路径，选中文件取其父目录；打开自定义导出窗口时自动填入，仍可手动浏览覆盖 |
+| AI 改写密钥状态显示 | 「未设置密钥」徽章在窄面板被挤成一字一行：徽章改为 `flex: 0 0 auto` + `nowrap`；验证失败的报错是整段无空格的 JSON / URL，改为 `overflow-wrap: anywhere` 换行显示全文；状态行 `flex-wrap` 让报错在窄栏另起一行 |
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **711/711**（新增 6 条：#554 3 条、#553 DOCX 模板 3 条）；`vite build` 成功。
+- 未执行任何 `git commit`，所有改动留在工作区。
+
+---
+
 ## [5.0.21] — 2026-11-12
 
 ### 同步上游 v5.0.19 – v5.0.20（1ea2d4e8，7 个提交）
