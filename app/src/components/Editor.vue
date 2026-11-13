@@ -76,7 +76,7 @@ import {
 import { HEADER_ROW, commonIndent } from '../lib/table-cell-edit';
 import { findTldrawFences, replaceBoardSnapshot } from '../lib/tldraw-board';
 import { dragAwareExtension } from '../lib/cm-drag-aware';
-import { imagePasteExtension, insertImageFromPath as cmInsertImageFromPath, imageTextFromPath, handleTextareaImagePaste, type ImagePasteOptions } from '../lib/cm-image-paste';
+import { imagePasteExtension, insertImageFromPath as cmInsertImageFromPath, imageTextFromPath, handleTextareaImagePaste, getPlainTextFromClipboardData, readClipboardTextFallback, type ImagePasteOptions } from '../lib/cm-image-paste';
 import { markdownImage, encodeImageDestination, resizeMarkdownImageLine } from '../lib/md-image-url';
 import { resolveUploader, uploadImage, type ImageUploadSettings } from '../lib/image-upload';
 import { focusModeExtension, typewriterModeExtension } from '../lib/cm-focus-mode';
@@ -85,6 +85,8 @@ import { tagAutocompleteExtension, tagComplete } from '../lib/cm-tag-autocomplet
 import { citationsExtension, citationCompleteSource } from '../lib/cm-citations';
 import { autocompletion } from '@codemirror/autocomplete';
 import { aiRewriteExtension } from '../lib/cm-ai-rewrite';
+import { applyVimrcMappings } from '../lib/vimrc';
+import { invoke } from '@tauri-apps/api/core';
 import { cmKeyOwnedByApp, combosFor, toCodeMirrorKey, eventToCombo, resolveBindings } from '../lib/keybindings';
 import {
   docParagraphStarts,
@@ -128,7 +130,7 @@ import { lineContext, nextHeadingKind, type Box } from '../lib/selection-bubble'
 import EditorContextMenu, { type EditorMenuAction, type EditorMenuSpell } from './EditorContextMenu.vue';
 import { lookupMisspelling, addToSpellDict } from '../lib/spell-suggest';
 import { copyImageElement } from '../lib/image-clipboard';
-import { readText as readClipboardTextPlugin, writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
+import { writeText as writeClipboardTextPlugin } from '@tauri-apps/plugin-clipboard-manager';
 import { mapPos, renumberAfterEdit, renumberChanges } from '../lib/list-renumber';
 import { findMarkdownLinkAt, openMarkdownHref, openRenderedLink } from '../lib/link-open';
 
@@ -430,8 +432,27 @@ async function syncSystemClipboardToVimRegister() {
 // declines keys it has no mapping for (Enter, Tab, Mod-*), so list
 // continuation, indentation, autocomplete and app shortcuts still run.
 function vimExtension() {
+  applyVimrcMappings(settings.vimrc, Vim as any);
+  let lastInsertMode: boolean | null = null;
   return [
     Prec.highest(vim()),
+    EditorView.updateListener.of((u) => {
+      if (!settings.vimAutoSwitchIm || !('__TAURI_INTERNALS__' in window)) return;
+      const cm = getCM(u.view) as { state?: { vim?: { insertMode?: boolean } } } | null;
+      if (!cm?.state?.vim) return;
+      const isInsert = Boolean(cm.state.vim.insertMode);
+      if (lastInsertMode === null) {
+        lastInsertMode = isInsert;
+        if (!isInsert) {
+          void invoke('vim_switch_input_method', { mode: 'normal' }).catch(() => {});
+        }
+        return;
+      }
+      if (isInsert !== lastInsertMode) {
+        lastInsertMode = isInsert;
+        void invoke('vim_switch_input_method', { mode: isInsert ? 'insert' : 'normal' }).catch(() => {});
+      }
+    }),
     EditorView.domEventHandlers({
       keydown(e, v) {
         const cm = getCM(v) as { state?: { vim?: { insertMode?: boolean } } } | null;
@@ -1267,7 +1288,7 @@ function splitPlainMarkdownBlocks(
   };
   const kindFor = (line: { text: string }) => {
     const text = line.text;
-    const trimmed = text.trim();
+    const trimmed = text.replace(/^[ \t]+|[ \t]+$/g, '');
     if (trimmed === '') return 'blank';
     if (/^(```|~~~)/.test(trimmed)) return 'fence';
     // #250 — a `$$` block is one block, like a code fence. Without this the
@@ -1281,13 +1302,16 @@ function splitPlainMarkdownBlocks(
     ) {
       return 'mathfence';
     }
-    if (/^#{1,6}\s+/.test(trimmed)) return 'heading';
-    if (/^(---|\*\*\*|___)\s*$/.test(trimmed)) return 'thematic';
-    if (/^\s{0,3}>\s?/.test(text)) return 'quote';
-    if (/^\s{0,3}([-+*]|\d+[.)])\s+/.test(text)) return 'list';
-    if (/^\s{0,3}([-*])\s+\[[ xX]\]\s+/.test(text)) return 'list';
-    if (/^\s{0,3}\|.*\|\s*$/.test(text)) return 'table';
-    if (/^\s{4,}\S/.test(text)) return 'indented';
+    if (/^#{1,6}[ \t\u3000]+/.test(trimmed)) return 'heading';
+    if (/^(---|\*\*\*|___)[ \t]*$/.test(trimmed)) return 'thematic';
+    if (/^[ \t]{0,3}>[ \t]?/.test(text)) return 'quote';
+    if (/^[ \t]{0,3}([-+*]|\d+[.)])[ \t\u3000]+/.test(text)) return 'list';
+    if (/^[ \t]{0,3}([-*])[ \t]+\[[ xX]\][ \t\u3000]+/.test(text)) return 'list';
+    if (/^[ \t]{0,3}\|.*\|[ \t]*$/.test(text)) return 'table';
+    // #546 — Only ASCII spaces (4+) or tabs form an indented code block.
+    // Full-width ideographic spaces (`\u3000`, `　　　　李玲：...`) are CJK
+    // paragraph/script indentation and must remain in the paragraph block.
+    if (/^(?: {4,}|\t+)\S/.test(text)) return 'indented';
     return 'paragraph';
   };
 
@@ -1856,7 +1880,7 @@ function handlePlainPaste(event: ClipboardEvent) {
       it.type.startsWith('image/'),
     );
     if (!hasImage) {
-      const raw = event.clipboardData.getData('text/plain');
+      const raw = getPlainTextFromClipboardData(event.clipboardData);
       const el = event.currentTarget as HTMLTextAreaElement | null;
       if (raw && el) {
         const from = el.selectionStart ?? 0;
@@ -4262,15 +4286,7 @@ async function writeClipboard(text: string) {
   }
 }
 async function readClipboard(): Promise<string> {
-  try {
-    return (await readClipboardTextPlugin()) ?? '';
-  } catch {
-    try {
-      return (await navigator.clipboard?.readText()) ?? '';
-    } catch {
-      return '';
-    }
-  }
+  return await readClipboardTextFallback();
 }
 
 function onEditorMenuResizeImage(size: string) {
@@ -6393,6 +6409,15 @@ watch(
   () => settings.vimMode,
   (v) => {
     view?.dispatch({ effects: vimCompartment.reconfigure(v ? vimExtension() : []) });
+  }
+);
+
+watch(
+  () => settings.vimrc,
+  (rc) => {
+    if (settings.vimMode) {
+      applyVimrcMappings(rc, Vim as any);
+    }
   }
 );
 

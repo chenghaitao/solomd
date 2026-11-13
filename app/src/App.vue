@@ -1323,7 +1323,9 @@ function applyAndroidInsets(insets: SystemInsetsPx = androidInsetsCache) {
     window.devicePixelRatio || 1,
   );
   const root = document.documentElement;
-  root.style.setProperty('--android-safe-top', `${pad.top}px`);
+  // Upstream 5.0.21: hiding the status bar means no top inset is needed.
+  const top = settings.mobileHideStatusBar ? 0 : pad.top;
+  root.style.setProperty('--android-safe-top', `${top}px`);
   root.style.setProperty('--android-safe-bottom', `${pad.bottom}px`);
 }
 
@@ -1371,6 +1373,10 @@ onMounted(async () => {
       window.addEventListener('orientationchange', () => {
         setTimeout(() => void remeasure(), 150);
       });
+      // Upstream 5.0.21: the "hide status bar" toggle changes the top padding
+      // without any resize/rotation, so re-apply the cached insets on change.
+      // Keeps the fork's #479 overlap detection (systemInsetPadding) intact.
+      watch(() => settings.mobileHideStatusBar, () => applyAndroidInsets());
     } catch (e) {
       console.warn('android_system_insets failed', e);
     }

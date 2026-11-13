@@ -13,6 +13,8 @@ import yaml from 'js-yaml';
 import { numberEquations } from './equations.ts';
 import { parseImageAltSize } from './md-image-url.ts';
 import { sanitizeRenderedHtml } from './sanitize-html.ts';
+import { renderMarkmapSvg } from './markmap-render.ts';
+import { renderExcalidrawSvg } from './excalidraw.ts';
 import { getHljs, getKatex } from './render-deps.ts';
 import {
   parseOutlineSegments,
@@ -160,6 +162,28 @@ md.validateLink = (url: string): boolean => {
 const tableBlockRule = (md.block.ruler as any).__rules__?.find((r: any) => r.name === 'table');
 if (tableBlockRule) {
   tableBlockRule.alt = ['paragraph', 'reference', 'blockquote', 'list'];
+}
+
+// #546 — Preserve full-width ideographic spaces (`\u3000`, `　`) at the start
+// and end of paragraphs. Stock markdown-it calls `.trim()` on paragraph content,
+// which in JavaScript strips all Unicode whitespace including `U+3000`, eating
+// CJK first-line / dialogue indentation (`　　　　李玲：...`). CommonMark §2.1
+// only trims ASCII spaces/tabs (`U+0020` / `U+0009`).
+const origParagraphRule = (md.block.ruler as any).__rules__?.find((r: any) => r.name === 'paragraph')?.fn;
+if (origParagraphRule) {
+  md.block.ruler.at('paragraph', (state, startLine, endLine, silent) => {
+    const blkIndent = state.blkIndent;
+    const ok = origParagraphRule(state, startLine, endLine, silent);
+    if (ok && !silent) {
+      const tok = state.tokens[state.tokens.length - 2];
+      if (tok && tok.type === 'inline') {
+        tok.content = state
+          .getLines(startLine, state.line, blkIndent, false)
+          .replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+      }
+    }
+    return ok;
+  });
 }
 (md.block.ruler as any).__cache__ = null;
 
@@ -604,6 +628,7 @@ function isValidFenceInfoString(rawInfo: string): boolean {
   const firstWord = trimmed.split(/\s+/)[0].toLowerCase();
   if (
     firstWord === 'mermaid' ||
+    firstWord === 'markmap' ||
     firstWord === 'tldraw' ||
     firstWord === 'plantuml' ||
     firstWord === 'puml'
@@ -640,6 +665,16 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   // post-processor can find it).
   const info = (tok.info || '').trim().toLowerCase();
   const lang = info.split(/\s+/)[0];
+  if (!treatInfoAsCodeLine && (lang === 'markmap' || lang === 'mm')) {
+    const line = tok.map && tok.map.length > 0 ? tok.map[0] + 1 : 0;
+    const lineAttr = line ? ` data-source-line="${line}"` : '';
+    return `<div class="markmap-block"${lineAttr}>${renderMarkmapSvg(origContent)}</div>\n`;
+  }
+  if (!treatInfoAsCodeLine && lang === 'excalidraw') {
+    const line = tok.map && tok.map.length > 0 ? tok.map[0] + 1 : 0;
+    const lineAttr = line ? ` data-source-line="${line}"` : '';
+    return `<div class="excalidraw-block"${lineAttr}>${renderExcalidrawSvg(origContent)}</div>\n`;
+  }
   if (!treatInfoAsCodeLine && (lang === 'mermaid' || lang === 'tldraw')) return html;
   // Inject .cb-line wrappers on each line. We do this on the rendered HTML
   // because the highlight has already produced <span class="hljs-..."> spans
@@ -1384,10 +1419,10 @@ function normalizeListIndent(source: string): string {
   let fenceChar = '';
   let curDelta = 0;
   let curOrig = -1;
-  const markRe = /^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/;
-  const noSpaceOrderedRe = /^(\s*)(\d{1,3}[.)])([^\s\d.)].*)$/;
+  const markRe = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)(.*)$/;
+  const noSpaceOrderedRe = /^([ \t]*)(\d{1,3}[.)])([^\s\d.)].*)$/;
   const cjkLeadRe = /^[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef“”‘’（【《「『]/;
-  const fenceRe = /^(\s*)(```+|~~~+)/;
+  const fenceRe = /^([ \t]*)(```+|~~~+)/;
   const hasAdjacentListLine = (idx: number): boolean => {
     for (let j = idx + 1; j < lines.length; j++) {
       const next = lines[j];
@@ -1452,10 +1487,10 @@ function normalizeListIndent(source: string): string {
       curDelta = norm - orig;
       curOrig = orig;
       out.push(' '.repeat(norm) + m[2] + m[3] + m[4]);
-    } else if (line.trim() === '') {
+    } else if (line.replace(/^[ \t]+|[ \t]+$/g, '') === '') {
       out.push(line);
     } else {
-      const leadWs = (line.match(/^\s*/) as RegExpMatchArray)[0];
+      const leadWs = (line.match(/^[ \t]*/) as RegExpMatchArray)[0];
       const lead = expand(leadWs);
       if (stack.length && curOrig >= 0 && lead >= curOrig) {
         const top = stack[stack.length - 1];
@@ -1954,4 +1989,49 @@ export function extractOutline(source: string): OutlineItem[] {
     }
   }
   return items;
+}
+
+/**
+ * #418 — Reorder a Markdown heading section (from `sourceHeadingLine` up to the
+ * next heading of equal or higher rank) before or after `targetHeadingLine`'s
+ * section.
+ */
+export function reorderMarkdownHeadingSection(
+  source: string,
+  sourceHeadingLine: number,
+  targetHeadingLine: number,
+  position: 'before' | 'after' = 'before',
+): string {
+  if (!source || sourceHeadingLine === targetHeadingLine) return source;
+  const outline = extractOutline(source);
+  const srcIdx = outline.findIndex((h) => h.line === sourceHeadingLine);
+  const dstIdx = outline.findIndex((h) => h.line === targetHeadingLine);
+  if (srcIdx < 0 || dstIdx < 0) return source;
+
+  const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  const sectionRange = (idx: number): [number, number] => {
+    const h = outline[idx];
+    const start = h.line - 1;
+    let end = lines.length;
+    for (let j = idx + 1; j < outline.length; j++) {
+      if (outline[j].level <= h.level) {
+        end = outline[j].line - 1;
+        break;
+      }
+    }
+    return [start, end];
+  };
+
+  const [srcStart, srcEnd] = sectionRange(srcIdx);
+  const [dstStart, dstEnd] = sectionRange(dstIdx);
+  const insertAt = position === 'before' ? dstStart : dstEnd;
+  if (insertAt >= srcStart && insertAt <= srcEnd) {
+    return source;
+  }
+
+  const moved = lines.slice(srcStart, srcEnd);
+  const remaining = [...lines.slice(0, srcStart), ...lines.slice(srcEnd)];
+  const adjustedInsert = insertAt > srcStart ? insertAt - (srcEnd - srcStart) : insertAt;
+  remaining.splice(adjustedInsert, 0, ...moved);
+  return remaining.join('\n');
 }
