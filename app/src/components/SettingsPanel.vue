@@ -1538,6 +1538,14 @@ function onSelectPdfFont(v: string) {
 
         <section data-cat="basics">
           <label>
+            <input type="checkbox" :checked="settings.showPdfPageBreaks" @change="settings.toggleShowPdfPageBreaks()" />
+            {{ t('settings.showPdfPageBreaks') }}
+          </label>
+          <div class="hint">{{ t('settings.showPdfPageBreaksHint') }}</div>
+        </section>
+
+        <section data-cat="basics">
+          <label>
             <input type="checkbox" :checked="settings.showOutline" @change="onToggleOutlineGlobal()" />
             {{ t('settings.showOutline') }}
           </label>
@@ -2121,6 +2129,14 @@ function onSelectPdfFont(v: string) {
         </section>
 
         <section data-cat="export">
+          <label>
+            <input type="checkbox" :checked="settings.showPdfPageBreaks" @change="settings.toggleShowPdfPageBreaks()" />
+            {{ t('settings.showPdfPageBreaks') }}
+          </label>
+          <p class="setting-hint">{{ t('settings.showPdfPageBreaksHint') }}</p>
+        </section>
+
+        <section data-cat="export">
           <label>{{ t('settings.pdfDefaults.pageSize') }}</label>
           <select
             :value="settings.pdfDefaults.pageSize"
@@ -2281,6 +2297,22 @@ function onSelectPdfFont(v: string) {
             <option value="dark">{{ t('settings.pdfDefaults.codeThemeDark') }}</option>
           </select>
           <p class="setting-hint">{{ t('settings.pdfDefaults.frontmatterHint') }}</p>
+        </section>
+
+        <section data-cat="export">
+          <label>
+            <input
+              type="checkbox"
+              :checked="settings.exportHtmlWithNav"
+              @change="settings.toggleExportHtmlWithNav()"
+            />
+            {{ isZhLocale ? '导出 HTML 文件带导航栏与全局搜索' : 'Include navigation & global search sidebar in exported HTML' }}
+          </label>
+          <p class="setting-hint">
+            {{ isZhLocale
+              ? '开启后，通过「文件 → 导出 → 导出为 HTML…」或「自定义导出」生成的单文件 HTML 会附带左侧多标签页「导航栏（书签树）」与「全局搜索」面板。'
+              : 'Adds a left multi-tab sidebar with a hierarchical bookmark tree and offline full-text search to standalone HTML exports.' }}
+          </p>
         </section>
 
         <section data-cat="export">

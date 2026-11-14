@@ -4,7 +4,7 @@ import App from './App.vue';
 import { followHtmlLang, isLang, loadLocale } from './i18n';
 import { useSettingsStore } from './stores/settings';
 import { reanchorIosContainerPaths } from './lib/ios-container';
-import { isMobile, isWindowsDesktop } from './lib/platform';
+import { isIOS, isMobile, isWindowsDesktop } from './lib/platform';
 import { installNativeMenuGuard } from './lib/native-menu-guard';
 import { preloadRenderDeps } from './lib/render-deps';
 import './styles/cjk-font.css';
@@ -59,25 +59,30 @@ async function readWebviewVersion(): Promise<void> {
   if (v) (window as unknown as { __SOLOMD_WEBVIEW_VERSION__?: string }).__SOLOMD_WEBVIEW_VERSION__ = v;
 }
 
-// iOS: point stored paths at the current app container before any store reads
-// them (lib/ios-container). Windows: the WebView2 version has to be known
-// before Editor.vue picks an engine. Both are bounded, and the locale chunk is
-// awaited as well, so a slow API never blocks launch — an unknown WebView2
-// version just means the native textarea.
-void Promise.all([
-  Promise.race([
-    Promise.all([
-      reanchorIosContainerPaths().catch(() => {}),
-      readWebviewVersion().catch(() => {}),
-    ]),
-    new Promise((r) => setTimeout(r, 1500)),
-  ]),
-  loadLocale(isLang(settings.language) ? settings.language : 'en').catch(() => {}),
-]).finally(() => {
+function mountApp(): void {
   app.mount('#app');
   // KaTeX + highlight.js are their own chunks (lib/render-deps.ts): fetch and
   // compile them once the first frame is up, so they are almost always ready
   // before a formula or code fence is on screen. The capture box never
   // renders markdown; the slideshow awaits them itself.
   if (rootComponent === App) preloadRenderDeps();
-});
+}
+
+// iOS: point stored paths at the current app container before any store reads
+// them (lib/ios-container). Windows: read WebView2 version before Editor.vue
+// picks an engine. Android/macOS/Linux need neither, so mount synchronously on
+// the very first tick (#550).
+if (isIOS() || isWindowsDesktop()) {
+  void Promise.race([
+    Promise.all([
+      reanchorIosContainerPaths().catch(() => {}),
+      readWebviewVersion().catch(() => {}),
+      // fork: load the language chunk before the first mount (bounded by the
+      // same 1500ms race), so Windows/iOS never flash the default locale.
+      loadLocale(isLang(settings.language) ? settings.language : 'en').catch(() => {}),
+    ]),
+    new Promise((r) => setTimeout(r, 1500)),
+  ]).then(mountApp);
+} else {
+  mountApp();
+}

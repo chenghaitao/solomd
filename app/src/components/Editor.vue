@@ -62,6 +62,7 @@ import { useToastsStore } from '../stores/toasts';
 import type { Tab } from '../types';
 import { livePreviewExtension, richHighlightOnly } from '../lib/cm-live-preview';
 import { liveEditExtension, setLiveEditCopyLabel } from '../lib/cm-live-render';
+import { pdfPageBreaksExtension } from '../lib/pdf-page-breaks';
 import {
   liveBlocksExtension,
   liveBlocksTheme,
@@ -329,6 +330,7 @@ const typewriterCompartment = new Compartment();
 const vimCompartment = new Compartment();
 const slashCompartment = new Compartment();
 const foldCompartment = new Compartment();
+const pdfPageBreaksCompartment = new Compartment();
 
 // #222 — Vim's `:w` / `:wq` / `:q` were dead: @replit/codemirror-vim ships no
 // Ex-command handlers (there is no file system in the browser), so typing `:w`
@@ -3220,11 +3222,11 @@ function activatePlainBlockFromClick(index: number, event: MouseEvent) {
   // Clicking a rendered task checkbox toggles its source marker instead of
   // entering edit mode.
   const target = event.target as HTMLElement | null;
-  // A rendered `<details>` folds in place: its summary is a control of the
-  // rendered view, not an editing gesture. Activating the block on that click
-  // swapped it for the textarea and left the disclosure triangle inert, so the
-  // fold could never be opened at all. No `preventDefault()` either — the
-  // native toggle must still run. (Same rule as the rendered task checkbox.)
+  // A rendered `<details>` folds in place: the summary is a control of the
+  // rendered view, not an editing gesture. Intercepting the click here (or
+  // activating the block on it) replaced the block with its textarea and left
+  // the disclosure triangle inert — the fold could never be opened at all.
+  // No `preventDefault()` either: the native toggle must still run.
   if (target?.closest('summary')) return;
   if (
     target instanceof HTMLInputElement &&
@@ -4752,6 +4754,16 @@ function buildExtensions() {
         ]
       : []),
     foldCompartment.of(foldExtensionFor(settings.foldingEnabled)),
+    pdfPageBreaksCompartment.of(
+      props.tab.language === 'markdown'
+        ? pdfPageBreaksExtension({
+            isEnabled: () => settings.showPdfPageBreaks,
+            getPdfDefaults: () => settings.pdfDefaults,
+            formatLabel: (page, total, size) =>
+              t('settings.pdfPageBreakLabel', { page: String(page), total: String(total), size }),
+          })
+        : [],
+    ),
     sessionRestoreExtension(props.tab.id),
     // #167 — clicks during async widget renders (post tab-switch) must not
     // turn into phantom multi-line selections when the layout shifts.
@@ -6277,6 +6289,25 @@ watch(
   (s) => {
     view?.dispatch({ effects: lineNumCompartment.reconfigure(s ? lineNumbers() : []) });
   }
+);
+
+watch(
+  [() => settings.showPdfPageBreaks, () => settings.pdfDefaults, () => settings.language],
+  () => {
+    view?.dispatch({
+      effects: pdfPageBreaksCompartment.reconfigure(
+        props.tab.language === 'markdown'
+          ? pdfPageBreaksExtension({
+              isEnabled: () => settings.showPdfPageBreaks,
+              getPdfDefaults: () => settings.pdfDefaults,
+              formatLabel: (page, total, size) =>
+                t('settings.pdfPageBreakLabel', { page: String(page), total: String(total), size }),
+            })
+          : [],
+      ),
+    });
+  },
+  { deep: true },
 );
 
 watch(
@@ -7910,5 +7941,36 @@ const cls = computed(() => ({
 :deep(.cm-split-hover-line) {
   background: color-mix(in srgb, var(--accent-soft) 35%, transparent) !important;
   border-radius: 3px;
+}
+:deep(.cm-pdf-page-break) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 10px 0 6px;
+  padding: 2px 0;
+  pointer-events: none;
+  user-select: none;
+}
+:deep(.cm-pdf-page-break::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  opacity: 0.85;
+}
+:deep(.cm-pdf-page-break__badge) {
+  position: relative;
+  z-index: 1;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+  background: var(--bg);
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 </style>

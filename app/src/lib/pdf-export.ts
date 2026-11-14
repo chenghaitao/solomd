@@ -75,6 +75,52 @@ const PDF_CSS = `
     padding-bottom: .32em;
     letter-spacing: -0.01em;
   }
+  /* #566 — On the TOC page, center the document title H1 and omit its bottom
+     border (while preserving H1/H2 borders on all body pages). */
+  :where(.pdf-page) > h1:first-child:has(+ .md-toc),
+  :where(.pdf-page) h1.pdf-doc-title {
+    text-align: center;
+    border-bottom: none !important;
+    padding-bottom: 0;
+  }
+  :where(.pdf-page) .md-toc {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  :where(.pdf-page) .md-toc .md-toc__link {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    color: inherit;
+    border-bottom: none;
+  }
+  :where(.pdf-page) .md-toc__leader {
+    flex: 1 1 auto;
+    min-width: 1em;
+    border-bottom: 1px dotted currentColor;
+    opacity: 0.45;
+  }
+  :where(.pdf-page) .md-toc__page {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+  :where(.pdf-page) .md-toc__link:not(.md-toc__link--paged) .md-toc__leader {
+    display: none;
+  }
+  :where(.pdf-page) > .md-toc:first-child,
+  :where(.pdf-page) > h1:first-child + .md-toc,
+  :where(.pdf-page) .md-toc.md-toc--lead {
+    break-after: page;
+    page-break-after: always;
+  }
+  :where(.pdf-page) > .md-toc:first-child + hr,
+  :where(.pdf-page) > h1:first-child + .md-toc + hr,
+  :where(.pdf-page) hr.pdf-toc-hr {
+    display: none !important;
+  }
   :where(.pdf-page) h2 {
     font-size: 1.5em;
     color: var(--md-h2, var(--text, #1f2328));
@@ -293,6 +339,102 @@ export interface PdfOutlineHeading {
   pageNumber: number;
 }
 
+export interface JsPdfOutlineLike {
+  add(parent: unknown, title: string, options: { pageNumber: number }): unknown;
+  makeString?: (val: string) => string;
+}
+
+export interface JsPdfLinkTargetOptions {
+  url?: string;
+  pageNumber?: number;
+  top?: number;
+  left?: number;
+  zoom?: number;
+  magFactor?: 'Fit' | 'FitH' | 'FitV' | 'XYZ';
+}
+
+export interface JsPdfLinkLike {
+  setPage(page: number): unknown;
+  link(x: number, y: number, w: number, h: number, options: JsPdfLinkTargetOptions): unknown;
+  internal?: { getNumberOfPages?: () => number };
+}
+
+export interface PdfMeasuredLink {
+  kind: 'internal' | 'external';
+  rectRaster: { x: number; y: number; width: number; height: number };
+  targetRasterY?: number;
+  url?: string;
+}
+
+const HEX_OUTLINE_PATCHED = Symbol.for('solomd.pdfHexOutlineString');
+
+/**
+ * #563 — Encode a PDF `/Title` string safely for jsPDF's outline dictionary.
+ *
+ * jsPDF's default `outline.makeString(val)` writes a literal string
+ * `(` + `pdfEscape(to8bitStream(val))` + `)`. For non-ASCII text, `to8bitStream`
+ * emits UTF-16BE bytes (`\xfe\xff...`), and `pdfEscape` only escapes `\`, `(`, `)`.
+ * Any UTF-16 code unit whose high or low byte is `0x0D` (CR) — e.g. `名`
+ * (`U+540D`), `不` (`U+4E0D`), `－` (`U+FF0D`) — leaves a bare `0x0D` byte inside
+ * the literal string. Per ISO 32000-1 §7.3.4.2, PDF readers normalize bare CR
+ * in literal strings to `0x0A` (LF), shifting the code point by −3 (`名` → `吊`,
+ * `不` → `上`).
+ *
+ * Encoding non-ASCII titles as a UTF-16BE hexadecimal string `<FEFF...>` (§7.3.4.3)
+ * avoids literal-string EOL normalization and delimiter escaping altogether.
+ */
+export function encodePdfOutlineString(
+  val: string,
+  fallbackMakeString?: (s: string) => string,
+): string {
+  const str = String(val ?? '');
+  if (/^[\x20-\x7E]*$/.test(str)) {
+    if (fallbackMakeString) return fallbackMakeString(str);
+    return `(${str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')})`;
+  }
+  let hex = 'FEFF';
+  for (let i = 0; i < str.length; i++) {
+    hex += str.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0');
+  }
+  return `<${hex}>`;
+}
+
+/**
+ * #515 / #567 — Map a source raster Y coordinate to its 1-based PDF page number
+ * and vertical pixel offset within that page after `buildPagedCanvas` slicing.
+ */
+export function rasterRowToPageLocation(
+  rasterY: number,
+  pageHeightPx: number,
+  breaks?: number[] | null,
+): { pageNumber: number; offsetInPagePx: number } {
+  const y = Math.max(0, rasterY);
+  if (breaks && breaks.length > 0) {
+    let pageStart = 0;
+    for (let i = 0; i < breaks.length; i++) {
+      if (y < breaks[i]) {
+        return {
+          pageNumber: i + 1,
+          offsetInPagePx: Math.max(0, y - pageStart),
+        };
+      }
+      pageStart = breaks[i];
+    }
+    return {
+      pageNumber: breaks.length + 1,
+      offsetInPagePx: Math.max(0, y - pageStart),
+    };
+  }
+  if (pageHeightPx > 0) {
+    const pageIndex = Math.max(0, Math.floor(y / pageHeightPx));
+    return {
+      pageNumber: pageIndex + 1,
+      offsetInPagePx: Math.max(0, y - pageIndex * pageHeightPx),
+    };
+  }
+  return { pageNumber: 1, offsetInPagePx: 0 };
+}
+
 /**
  * #515 — Map a heading's raster Y coordinate to a 1-based PDF page number.
  * When `buildPagedCanvas` re-paginated the raster, `breaks` holds the ascending
@@ -303,74 +445,187 @@ export function rasterRowToPageNumber(
   pageHeightPx: number,
   breaks?: number[] | null,
 ): number {
-  const y = Math.max(0, rasterY);
-  if (breaks && breaks.length > 0) {
-    for (let i = 0; i < breaks.length; i++) {
-      if (y < breaks[i]) return i + 1;
+  return rasterRowToPageLocation(rasterY, pageHeightPx, breaks).pageNumber;
+}
+
+/**
+ * #566 — Decorate `<nav class="md-toc">` for PDF export:
+ * 1. Marks a leading document title `H1` before `.md-toc` with `.pdf-doc-title`
+ *    (centered, no bottom border line), while keeping borders on body headings.
+ * 2. Marks the leading `.md-toc` with `.md-toc--lead` + `.html2pdf__page-break`
+ *    and hides any `<hr>` immediately after `.md-toc`.
+ * 3. Wraps each `.md-toc__link` label in `.md-toc__text` and appends
+ *    `.md-toc__leader` + `.md-toc__page` slots so page numbers can be filled.
+ */
+export function decoratePdfToc(root: HTMLElement): HTMLElement | null {
+  const navs = Array.from(root.querySelectorAll<HTMLElement>('nav.md-toc'));
+  if (!navs.length) return null;
+  for (const nav of navs) {
+    if (nav.dataset.pdfDecorated === '1') continue;
+    nav.dataset.pdfDecorated = '1';
+    const prev = nav.previousElementSibling as HTMLElement | null;
+    const isLeading =
+      nav === root.firstElementChild ||
+      (prev === root.firstElementChild && prev?.tagName === 'H1');
+    if (isLeading) {
+      nav.classList.add('md-toc--lead', 'html2pdf__page-break');
+      if (prev?.tagName === 'H1') {
+        prev.classList.add('pdf-doc-title');
+      }
+      const next = nav.nextElementSibling as HTMLElement | null;
+      if (next?.tagName === 'HR') {
+        next.classList.add('pdf-toc-hr');
+      }
     }
-    return breaks.length + 1;
+    for (const link of Array.from(nav.querySelectorAll<HTMLAnchorElement>('a.md-toc__link'))) {
+      if (link.querySelector('.md-toc__page')) continue;
+      const text = root.ownerDocument.createElement('span');
+      text.className = 'md-toc__text';
+      while (link.firstChild) text.appendChild(link.firstChild);
+      const leader = root.ownerDocument.createElement('span');
+      leader.className = 'md-toc__leader';
+      const pageSlot = root.ownerDocument.createElement('span');
+      pageSlot.className = 'md-toc__page';
+      pageSlot.textContent = '1';
+      link.append(text, leader, pageSlot);
+      link.classList.add('md-toc__link--paged');
+    }
   }
-  if (pageHeightPx > 0) {
-    return Math.max(1, Math.floor(y / pageHeightPx) + 1);
-  }
-  return 1;
-}
-
-export interface JsPdfOutlineLike {
-  add(parent: unknown, title: string, options: { pageNumber: number }): unknown;
-  /**
-   * #563 — jsPDF renders each `/Title` through this hook. Optional because the
-   * unit tests hand in plain mocks; `patchOutlineTitleEncoding()` only acts
-   * when the real jsPDF method is there.
-   */
-  makeString?(val: string): string;
+  return navs[0];
 }
 
 /**
- * #563 — jsPDF writes a bookmark title as a *literal* string:
- *
- *     /Title (pdfEscape(title))
- *
- * By then `to8bitStream()` has recast the title as UTF-16BE bytes (BOM
- * included), and `pdfEscape()` only escapes `\`, `(` and `)` — it leaves 0x0D
- * alone. A bare CR inside a literal string is an end-of-line marker, which a
- * reader must read back as 0x0A (ISO 32000-1, 7.3.4.2), so every character
- * whose low byte is 0x0D comes back 3 lower: 名 U+540D arrives as 吊 U+540A
- * and 不 U+4E0D as 上 U+4E0A.
- *
- * Encoding the title as a hex string (`<FEFF…>`) takes the escape rules out of
- * play: every byte is a hex digit, and no hex digit can be mistaken for a
- * delimiter or an EOL marker.
+ * #567 / #562 — Resolve an in-page `#anchor` href inside `root`.
+ * Synthetic folder headings (`data-toc-folder="1"`) that immediately precede a
+ * child heading advance to that child heading so folder TOC entries jump to the
+ * exact start of the first note under them.
  */
-export function utf16BeHexString(text: string): string {
-  let hex = 'FEFF';
-  for (let i = 0; i < text.length; i++) {
-    // charCodeAt yields the UTF-16 code unit, and surrogate pairs are exactly
-    // what UTF-16BE wants, so no codePointAt gymnastics are needed here.
-    hex += text.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0');
+export function resolvePdfAnchorTarget(
+  root: ParentNode,
+  href: string,
+): HTMLElement | null {
+  const trimmed = String(href ?? '').trim();
+  if (!trimmed.startsWith('#') || trimmed.length <= 1) return null;
+  const rawId = trimmed.slice(1);
+  let decodedId = rawId;
+  try {
+    decodedId = decodeURIComponent(rawId);
+  } catch {
+    // Keep rawId when not valid percent-encoding.
   }
-  return `<${hex}>`;
+  let target: HTMLElement | null = null;
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>('[id]'))) {
+    if (el.id === decodedId || el.id === rawId) {
+      target = el;
+      break;
+    }
+  }
+  while (
+    target &&
+    target.getAttribute('data-toc-folder') === '1' &&
+    target.nextElementSibling instanceof HTMLElement &&
+    /^H[1-6]$/.test(target.nextElementSibling.tagName)
+  ) {
+    target = target.nextElementSibling;
+  }
+  return target;
 }
 
-const HEX_TITLES_PATCHED = Symbol.for('solomd.pdfOutlineHexTitles');
-
-type PatchableOutline = JsPdfOutlineLike & { [HEX_TITLES_PATCHED]?: boolean };
+/**
+ * #566 — Fill each `.md-toc__page` slot inside `root` with the 1-based page
+ * number of its target heading.
+ */
+export function fillPdfTocPageNumbers(
+  root: ParentNode,
+  pageOfEl: (el: HTMLElement) => number,
+): Array<{ pageEl: HTMLElement; targetEl: HTMLElement; pageNumber: number }> {
+  const filled: Array<{ pageEl: HTMLElement; targetEl: HTMLElement; pageNumber: number }> = [];
+  for (const link of Array.from(root.querySelectorAll<HTMLAnchorElement>('a.md-toc__link'))) {
+    const slot = link.querySelector<HTMLElement>('.md-toc__page');
+    if (!slot) continue;
+    const target = resolvePdfAnchorTarget(root, link.getAttribute('href') || '');
+    const pageNumber = target ? Math.max(1, Math.round(pageOfEl(target) || 1)) : 0;
+    slot.textContent = pageNumber > 0 ? String(pageNumber) : '';
+    link.classList.toggle('md-toc__link--paged', pageNumber > 0);
+    if (target && pageNumber > 0) {
+      filled.push({ pageEl: slot, targetEl: target, pageNumber });
+    }
+  }
+  return filled;
+}
 
 /**
- * #563 — Swap the document's `makeString` for one that emits a UTF-16BE hex
- * string as soon as the title leaves printable ASCII. Latin-only titles keep
- * the original path, so documents without CJK are byte-for-byte unchanged.
+ * #567 — Inject internal (`/Dest` page jump) and external (`/URI`) link
+ * annotations into jsPDF using the re-paginated page break boundaries.
+ *
+ * Replaces html2pdf.js's built-in `hyperlinks` plugin, which:
+ * 1) Passed `link.href` (`http://tauri.localhost/#...`) as an external `/URI`
+ *    for in-document `#anchor` links, causing PDF viewers to show an external
+ *    URL warning and open a browser instead of jumping inside the PDF (#567);
+ * 2) Computed link coordinates before `buildPagedCanvas` re-paginated the raster.
  */
-export function patchOutlineTitleEncoding(
-  outline: JsPdfOutlineLike | null | undefined,
+export function populatePdfLinks(
+  pdf: JsPdfLinkLike | null | undefined,
+  links: PdfMeasuredLink[],
+  geometry: {
+    canvasWidth: number;
+    pageHeightPx: number;
+    innerWidthMm: number;
+    marginTopMm: number;
+    marginLeftMm: number;
+  },
+  pageBreaks?: number[] | null,
 ): void {
-  if (!outline || typeof outline.makeString !== 'function') return;
-  const target = outline as PatchableOutline;
-  if (target[HEX_TITLES_PATCHED]) return;
-  const original = outline.makeString.bind(outline);
-  target.makeString = (val: string) =>
-    /[^\x20-\x7E]/.test(val) ? utf16BeHexString(val) : original(val);
-  target[HEX_TITLES_PATCHED] = true;
+  if (
+    !pdf ||
+    typeof pdf.setPage !== 'function' ||
+    typeof pdf.link !== 'function' ||
+    !links.length ||
+    !(geometry.canvasWidth > 0) ||
+    !(geometry.innerWidthMm > 0)
+  ) {
+    return;
+  }
+  const totalPages =
+    typeof pdf.internal?.getNumberOfPages === 'function'
+      ? Math.max(1, pdf.internal.getNumberOfPages())
+      : Infinity;
+  const mmPerRasterPx = geometry.innerWidthMm / geometry.canvasWidth;
+
+  for (const item of links) {
+    const { x, y, width, height } = item.rectRaster;
+    if (!(width > 0) || !(height > 0)) continue;
+    const loc = rasterRowToPageLocation(y, geometry.pageHeightPx, pageBreaks);
+    const linkPage = Math.min(totalPages, Math.max(1, loc.pageNumber));
+    const xMm = geometry.marginLeftMm + Math.max(0, x) * mmPerRasterPx;
+    const yMm = geometry.marginTopMm + loc.offsetInPagePx * mmPerRasterPx;
+    const wMm = width * mmPerRasterPx;
+    const hMm = height * mmPerRasterPx;
+
+    pdf.setPage(linkPage);
+    if (item.kind === 'internal' && typeof item.targetRasterY === 'number') {
+      const targetLoc = rasterRowToPageLocation(
+        item.targetRasterY,
+        geometry.pageHeightPx,
+        pageBreaks,
+      );
+      const targetPageNumber = Math.min(totalPages, Math.max(1, targetLoc.pageNumber));
+      const targetTopMm = Math.max(
+        0,
+        geometry.marginTopMm + targetLoc.offsetInPagePx * mmPerRasterPx - 2,
+      );
+      pdf.link(xMm, yMm, wMm, hMm, {
+        pageNumber: targetPageNumber,
+        top: targetTopMm,
+      });
+    } else if (item.kind === 'external' && item.url) {
+      pdf.link(xMm, yMm, wMm, hMm, { url: item.url });
+    }
+  }
+
+  if (Number.isFinite(totalPages)) {
+    pdf.setPage(totalPages);
+  }
 }
 
 /**
@@ -382,7 +637,12 @@ export function populatePdfOutline(
   headings: PdfOutlineHeading[],
 ): void {
   if (!outline || typeof outline.add !== 'function' || !headings.length) return;
-  patchOutlineTitleEncoding(outline);
+  const patchedObj = outline as JsPdfOutlineLike & Record<symbol, boolean>;
+  if (typeof outline.makeString === 'function' && !patchedObj[HEX_OUTLINE_PATCHED]) {
+    const origMakeString = outline.makeString.bind(outline);
+    outline.makeString = (val: string) => encodePdfOutlineString(val, origMakeString);
+    patchedObj[HEX_OUTLINE_PATCHED] = true;
+  }
   const stack: Array<{ level: number; node: unknown }> = [];
   for (const h of headings) {
     const title = h.text.replace(/\s+/g, ' ').trim();
@@ -407,9 +667,16 @@ export function populatePdfOutline(
  */
 interface Html2PdfWorkerInternals {
   prop?: {
+    container?: HTMLElement;
     canvas?: HTMLCanvasElement;
-    pageSize?: { inner?: { width: number; height: number } };
-    pdf?: {
+    pageSize?: {
+      inner?: {
+        width: number;
+        height: number;
+        px?: { width: number; height: number };
+      };
+    };
+    pdf?: JsPdfLinkLike & {
       outline?: JsPdfOutlineLike;
       internal?: { getNumberOfPages?: () => number };
     };
@@ -559,6 +826,9 @@ export async function capturePdfRaster(
     // cross-origin image when the host sends CORS headers, and most image
     // hosts don't — "导出为 pdf 图片，部分信息也丢失了".
     await inlineRemoteImages(page);
+    // #566 — Decorate any `[TOC]` block with dotted leaders, page-number slots,
+    // centered borderless document title H1, and a page break after a leading TOC.
+    decoratePdfToc(page);
     // Give the browser a tick to lay everything out (KaTeX fonts especially).
     await new Promise((r) => setTimeout(r, 60));
     // #115 — convert any modern CSS color functions (color()/oklch()/…) that
@@ -572,31 +842,189 @@ export async function capturePdfRaster(
     // export actually happens, not on every cold start.
     const html2pdf = (await import('html2pdf.js')).default;
     const worker = html2pdf().set(opts).from(page);
+    // Materialize html2pdf's container + pagebreak spacers first so we can
+    // fill TOC page numbers and measure heading/link rects on the exact DOM
+    // tree that html2canvas is about to capture (#566, #567).
+    if (typeof worker.toContainer === 'function') {
+      await worker.toContainer();
+    }
+    const prop = (worker as unknown as Html2PdfWorkerInternals).prop;
+    const containerEl = prop?.container ?? page;
+    const measurePage =
+      prop?.container?.querySelector<HTMLElement>('.pdf-page') ?? containerEl;
+    const innerPre = prop?.pageSize?.inner;
+    const containerRectPre = containerEl.getBoundingClientRect();
+    const containerWidthPre =
+      containerEl.offsetWidth || containerRectPre.width || page.offsetWidth || 1;
+    const singlePageHeightCss =
+      innerPre && innerPre.width > 0 && innerPre.height > 0
+        ? containerWidthPre * (innerPre.height / innerPre.width)
+        : prop?.pageSize?.inner?.px?.height || 1000;
+
+    // Ensure a leading TOC page breaks cleanly onto the next page boundary.
+    const leadToc = measurePage.querySelector<HTMLElement>('nav.md-toc.md-toc--lead');
+    if (leadToc && singlePageHeightCss > 0) {
+      const tocBottomRel = Math.max(
+        0,
+        leadToc.getBoundingClientRect().bottom - containerRectPre.top,
+      );
+      const nextPageTopCss =
+        Math.ceil((tocBottomRel + 1) / singlePageHeightCss) * singlePageHeightCss + 4;
+      const neededPad = Math.max(0, Math.round(nextPageTopCss - tocBottomRel));
+      const nextSibling = leadToc.nextElementSibling as HTMLElement | null;
+      if (nextSibling && !nextSibling.id && nextSibling.tagName === 'DIV' && !nextSibling.children.length) {
+        const currentH = parseFloat(nextSibling.style.height || '0') || 0;
+        if (currentH < neededPad) {
+          nextSibling.style.height = `${neededPad}px`;
+        }
+      } else if (neededPad > 0) {
+        const pad = measurePage.ownerDocument.createElement('div');
+        pad.style.display = 'block';
+        pad.style.height = `${neededPad}px`;
+        leadToc.parentNode?.insertBefore(pad, leadToc.nextSibling);
+      }
+    }
+
+    const containerRect = containerEl.getBoundingClientRect();
+    const containerWidthCss =
+      containerEl.offsetWidth || containerRect.width || page.offsetWidth || 1;
+    const filledToc = fillPdfTocPageNumbers(measurePage, (targetEl) => {
+      const relTop = Math.max(0, targetEl.getBoundingClientRect().top - containerRect.top);
+      return Math.max(1, Math.floor(relTop / singlePageHeightCss) + 1);
+    });
+
+    const containerHeightCss =
+      containerEl.offsetHeight || containerRect.height || page.offsetHeight || 1;
+
+    const tocSlotsCss = filledToc.map((entry) => {
+      const r = entry.pageEl.getBoundingClientRect();
+      const targetRect = entry.targetEl.getBoundingClientRect();
+      const cs = getComputedStyle(entry.pageEl);
+      return {
+        relLeftCss: Math.max(0, r.left - containerRect.left),
+        relTopCss: Math.max(0, r.top - containerRect.top),
+        widthCss: Math.max(1, r.width),
+        heightCss: Math.max(1, r.height),
+        targetRelTopCss: Math.max(0, targetRect.top - containerRect.top),
+        initialPageNumber: entry.pageNumber,
+        fontFamily: cs.fontFamily || 'sans-serif',
+        fontSizePx: parseFloat(cs.fontSize) || 14,
+        color: cs.color || '#1f2328',
+      };
+    });
+
+    // #515 — Measure heading positions on the live container before `toCanvas()`
+    // removes the overlay, so `finish()` can inject a navigable PDF outline.
+    const rawHeadingsCss = Array.from(
+      measurePage.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'),
+    )
+      .filter((el) => !el.closest('.md-toc'))
+      .map((el) => {
+        const customLevel = Number(el.getAttribute('data-toc-level'));
+        const level =
+          Number.isFinite(customLevel) && customLevel >= 1
+            ? customLevel
+            : Number(el.tagName.slice(1)) || 1;
+        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        const elRect = el.getBoundingClientRect();
+        const relTopCss = Math.max(0, elRect.top - containerRect.top);
+        return { el, level, text, relTopCss };
+      })
+      .filter((h) => h.text.length > 0);
+    // #562 — Folder headings immediately preceding their first note's first
+    // heading jump to that first note heading's exact position/page.
+    for (let k = rawHeadingsCss.length - 2; k >= 0; k--) {
+      if (
+        rawHeadingsCss[k].el.getAttribute('data-toc-folder') === '1' &&
+        rawHeadingsCss[k].el.nextElementSibling === rawHeadingsCss[k + 1].el &&
+        rawHeadingsCss[k + 1].level > rawHeadingsCss[k].level
+      ) {
+        rawHeadingsCss[k].relTopCss = rawHeadingsCss[k + 1].relTopCss;
+      }
+    }
+
+    // #567 — Measure all internal (`#anchor`) and external links on the live
+    // container so `finish()` can attach PDF link annotations aligned with
+    // `buildPagedCanvas` page breaks.
+    const rawLinksCss: Array<{
+      kind: 'internal' | 'external';
+      relLeftCss: number;
+      relTopCss: number;
+      widthCss: number;
+      heightCss: number;
+      targetRelTopCss?: number;
+      url?: string;
+    }> = [];
+    for (const a of Array.from(measurePage.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+      const rawHref = (a.getAttribute('href') || '').trim();
+      if (!rawHref) continue;
+      const isTocLink = a.classList.contains('md-toc__link');
+      const clientRects = isTocLink ? [] : Array.from(a.getClientRects());
+      const rects = clientRects.length > 0 ? clientRects : [a.getBoundingClientRect()];
+      if (rawHref.startsWith('#')) {
+        const targetEl = resolvePdfAnchorTarget(measurePage, rawHref);
+        if (!targetEl) continue;
+        const targetRelTopCss = Math.max(
+          0,
+          targetEl.getBoundingClientRect().top - containerRect.top,
+        );
+        for (const r of rects) {
+          if (!(r.width > 0) || !(r.height > 0)) continue;
+          rawLinksCss.push({
+            kind: 'internal',
+            relLeftCss: Math.max(0, r.left - containerRect.left),
+            relTopCss: Math.max(0, r.top - containerRect.top),
+            widthCss: r.width,
+            heightCss: r.height,
+            targetRelTopCss,
+          });
+        }
+      } else if (
+        /^(https?|mailto|tel|file):/i.test(rawHref) &&
+        !/^https?:\/\/tauri\.localhost\b/i.test(rawHref)
+      ) {
+        for (const r of rects) {
+          if (!(r.width > 0) || !(r.height > 0)) continue;
+          rawLinksCss.push({
+            kind: 'external',
+            relLeftCss: Math.max(0, r.left - containerRect.left),
+            relTopCss: Math.max(0, r.top - containerRect.top),
+            widthCss: r.width,
+            heightCss: r.height,
+            url: rawHref,
+          });
+        }
+      }
+    }
+
     // Capture here rather than letting `outputPdf()` do it, so the raster can
     // be re-paginated first.
     await worker.toCanvas();
-    const prop = (worker as unknown as Html2PdfWorkerInternals).prop;
     const canvas = prop?.canvas ?? null;
     const inner = prop?.pageSize?.inner;
     const geometry = pdfPaginationGeometry(canvas, inner, page);
 
-    // #515 — Measure heading positions on the live page before `dispose()`
-    // removes it, so `finish()` can inject a navigable PDF document outline.
-    const pageRect = page.getBoundingClientRect();
-    const pageHeightCss = page.offsetHeight || pageRect.height || 1;
-    const rawHeadings = Array.from(
-      page.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'),
-    )
-      .filter((el) => !el.closest('.md-toc'))
-      .map((el) => {
-        const level = Number(el.tagName.slice(1)) || 1;
-        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-        const elRect = el.getBoundingClientRect();
-        const relTopCss = Math.max(0, elRect.top - pageRect.top);
-        const rasterY = canvas ? Math.round((relTopCss / pageHeightCss) * canvas.height) : 0;
-        return { level, text, rasterY };
-      })
-      .filter((h) => h.text.length > 0);
+    const scaleX = canvas ? canvas.width / containerWidthCss : 0;
+    const scaleY = canvas ? canvas.height / containerHeightCss : 0;
+
+    const rawHeadings = rawHeadingsCss.map((h) => ({
+      level: h.level,
+      text: h.text,
+      rasterY: canvas ? Math.round(h.relTopCss * scaleY) : 0,
+    }));
+
+    const measuredLinks: PdfMeasuredLink[] = rawLinksCss.map((l) => ({
+      kind: l.kind,
+      rectRaster: {
+        x: Math.round(l.relLeftCss * scaleX),
+        y: Math.round(l.relTopCss * scaleY),
+        width: Math.max(1, Math.round(l.widthCss * scaleX)),
+        height: Math.max(1, Math.round(l.heightCss * scaleY)),
+      },
+      targetRasterY:
+        typeof l.targetRelTopCss === 'number' ? Math.round(l.targetRelTopCss * scaleY) : undefined,
+      url: l.url,
+    }));
 
     let pageBreaks: number[] | null = null;
 
@@ -607,16 +1035,53 @@ export async function capturePdfRaster(
       lineHeightPx: geometry.lineHeightPx,
       useCanvas(replacement: HTMLCanvasElement, breaks?: number[]) {
         if (prop) prop.canvas = replacement;
-        if (breaks) pageBreaks = breaks;
+        if (breaks) {
+          pageBreaks = breaks;
+          // If re-pagination shifted any heading's page number relative to the
+          // pre-capture estimate, repaint that TOC entry's page slot on the
+          // paged raster so the visible TOC number matches the link target.
+          const ctx = replacement.getContext('2d');
+          if (ctx && tocSlotsCss.length > 0 && geometry.pageHeightPx > 0) {
+            for (const slot of tocSlotsCss) {
+              const targetRasterY = Math.round(slot.targetRelTopCss * scaleY);
+              const actualPage = rasterRowToPageNumber(
+                targetRasterY,
+                geometry.pageHeightPx,
+                breaks,
+              );
+              if (actualPage === slot.initialPageNumber) continue;
+              const slotRasterY = Math.round(slot.relTopCss * scaleY);
+              const slotLoc = rasterRowToPageLocation(
+                slotRasterY,
+                geometry.pageHeightPx,
+                breaks,
+              );
+              const slotX = Math.round(slot.relLeftCss * scaleX);
+              const slotW = Math.max(8, Math.round(slot.widthCss * scaleX));
+              const slotH = Math.max(8, Math.round(slot.heightCss * scaleY));
+              const drawY =
+                (slotLoc.pageNumber - 1) * geometry.pageHeightPx + slotLoc.offsetInPagePx;
+              ctx.save();
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(Math.max(0, slotX - 4), Math.max(0, drawY - 1), slotW + 8, slotH + 2);
+              ctx.fillStyle = slot.color;
+              ctx.font = `${Math.round(slot.fontSizePx * scaleY)}px ${slot.fontFamily}`;
+              ctx.textAlign = 'right';
+              ctx.textBaseline = 'top';
+              ctx.fillText(String(actualPage), slotX + slotW, drawY);
+              ctx.restore();
+            }
+          }
+        }
       },
       async finish(): Promise<Blob> {
         await worker.toPdf();
         const pdf = prop?.pdf;
+        const totalPages =
+          typeof pdf?.internal?.getNumberOfPages === 'function'
+            ? pdf.internal.getNumberOfPages()
+            : Infinity;
         if (pdf?.outline && rawHeadings.length > 0) {
-          const totalPages =
-            typeof pdf.internal?.getNumberOfPages === 'function'
-              ? pdf.internal.getNumberOfPages()
-              : Infinity;
           const outlineHeadings: PdfOutlineHeading[] = rawHeadings.map((h) => ({
             level: h.level,
             text: h.text,
@@ -629,6 +1094,25 @@ export async function capturePdfRaster(
             populatePdfOutline(pdf.outline, outlineHeadings);
           } catch (err) {
             console.warn('[pdf] outline generation skipped', err);
+          }
+        }
+        if (pdf && measuredLinks.length > 0 && canvas && inner) {
+          try {
+            const marginArr = Array.isArray(opts.margin) ? opts.margin : [10, 10, 12, 10];
+            populatePdfLinks(
+              pdf,
+              measuredLinks,
+              {
+                canvasWidth: canvas.width,
+                pageHeightPx: geometry.pageHeightPx,
+                innerWidthMm: inner.width,
+                marginTopMm: Number(marginArr[0]) || 0,
+                marginLeftMm: Number(marginArr[1]) || 0,
+              },
+              pageBreaks,
+            );
+          } catch (err) {
+            console.warn('[pdf] link annotation generation skipped', err);
           }
         }
         return await worker.outputPdf('blob');
@@ -759,6 +1243,7 @@ export function buildHtml2PdfOptions(title: string, pdfOpts?: ResolvedPdfOptions
   return {
     margin: margins,
     filename: `${title || 'document'}.pdf`,
+    enableLinks: false,
     image: { type: 'jpeg', quality: 0.96 },
     html2canvas: {
       scale: 2,

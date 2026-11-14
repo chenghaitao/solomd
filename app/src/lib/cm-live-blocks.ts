@@ -726,12 +726,34 @@ export function bindDomTableCellEditor(
     return true;
   };
 
+  const scrollCellIntoView = (cell: HTMLTableCellElement): void => {
+    try {
+      cell.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    } catch {
+      // Fallback for non-standard scrollIntoView implementations.
+    }
+    const scroller = wrap.closest?.('.plain-live-host, .cm-scroller') as HTMLElement | null;
+    if (!scroller || typeof cell.getBoundingClientRect !== 'function' || typeof scroller.getBoundingClientRect !== 'function') {
+      return;
+    }
+    const cellRect = cell.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    if (!(scrollerRect.height > 0) || !(cellRect.height > 0)) return;
+    const pad = 8;
+    if (cellRect.top < scrollerRect.top + pad) {
+      scroller.scrollTop -= scrollerRect.top + pad - cellRect.top;
+    } else if (cellRect.bottom > scrollerRect.bottom - pad) {
+      scroller.scrollTop += cellRect.bottom - (scrollerRect.bottom - pad);
+    }
+  };
+
   const focusCell = (row: number, col: number, caret: 'start' | 'end' = 'end'): boolean => {
     const cell = wrap.querySelector<HTMLTableCellElement>(
       `[data-row="${row}"][data-col="${col}"]`,
     );
     if (!cell || !start(cell)) return false;
     caretToEdge(cell, caret);
+    scrollCellIntoView(cell);
     return true;
   };
 
@@ -1222,7 +1244,7 @@ class HtmlBlockWidget extends WidgetType {
       });
       summary.addEventListener('click', (event) => {
         // Cancel the native activation and flip `open` ourselves, so exactly
-        // one toggle happens per click, whatever else handles the event.
+        // one toggle happens per click whatever else handles the event.
         event.preventDefault();
         details.open = !details.open;
         scheduleRelayout();
@@ -2044,48 +2066,34 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             continue;
           }
 
-          // Standalone HTML `<img ...>` line (#446).
+          // Standalone HTML `<img ...>` line (#446 / #561).
+          // Always keep the source line visible and mount the rendered image
+          // below it so clicking or moving the cursor across the image never
+          // causes the document to jump or flicker.
           if (/^\s*<img\b[^>]*>\s*$/i.test(line.text)) {
-            if (keepSource) {
-              builder.add(
-                line.to,
-                line.to,
-                Decoration.widget({
-                  widget: new HtmlBlockWidget(
-                    line.text,
-                    opts.getImageRoot?.() ?? null,
-                    opts.getFilePath?.(),
-                    i,
-                  ),
-                  block: true,
-                  side: 1,
-                }),
-              );
-              i += 1;
-              continue;
-            }
-            const cursorInside = i >= cursorLine && i <= cursorLineEnd;
-            if (!cursorInside) {
-              builder.add(
-                line.from,
-                line.to,
-                Decoration.replace({
-                  widget: new HtmlBlockWidget(
-                    line.text,
-                    opts.getImageRoot?.() ?? null,
-                    opts.getFilePath?.(),
-                    i,
-                  ),
-                  block: true,
-                }),
-              );
-            }
+            builder.add(
+              line.to,
+              line.to,
+              Decoration.widget({
+                widget: new HtmlBlockWidget(
+                  line.text,
+                  opts.getImageRoot?.() ?? null,
+                  opts.getFilePath?.(),
+                  i,
+                ),
+                block: true,
+                side: 1,
+              }),
+            );
             i += 1;
             continue;
           }
 
-          // #506 — Standalone Markdown image line (`![alt](url)`, `[![alt](img)](link)`,
-          // `![[1] alt](url)`, `![alt](<url>)`, `![alt][ref]`, etc.).
+          // #506 / #561 — Standalone Markdown image line (`![alt](url)`,
+          // `[![alt](img)](link)`, `![[1] alt](url)`, `![alt](<url>)`,
+          // `![alt][ref]`, etc.). Keep the Markdown source line visible above
+          // the rendered image widget at all times so cursor entry/exit never
+          // collapses or expands the image height.
           const lineImages = findMarkdownImagesInLine(line.text, imageRefs);
           const isStandaloneImage =
             lineImages.length === 1 &&
@@ -2093,50 +2101,23 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             line.text.slice(lineImages[0].end).trim() === '';
           if (isStandaloneImage) {
             const imgSpan = lineImages[0];
-            if (keepSource) {
-              // Render below the source line and leave the line alone, so
-              // clicking into it changes nothing on screen.
-              const root = opts.getImageRoot?.() ?? null;
-              const filePath = opts.getFilePath?.();
-              const src = resolveImageSrc(imgSpan.src, root, filePath);
-              const localPath = resolveImagePath(imgSpan.src, root, filePath);
-              const needsFallback =
-                isLocalSvgPath(localPath) ||
-                localPath.startsWith('saf:') ||
-                /^\/(?:storage\/emulated\/0|sdcard)\//i.test(localPath);
-              builder.add(
-                line.to,
-                line.to,
-                Decoration.widget({
-                  widget: new ImageWidget(src, imgSpan.alt, needsFallback ? localPath : null, i),
-                  block: true,
-                  side: 1,
-                }),
-              );
-              i += 1;
-              continue;
-            }
-            const cursorInside = i >= cursorLine && i <= cursorLineEnd;
-            if (!cursorInside) {
-              const alt = imgSpan.alt;
-              const rawSrc = imgSpan.src;
-              const root = opts.getImageRoot?.() ?? null;
-              const filePath = opts.getFilePath?.();
-              const src = resolveImageSrc(rawSrc, root, filePath);
-              const localPath = resolveImagePath(rawSrc, root, filePath);
-              const needsFallback =
-                isLocalSvgPath(localPath) ||
-                localPath.startsWith('saf:') ||
-                /^\/(?:storage\/emulated\/0|sdcard)\//i.test(localPath);
-              builder.add(
-                line.from,
-                line.to,
-                Decoration.replace({
-                  widget: new ImageWidget(src, alt, needsFallback ? localPath : null, i),
-                  block: true,
-                }),
-              );
-            }
+            const root = opts.getImageRoot?.() ?? null;
+            const filePath = opts.getFilePath?.();
+            const src = resolveImageSrc(imgSpan.src, root, filePath);
+            const localPath = resolveImagePath(imgSpan.src, root, filePath);
+            const needsFallback =
+              isLocalSvgPath(localPath) ||
+              localPath.startsWith('saf:') ||
+              /^\/(?:storage\/emulated\/0|sdcard)\//i.test(localPath);
+            builder.add(
+              line.to,
+              line.to,
+              Decoration.widget({
+                widget: new ImageWidget(src, imgSpan.alt, needsFallback ? localPath : null, i),
+                block: true,
+                side: 1,
+              }),
+            );
             i += 1;
             continue;
           }
@@ -2774,23 +2755,29 @@ export function liveBlocksExtension(opts: BlockOptions = {}) {
         : fromLine.number > b && toLineNo < a;
       if (!jumpedOver) return;
       if (widget instanceof TableWidget) {
+        const parsed = parseTable(doc.sliceString(from, to));
+        const targetRow = forward
+          ? HEADER_ROW
+          : parsed && parsed.rows.length > 0
+            ? parsed.rows.length - 1
+            : HEADER_ROW;
         const wrapEl = view.dom.querySelector<HTMLElement>(
           `.cm-live-block--table[data-table-from="${from}"]`,
         );
         const handle = wrapEl ? tableEditorHandles.get(wrapEl) : null;
-        if (handle) {
-          const parsed = parseTable(doc.sliceString(from, to));
-          const targetRow = forward
-            ? HEADER_ROW
-            : parsed && parsed.rows.length > 0
-              ? parsed.rows.length - 1
-              : HEADER_ROW;
-          if (handle.focusCell(targetRow, 0, 'end')) {
-            handled = true;
-            return false;
-          }
+        if (handle && handle.focusCell(targetRow, 0, 'end')) {
+          handled = true;
+          return false;
         }
-        return;
+        requestTableCellFocus(from, targetRow, 0);
+        const edge = doc.line(forward ? a : b);
+        view.dispatch({
+          selection: { anchor: edge.from },
+          scrollIntoView: true,
+          userEvent: 'select',
+        });
+        handled = true;
+        return false;
       }
       const edge = doc.line(forward ? a : b);
       const col = Math.min(sel.head - fromLine.from, edge.length);

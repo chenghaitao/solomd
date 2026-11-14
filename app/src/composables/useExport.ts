@@ -329,6 +329,8 @@ export function useExport() {
         plantumlServer: plantumlServer(),
         codeBlockLineNumbers: settings.codeBlockLineNumbers,
         codeBlockWrap: settings.codeBlockWrap,
+        withNav: settings.exportHtmlWithNav,
+        lang: settings.language,
       });
       toasts.dismiss(tid);
       await invoke('write_file', { path, content: html, encoding: 'UTF-8' });
@@ -556,9 +558,10 @@ export function useExport() {
     let printOutlines: Array<[number, string, number]> = [];
     if (printContent) {
       try {
-        const nav = pdfOpts.toc
-          ? decoratePrintToc(printContent, t('settings.pdfDefaults.tocTitle'))
-          : null;
+        const nav = decoratePrintToc(
+          printContent,
+          pdfOpts.toc ? t('settings.pdfDefaults.tocTitle') : '',
+        );
         const box = printableBox(
           pdfOpts.pageSizeMm ?? { width: 210, height: 297 },
           pdfOpts.marginMm ?? { top: 15, right: 15, bottom: 15, left: 15 },
@@ -854,9 +857,35 @@ export function useExport() {
     baseName: string;
     filePath?: string;
     outputPath: string;
-    format: 'pdf' | 'html' | 'docx' | 'png' | 'textpack';
+    format: 'pdf' | 'html' | 'docx' | 'epub' | 'png' | 'textpack';
   }): Promise<void> {
     const { content, baseName, filePath, outputPath, format } = input;
+    if (format === 'epub') {
+      const { preprocessMarkdown } = await import('../lib/markdown');
+      const { pandocResourcePaths } = await import('../lib/pandoc-resource-paths');
+      const { useWorkspaceStore } = await import('../stores/workspace');
+      const workspace = useWorkspaceStore();
+      const cleanedMarkdown = preprocessMarkdown(content)
+        .replace(/^[ \t]*\[toc\][ \t]*\r?$/gim, '')
+        .replace(/\s*<!--\s*solomd-toc-(?:level:\d+|folder)\s*-->/g, '');
+      const extraArgs = ['--toc', '--toc-depth=6', `--metadata=title:${baseName}`];
+      if (settings.markdownHardBreaks) {
+        extraArgs.push('--from=markdown+hard_line_breaks');
+      }
+      await invoke('pandoc_export', {
+        args: {
+          input_markdown: cleanedMarkdown,
+          format: 'epub',
+          output_path: outputPath,
+          bibliography: null,
+          csl: null,
+          template: null,
+          extra_args: extraArgs,
+          resource_paths: pandocResourcePaths(filePath ?? null, workspace.currentFolder),
+        },
+      });
+      return;
+    }
     if (format === 'textpack') {
       const { rewriteMarkdownForTextBundle, createTextPackArchive } = await import('../lib/textbundle');
       const { rewrittenMarkdown, assets } = rewriteMarkdownForTextBundle(content);
@@ -896,6 +925,8 @@ export function useExport() {
         plantumlServer: plantumlServer(),
         codeBlockLineNumbers: settings.codeBlockLineNumbers,
         codeBlockWrap: settings.codeBlockWrap,
+        withNav: settings.exportHtmlWithNav,
+        lang: settings.language,
       });
       await invoke('write_file', { path: outputPath, content: html, encoding: 'UTF-8' });
       return;

@@ -287,7 +287,7 @@ test('#504: findTableCellOffsetInLine locates exact column offsets in Markdown t
 });
 
 test('liveBlocksExtension stays frozen while dragging and flushes on dragEndEffect', () => {
-  const doc = ['intro', '', '![img](https://example.com/a.png)', '', 'outro'].join('\n');
+  const doc = ['intro', '', '- ![img](https://example.com/a.png)', '', 'outro'].join('\n');
   let state = EditorState.create({
     doc,
     extensions: [
@@ -320,6 +320,21 @@ test('liveBlocksExtension stays frozen while dragging and flushes on dragEndEffe
   // Releasing the pointer dispatches dragEndEffect and reveals the selected block source
   state = state.update({ effects: dragEndEffect.of(null) }).state;
   assert.equal(countImageWidgets(state), 0);
+});
+
+test('#561: standalone image keeps source line visible and ImageWidget mounted below even when cursor enters the line', () => {
+  const doc = ['intro', '', '![img](https://example.com/a.png)', '<img src="https://example.com/b.png">', 'outro'].join('\n');
+  for (const cursorLine of [1, 3, 4, 5]) {
+    const all = widgets(doc, cursorLine);
+    const imgHits = all.filter((w) => w.widgetName === 'ImageWidget');
+    const htmlHits = all.filter((w) => w.widgetName === 'HtmlBlockWidget');
+    assert.equal(imgHits.length, 1, `expected ImageWidget on cursorLine=${cursorLine}`);
+    assert.equal(imgHits[0].from, imgHits[0].to, 'ImageWidget should be a point widget below the source line');
+    assert.equal(lineOf(doc, imgHits[0].from), 3);
+    assert.equal(htmlHits.length, 1, `expected HtmlBlockWidget for <img> on cursorLine=${cursorLine}`);
+    assert.equal(htmlHits[0].from, htmlHits[0].to, 'HtmlBlockWidget for <img> should be a point widget below the source line');
+    assert.equal(lineOf(doc, htmlHits[0].from), 4);
+  }
 });
 
 test('#500: liveBlocksExtension keeps GFM tables rendered when cursor is inside unless keepSource is enabled', () => {

@@ -23,11 +23,17 @@ import katexCss from 'katex/dist/katex.min.css?raw';
 // emits is then relative-ised against the importer into
 // `../../../../../../../d:/Code/...`, which nothing can resolve. The glob is
 // matched against the importer's directory, so two levels up is the same file.
-const fontUrls = import.meta.glob('../../node_modules/katex/dist/fonts/*.woff2', {
-  query: '?url',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
+// (`typeof` guard keeps node:test imports from exploding when the Vite macro
+// is not defined.)
+const fontUrls = (
+  typeof import.meta.glob === 'function'
+    ? import.meta.glob('../../node_modules/katex/dist/fonts/*.woff2', {
+        query: '?url',
+        import: 'default',
+        eager: true,
+      })
+    : {}
+) as Record<string, string>;
 
 let cached: Promise<string> | null = null;
 

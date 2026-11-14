@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  patchOutlineTitleEncoding,
+  buildHtml2PdfOptions,
+  encodePdfOutlineString,
+  populatePdfLinks,
   populatePdfOutline,
+  rasterRowToPageLocation,
   rasterRowToPageNumber,
-  utf16BeHexString,
+  type JsPdfLinkLike,
+  type JsPdfLinkTargetOptions,
   type JsPdfOutlineLike,
 } from './pdf-export';
 
@@ -72,110 +76,116 @@ test('#515 populatePdfOutline builds hierarchical H1-H6 bookmark tree', () => {
   assert.equal(calls[5].pageNumber, 4);
 });
 
-// --- #563 — CJK bookmark titles -------------------------------------------
-
-/**
- * #563 — just enough of jsPDF's `to8bitStream()` + `pdfEscape()` to reproduce
- * exactly what it hands the PDF writer for a `/Title`: UTF-16BE bytes wrapped
- * in a literal string, with only `\`, `(` and `)` escaped.
- */
-function legacyMakeString(text: string): string {
-  let bytes = text;
-  if (/[^\x00-\xFF]/.test(text)) {
-    bytes = '\u00FE\u00FF';
-    for (let i = 0; i < text.length; i++) {
-      const code = text.charCodeAt(i);
-      bytes += String.fromCharCode(code >> 8, code & 0xFF);
-    }
-  }
-  const escaped = bytes.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-  return '(' + escaped + ')';
-}
-
-/**
- * #563 — Read a PDF string the way a conforming reader does: decode the
- * backslash escapes, turn a bare EOL marker into 0x0A (ISO 32000-1 7.3.4.2),
- * and decode a `<FEFF…>` hex string as UTF-16BE.
- */
-function readPdfString(raw: string): string {
-  const escapes: Record<number, number> = {
-    0x6E: 0x0A, 0x72: 0x0D, 0x74: 0x09, 0x62: 0x08, 0x66: 0x0C,
-  };
-  const bytes: number[] = [];
-  if (raw.startsWith('<')) {
-    const hex = raw.slice(1, -1);
-    for (let i = 0; i + 1 < hex.length; i += 2) {
-      bytes.push(parseInt(hex.slice(i, i + 2), 16));
-    }
-  } else {
-    assert.equal(raw[0], '(');
-    for (let i = 1; i < raw.length; i++) {
-      const code = raw.charCodeAt(i);
-      if (code === 0x5C) {
-        const next = raw.charCodeAt(++i);
-        bytes.push(escapes[next] ?? next);
-        continue;
-      }
-      if (code === 0x29) break;
-      bytes.push(code === 0x0D || code === 0x0A ? 0x0A : code);
-    }
-  }
-  if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
-    let out = '';
-    for (let i = 2; i + 1 < bytes.length; i += 2) {
-      out += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
-    }
-    return out;
-  }
-  return bytes.map((b) => String.fromCharCode(b)).join('');
-}
-
-test('#563 jsPDF alone turns 名 into 吊 (the reported bug)', () => {
-  // 名 U+540D and 不 U+4E0D both carry 0x0D as their low byte, which a PDF
-  // reader turns into 0x0A: 0x540D -> 0x540A, 0x4E0D -> 0x4E0A.
-  assert.equal(readPdfString(legacyMakeString('名不虚传')), '吊上虚传');
-  // Characters with any other low byte are untouched.
-  assert.equal(readPdfString(legacyMakeString('安全测试')), '安全测试');
-});
-
-test('#563 utf16BeHexString writes UTF-16BE hex with a BOM', () => {
-  assert.equal(utf16BeHexString('名'), '<FEFF540D>');
-  assert.equal(utf16BeHexString('A'), '<FEFF0041>');
-  assert.equal(utf16BeHexString(''), '<FEFF>');
-  // Surrogate pairs are two code units, which is exactly UTF-16BE.
-  assert.equal(utf16BeHexString('😀'), '<FEFFD83DDE00>');
-});
-
-test('#563 the patched makeString round-trips titles containing 0x0D', () => {
-  const outline: JsPdfOutlineLike = { add: () => null, makeString: legacyMakeString };
-  patchOutlineTitleEncoding(outline);
-  for (const title of ['名不虚传', '第一章 概述', 'plain ascii', '名 (a) \\ b', '명']) {
-    assert.equal(readPdfString(outline.makeString!(title)), title);
-  }
-});
-
-test('#563 patchOutlineTitleEncoding is idempotent and tolerates mocks', () => {
-  const outline: JsPdfOutlineLike = { add: () => null, makeString: legacyMakeString };
-  patchOutlineTitleEncoding(outline);
-  const once = outline.makeString;
-  patchOutlineTitleEncoding(outline);
-  assert.equal(outline.makeString, once);
-  assert.doesNotThrow(() => patchOutlineTitleEncoding({ add: () => null }));
-  assert.doesNotThrow(() => patchOutlineTitleEncoding(null));
-});
-
-test('#563 populatePdfOutline patches the outline it writes into', () => {
-  const written: string[] = [];
+test('#563 populatePdfOutline patches makeString with UTF-16BE hex string so 0x0D bytes (名 U+540D, 不 U+4E0D) are never corrupted to 0x0A (吊, 上)', () => {
   const outline: JsPdfOutlineLike = {
     add(_parent, title) {
-      written.push(title);
-      return {};
+      return { title };
     },
-    makeString: legacyMakeString,
+    makeString(val: string) {
+      return `(${val})`;
+    },
   };
-  populatePdfOutline(outline, [{ level: 1, text: '名不虚传', pageNumber: 1 }]);
-  // The title handed to jsPDF is still the plain text...
-  assert.equal(written[0], '名不虚传');
-  // ...and what it would write to the file decodes back unchanged.
-  assert.equal(readPdfString(outline.makeString!('名不虚传')), '名不虚传');
+
+  populatePdfOutline(outline, [{ level: 1, text: '01 书籍名与名不虚传', pageNumber: 1 }]);
+
+  // Pure ASCII stays a literal string via the original makeString
+  assert.equal(outline.makeString!('Chapter 1: Intro'), '(Chapter 1: Intro)');
+
+  // CJK characters containing 0x0D low byte (名=540D, 不=4E0D) are encoded as <FEFF...>
+  const hex = outline.makeString!('名不虚传');
+  assert.equal(hex, '<FEFF540D4E0D865A4F20>');
+  assert.equal(encodePdfOutlineString('01 书籍名'), '<FEFF0030003100204E667C4D540D>');
+});
+
+test('#567 buildHtml2PdfOptions disables html2pdf hyperlinks plugin so #anchor links never become http://tauri.localhost/#... external URLs', () => {
+  const opts = buildHtml2PdfOptions('MyBook');
+  assert.equal(opts.enableLinks, false);
+});
+
+test('#566 & #567 populatePdfLinks maps internal TOC/#anchor links to native PDF page destinations and keeps external links', () => {
+  const breaks = [900, 1800];
+  assert.deepEqual(rasterRowToPageLocation(200, 1000, breaks), {
+    pageNumber: 1,
+    offsetInPagePx: 200,
+  });
+  assert.deepEqual(rasterRowToPageLocation(950, 1000, breaks), {
+    pageNumber: 2,
+    offsetInPagePx: 50,
+  });
+  assert.deepEqual(rasterRowToPageLocation(1900, 1000, breaks), {
+    pageNumber: 3,
+    offsetInPagePx: 100,
+  });
+
+  const recorded: Array<{
+    page: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    options: JsPdfLinkTargetOptions;
+  }> = [];
+  let activePage = 1;
+  const pdf: JsPdfLinkLike = {
+    setPage(p: number) {
+      activePage = p;
+    },
+    link(x, y, w, h, options) {
+      recorded.push({ page: activePage, x, y, w, h, options });
+    },
+    internal: {
+      getNumberOfPages: () => 3,
+    },
+  };
+
+  populatePdfLinks(
+    pdf,
+    [
+      // TOC entry on Page 1 jumping to Chapter 1 on Page 2 (y = 950 -> offset 50px on page 2)
+      {
+        kind: 'internal',
+        rectRaster: { x: 100, y: 200, width: 600, height: 30 },
+        targetRasterY: 950,
+      },
+      // TOC entry on Page 1 jumping to Chapter 2 on Page 3 (y = 1900 -> offset 100px on page 3)
+      {
+        kind: 'internal',
+        rectRaster: { x: 100, y: 250, width: 600, height: 30 },
+        targetRasterY: 1900,
+      },
+      // External HTTPS link on Page 2 (y = 1100 -> offset 200px on page 2)
+      {
+        kind: 'external',
+        rectRaster: { x: 150, y: 1100, width: 200, height: 24 },
+        url: 'https://solomd.app/docs',
+      },
+    ],
+    {
+      canvasWidth: 1900,
+      pageHeightPx: 1000,
+      innerWidthMm: 190,
+      marginTopMm: 10,
+      marginLeftMm: 10,
+    },
+    breaks,
+  );
+
+  assert.equal(recorded.length, 3);
+  // 1st TOC link: on page 1, jumps to pageNumber 2 (no external url!)
+  assert.equal(recorded[0].page, 1);
+  assert.equal(recorded[0].options.url, undefined);
+  assert.equal(recorded[0].options.pageNumber, 2);
+  assert.equal(recorded[0].x, 20); // 10mm + 100 * 0.1mm
+  assert.equal(recorded[0].y, 30); // 10mm + 200 * 0.1mm
+  assert.equal(recorded[0].options.top, 13); // 10mm + 50 * 0.1mm - 2mm
+
+  // 2nd TOC link: on page 1, jumps to pageNumber 3
+  assert.equal(recorded[1].page, 1);
+  assert.equal(recorded[1].options.pageNumber, 3);
+  assert.equal(recorded[1].options.top, 18); // 10mm + 100 * 0.1mm - 2mm
+
+  // 3rd link: external URL on page 2
+  assert.equal(recorded[2].page, 2);
+  assert.equal(recorded[2].options.url, 'https://solomd.app/docs');
+  assert.equal(recorded[2].y, 30); // 10mm + (1100 - 900) * 0.1mm
 });

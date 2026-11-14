@@ -156,6 +156,8 @@ interface Settings {
   /** #484 — automatically maintain hierarchical 1–6 heading numbers (`1.`, `1.1`, `1.1.1`)
    *  when headings are added, deleted, or modified (off by default). */
   autoNumberHeadings: boolean;
+  /** #552 — display dashed PDF page-break reference lines and page indicators in the editor. */
+  showPdfPageBreaks: boolean;
   // #190 — dedicated code font (code blocks / inline code / mono UI).
   // Empty = built-in monospace stack.
   codeFontFamily: string;
@@ -438,7 +440,7 @@ interface Settings {
   syncOnlyRegisteredVaults: boolean;
   // #535 / #359 / #505 — Custom export dialog remembered directory & format.
   lastCustomExportDir: string;
-  lastCustomExportFormat: 'pdf' | 'html' | 'docx' | 'png' | 'textpack';
+  lastCustomExportFormat: 'pdf' | 'html' | 'docx' | 'epub' | 'png' | 'textpack';
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
   // status bar. Off-by-default-ish: the pill stays inert unless the doc's
   // YAML front matter sets a `goal:` key, so this toggle is a hard kill
@@ -467,6 +469,9 @@ interface Settings {
   // for a free MIT app), but explicitly toggleable in Settings → Export
   // for users who don't want the watermark on screenshots they share.
   imageExportBranding: boolean;
+  // #570 — Standalone HTML export includes a left multi-tab sidebar with
+  // bookmark navigation tree and global search panel.
+  exportHtmlWithNav: boolean;
   // v4.3.0: global UI zoom (scales the entire app — editor, preview, chrome,
   // sidebars, modals). Helpful on high-DPI screens where everything renders
   // too small even at the OS default scale. Range 0.75x – 2.5x. Wired via
@@ -818,6 +823,7 @@ function defaults(): Settings {
     tabTitleFromFirstLine: false,
     confirmSaveMissingFile: false,
     autoNumberHeadings: false,
+    showPdfPageBreaks: false,
     v507HighlightLineMigrated: true,
     codeFontFamily: '',
     showOutline: false,
@@ -991,6 +997,7 @@ function defaults(): Settings {
     slashCommandsEnabled: true,
     fenceLanguageSuggestions: true,
     imageExportBranding: true,
+    exportHtmlWithNav: true,
     globalZoom: 1,
     wheelZoomEnabled: true,
     quickCaptureEnabled: true,
@@ -1470,6 +1477,10 @@ export const useSettingsStore = defineStore('settings', {
       this.autoNumberHeadings = !this.autoNumberHeadings;
       this.persist();
     },
+    toggleShowPdfPageBreaks() {
+      this.showPdfPageBreaks = !this.showPdfPageBreaks;
+      this.persist();
+    },
     setCodeFontFamily(f: string) {
       this.codeFontFamily = f;
       this.persist();
@@ -1925,7 +1936,7 @@ export const useSettingsStore = defineStore('settings', {
       this.lastCustomExportDir = dir;
       this.persist();
     },
-    setLastCustomExportFormat(fmt: 'pdf' | 'html' | 'docx' | 'png' | 'textpack') {
+    setLastCustomExportFormat(fmt: 'pdf' | 'html' | 'docx' | 'epub' | 'png' | 'textpack') {
       this.lastCustomExportFormat = fmt;
       this.persist();
     },
@@ -2217,6 +2228,14 @@ export const useSettingsStore = defineStore('settings', {
     },
     setDefaultExportDir(dir: string) {
       this.defaultExportDir = (dir || '').trim();
+      this.persist();
+    },
+    toggleExportHtmlWithNav() {
+      this.exportHtmlWithNav = !this.exportHtmlWithNav;
+      this.persist();
+    },
+    setExportHtmlWithNav(enabled: boolean) {
+      this.exportHtmlWithNav = Boolean(enabled);
       this.persist();
     },
     // #7 — Typora-style custom path template (used when attachmentMode==='custom').

@@ -1,22 +1,27 @@
 import { findHtmlBlockEnd } from './html-live-render';
 
 /**
- * Windows plain-block editor: split a document into the blocks that are
- * rendered one at a time. Extracted from Editor.vue so the grouping rules can
- * be tested without mounting the component.
+ * One editable unit of the Windows plain-block editor: the source span of the
+ * block plus the exact text its `<textarea>` holds.
  */
 export interface PlainBlockRange {
   start: number;
   end: number;
   /**
    * The block's Markdown without the separating trailing newline — the value
-   * the editable textarea carries (start/end still cover the whole range, so
-   * the separator is reconstructed when the block is written back).
+   * the editable `<textarea>` carries (`start`/`end` still cover the whole
+   * range so the separator is reconstructed when the block is written back).
    */
   text: string;
   hasTrailingNewline: boolean;
 }
 
+/**
+ * Split a document into the blocks the plain-block live editor renders one at a
+ * time. Each block is rendered in isolation, so the split has to keep every
+ * construct that only renders as a whole together: fenced code, `$$` math,
+ * tables, lists, quotes, and raw block HTML containers.
+ */
 export function splitPlainMarkdownBlocks(src: string): PlainBlockRange[] {
   if (!src) return [{ start: 0, end: 0, text: '', hasTrailingNewline: false }];
 
@@ -35,7 +40,7 @@ export function splitPlainMarkdownBlocks(src: string): PlainBlockRange[] {
     pos = end;
   }
 
-  const blocks: Array<{ start: number; end: number; text: string; hasTrailingNewline: boolean }> = [];
+  const blocks: PlainBlockRange[] = [];
   const pushRange = (start: number, end: number) => {
     if (end < start) return;
     // The editable text must NOT carry the block-separating trailing newline.
@@ -81,19 +86,36 @@ export function splitPlainMarkdownBlocks(src: string): PlainBlockRange[] {
     return 'paragraph';
   };
 
+  // Raw block HTML (`<details>`, `<div>`, HTML tables, …) is ONE block, like a
+  // code fence — the same rule the CodeMirror live editor applies
+  // (cm-live-blocks.ts). Splitting at the blank lines inside a container left
+  // the opening tag alone in its own block, where markdown-it handed the
+  // fragment to innerHTML and the browser auto-closed it: `<details>` then
+  // rendered a disclosure triangle with nothing inside, and its content showed
+  // up as sibling blocks that no click could ever fold.
   const lineTexts = lines.map((line) => line.text);
 
   for (let i = 0; i < lines.length;) {
     const line = lines[i];
-    // Raw block HTML (`<details>`, `<div>`, HTML tables, …) is ONE block, the
-    // same way a code fence or a `$$` formula is, and the same rule the
-    // CodeMirror live editor already applies (cm-live-blocks.ts). Splitting at
-    // the blank lines inside a container left the opening tag alone in its own
-    // block: markdown-it handed that fragment straight to innerHTML, the
-    // browser auto-closed it, and `<details>` rendered a disclosure triangle
-    // with nothing inside — its content showed up as sibling blocks, so no
-    // click could ever fold it. Unclosed containers fall through to the
-    // per-kind rules below.
+    // Keep leading YAML front-matter (`---\n...\n---`) as a single block instead
+    // of splitting the opening `---` into a standalone `<hr>` thematic block
+    // (which caused `inbox: true\n---` to be separated from its opening fence).
+    if (i === 0 && line.text.replace(/^\uFEFF/, '').trim() === '---') {
+      let closeIdx = -1;
+      const maxFmLine = Math.min(lines.length, 100);
+      for (let k = 1; k < maxFmLine; k++) {
+        const kt = lines[k].text.trim();
+        if (kt === '---' || kt === '...') {
+          closeIdx = k;
+          break;
+        }
+      }
+      if (closeIdx > 0) {
+        pushRange(line.start, lines[closeIdx].end);
+        i = closeIdx + 1;
+        continue;
+      }
+    }
     const htmlEnd = findHtmlBlockEnd(lineTexts, i);
     if (htmlEnd !== null) {
       pushRange(line.start, lines[htmlEnd].end);
@@ -217,7 +239,7 @@ export function splitPlainMarkdownBlocks(src: string): PlainBlockRange[] {
     }
 
     let j = i + 1;
-    while (j < lines.length && kindFor(lines[j]) === 'paragraph') j++;
+    while (j < lines.length && kindFor(lines[j]) === 'paragraph' && !isTableStartAt(j)) j++;
     pushRange(line.start, lines[j - 1]?.end ?? line.end);
     i = j;
   }

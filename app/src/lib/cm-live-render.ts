@@ -71,6 +71,7 @@ import {
 import { copyPlainText, dedentFenced, dedentIndented } from './code-copy';
 // #395 — URL nodes that are a link *destination* (and so should be hidden)
 // versus URL nodes that are the visible label. Leaf module so it is testable.
+import { isStandaloneImageLine } from './md-image-url';
 
 // ---------------------------------------------------------------------------
 // Marker nodes that we hide off-line. Brackets/parens for links and
@@ -338,12 +339,27 @@ const HEADING_LEVELS: Record<string, number> = {
   SetextHeading1: 1, SetextHeading2: 2,
 };
 
+function frontMatterEndPos(doc: { lines: number; line: (n: number) => { text: string; to: number } }): number {
+  if (doc.lines < 2) return 0;
+  const first = doc.line(1).text.replace(/^\uFEFF/, '').trim();
+  if (first !== '---') return 0;
+  const maxLines = Math.min(doc.lines, 100);
+  for (let n = 2; n <= maxLines; n += 1) {
+    const t = doc.line(n).text.trim();
+    if (t === '---' || t === '...') {
+      return doc.line(n).to;
+    }
+  }
+  return 0;
+}
+
 function buildDecorations(view: EditorView, showMarkers = false): DecorationSet {
   const sel = view.state.selection.main;
   const dragging = isDragging(view.state);
   const fromLine = dragging ? -1 : view.state.doc.lineAt(sel.from).number;
   const toLine = dragging ? -1 : view.state.doc.lineAt(sel.to).number;
   const tree = syntaxTree(view.state);
+  const fmEnd = frontMatterEndPos(view.state.doc);
 
   // We collect into a flat list of `Range<Decoration>` and then call
   // `Decoration.set(ranges, /* sort */ true)` — that's the documented
@@ -368,17 +384,31 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
         const name = node.name;
         const nFrom = node.from;
         const nTo = node.to;
+        // Do not misparse leading YAML front-matter (`---\ninbox: true\n---`)
+        // as a HorizontalRule (<hr>) on line 1 + a SetextHeading2 on the
+        // closing `---` (which hid the opening `---` and left `inbox: true\n---`
+        // exposed as an H2 heading).
+        if (fmEnd > 0 && nFrom < fmEnd && name !== 'Document') {
+          return false;
+        }
         const lineAtNode = view.state.doc.lineAt(nFrom).number;
         const lineEndAtNode = view.state.doc.lineAt(
           Math.min(nTo, view.state.doc.length),
         ).number;
         const caretTouches = lineEndAtNode >= fromLine && lineAtNode <= toLine;
+        const nodeLineText =
+          lineAtNode === lineEndAtNode ? view.state.doc.line(lineAtNode).text : '';
+        // #561 — Standalone image lines always keep their Markdown source line
+        // visible above the rendered ImageWidget so entering/leaving the line
+        // never shifts layout. Keep their markers dimmed (never hidden).
+        const onStandaloneImage =
+          nodeLineText !== '' && isStandaloneImageLine(nodeLineText);
 
-        // #506 — When `showMarkers` is off and the caret is off this line,
-        // `liveBlocksExtension` replaces the entire `Image` range with an
-        // `ImageWidget`. Skip emitting overlapping `hideDeco` replacements on
-        // the `![`, `]`, `(`, `URL`, `)` child nodes inside `Image`.
-        if (name === 'Image' && !showMarkers && !caretTouches) {
+        // #506 — When `showMarkers` is off and the caret is off a non-standalone
+        // line (e.g. `- ![alt](url)`), `liveBlocksExtension` replaces the inline
+        // `Image` range with an `ImageWidget`. Skip emitting overlapping
+        // `hideDeco` replacements on child nodes inside that inline `Image`.
+        if (name === 'Image' && !onStandaloneImage && !showMarkers && !caretTouches) {
           return false;
         }
 
@@ -391,9 +421,9 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
             /^\s*(`{3,}|~{3,})\s*mermaid\s*$/i.test(
               view.state.doc.lineAt(nFrom).text,
             );
-          if (showMarkers || isMermaidHeaderMark) {
+          if (showMarkers || isMermaidHeaderMark || onStandaloneImage) {
             // Dimmed, never removed — so the line looks the same whether or
-            // not the caret is on it (#353 / #530).
+            // not the caret is on it (#353 / #530 / #561).
             if (nTo > nFrom) ranges.push(markerMark.range(nFrom, nTo));
             return;
           }
@@ -433,7 +463,7 @@ function buildDecorations(view: EditorView, showMarkers = false): DecorationSet 
             previous?.name === 'LinkMark' &&
             view.state.doc.sliceString(previous.from, previous.to) === '(';
           if (inLabeledLink) {
-            if (!showMarkers && !caretTouches && nTo > nFrom) {
+            if (!showMarkers && !onStandaloneImage && !caretTouches && nTo > nFrom) {
               ranges.push(hideDeco.range(nFrom, nTo));
             } else if (nTo > nFrom) {
               ranges.push(markerMark.range(nFrom, nTo));
