@@ -19,6 +19,48 @@
 
 ---
 
+## [5.1.1] — 2026-11-14
+
+### 同步上游至 2f82da8b（25 个提交，v5.1.0）
+
+- 合并提交 `Merge upstream/main (25 commits): v5.1.0`，上游 tip `2f82da8b`（tag `v5.1.0`）。
+- 上游本轮把 fork 5.0.22 / 5.0.23 已提交的十余个修复一并合入（#551–#561、#559、#563 等），
+  因此这批冲突大多是「同一修复的两份实现」，按「功能以上游为基线、只留 fork 必要差异」处理。
+- 上游新增全量接入：合并书籍导出（层级 / 文件夹 TOC + UTF-16BE hex 书签，#562 / #563）、
+  PDF TOC 页码与样式、内部目录链接跳页（#564–#567）、可选 PDF 分页引导线与页码指示（#552）、
+  HTML 导出导航 / 搜索侧栏与 EPUB 批量导出（#568–#570）、Android 16 / ColorOS 16 启动白屏修复（#550）、
+  纯文本编辑器把 YAML front-matter 当单块、iOS 27 SDK、5.1.0 各语言发布说明与官网。
+- 按既定策略：`web/` 与 `mcp-server/`（含 `mcpb/manifest.json`）全量跟随上游，版本号保持上游 5.1.0；
+  上游新增的 `app-store/release-notes/5.1.0/` 16 个文案文件属排除项，已删除；应用内遥测保持删除。
+  误随 fetch 拉入的本地 `v5.1.0` tag 已删（拉上游应带 `--no-tags`）。
+
+### 冲突处理
+
+| 文件 | 处理 |
+| --- | --- |
+| `app/package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock` | 取上游 5.1.0，随后由 `bump-version.js` 统一抬到 5.1.1 |
+| `mcp-server/Cargo.toml` / `Cargo.lock` / `mcpb/manifest.json`、`scripts/solomd` | 取上游 5.1.0，不做版本盖章 |
+| `app/src/lib/pdf-export.ts`、`pdf-outline.test.ts` | 整取上游：上游用 `encodePdfOutlineString()` 实现 #563，fork 那套 `utf16BeHexString()` / `patchOutlineTitleEncoding()`（及 5 条测试）由等价实现取代；同时接入 #565–#567 的 PDF 链接与页码 |
+| `app/src/lib/plain-blocks.ts` / `.test.ts` | 取上游：新增 YAML front-matter 单块、`isTableStartAt` 表格边界；fork 的 #559 原始 HTML 容器规则上游已有 |
+| `app/src/main.ts` | 取上游 `mountApp()` 结构（#550 Android 首帧同步挂载），把 fork 的启动前语言包加载并入 iOS / Windows 的 1500ms race，避免首屏闪默认语言 |
+| `app/src/App.vue` | 保留 fork 的 `androidInsetsCache` / `systemInsetPadding`（#479 重叠判定）与 `mobileHideStatusBar` watch，不取上游简化版 |
+| `app/src/components/FileTree.vue` | 保留 fork 的 `@wheel="onTreeWheel"`（上游已删，函数仍在） |
+| `app/src/composables/usePandocExport.ts` | 取 fork 版，剔除上游重新引入的 `track` 遥测导入 |
+| `app/src/lib/docx-export.ts` | 保留 fork 的 `.ts` 后缀导入 |
+| `app/src/lib/katex-standalone.ts` | 合成：fork 的相对路径 glob（Windows 下 `/node_modules/...` 会解析失败）+ 上游的 `typeof import.meta.glob` 守卫 |
+| `app/src/lib/cm-live-render.ts` | 合成：fork 的 #395 注释 + 上游 `isStandaloneImageLine` 导入（否则 #561 图片块编译不过） |
+| `CustomExportDialog.vue` | 取上游，补 `buildMergedBookMarkdown` 导入（非冲突区已在调用） |
+| `Editor.vue` / `cm-live-blocks.ts` | 仅注释措辞差异，取上游 |
+| `app/src/lib/markdown.ts` | 无冲突，保留三方自动合并：上游 #562 TOC 标记与带空格图片路径照收，fork 的 `sourceLine()` / `table_no_pipe_terminator` / `unwrapInlineHtmlBlocks` 等本地修复逐项核对仍在 |
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **737 / 737**（基线 724，上游新增 13 条）；`vite build` 成功，
+  入口 chunk **1,738.17 kB / gzip 530.02 kB**（与基线一致）；`cargo metadata --locked` 两处通过；`git diff --check` 干净。
+- 上游 5.1.0 已占用版本号，按「不与上游重号」顺延为 **5.1.1**（同 5.0.20 → 5.0.21 的处理）。
+
+---
+
 ## [5.0.23] — 2026-11-13
 
 ### 本地修复
