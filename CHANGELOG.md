@@ -19,6 +19,43 @@
 
 ---
 
+## [5.2.2] — 2026-11-16
+
+### 同步上游至 51463af2（14 个提交，v5.2.0 → v5.2.1）
+
+- 合并提交 `Merge upstream/main (14 commits): v5.2.1`，上游 tip `51463af2`（tag `v5.2.1`），本仓库基线 5.1.1。
+- 上游 5.2.0 带入：**统一导出中心**（9 种格式一个对话框、覆盖提示）、**纯 WYSIWYG 模式**（活动行不再露语法）、
+  OPR 本地模型自动发现、**用户插件**、CLI v2、行内分数渲染修复。
+- 上游 5.2.1 带入：Tier-1 编辑器/工作区改进（多光标增删、可配置 Today 按钮）、合并书籍章节序号连续重编号（#585）、
+  HTML 导出的分页 / 宽度 / 导航修复、PDF 书签 Y 目标、EPUB 图表与 CSS、深层目录一键展开。
+- 官网 `web/`、`mcp-server/`、`.agents/` 全量跟随上游（含 14 语言 v5.2 定位与 SEO/GEO 内容）。
+- 版本号：上游已占用 5.2.1，按「不与上游重号」顺延为 **5.2.2**。
+
+### 冲突处理
+
+| 文件 | 处理 |
+| --- | --- |
+| `app/package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock` | 取上游 5.2.1，再由 `bump-version.js` 统一抬到 5.2.2 |
+| `README*.md`（14 个） | 保留 fork 版。上游改成 v5.2 营销文案并把下载直链写死到 `v5.2.0` 资产与 `brew` / `solomd.app` 安装脚本，指向的是上游的构建；fork 的 11 处链接必须继续指向 `chenghaitao/solomd` 的 release，且写明 macOS 包不由本仓库提供 |
+| `app/src/components/AboutDialog.vue` | 保留 fork：不内置 sponsors / promoters 名单（上游改成为离线也能显示而写死名单） |
+| `app/src/components/SettingsPanel.vue` | 取上游 user-plugins 面板（安装 / 启停 / 删除 / 重扫），剔除 `activeSupporterBadge` / `initSupporterState` —— fork 没有支持者徽章入口 |
+| `app/src/components/Editor.vue` | 合成：取上游多光标与查找增强导入（`addCursorAbove/Below`、`selectNextOccurrence`、`selectAllOccurrencesCommand`、`setFindPanelReplaceExpanded`），保留 fork 的 `searchPanelOpen`（#389 ⌘F 二次按下关闭）与 `list-continuation` 导入；查找函数把 Ctrl+H 的 `setFindPanelReplaceExpanded` 并进 fork 的 toggle 分支，展开替换行但不丢关闭行为 |
+| `app/src/composables/useExport.ts` | 走上游统一导出中心入口（`shouldUseUnifiedDialog()` → `openCustomExportDialog`，5 处），逐处剔除上游重新引入的 `track()` 遥测 |
+| `app/src/composables/useCommands.ts` | 两侧导入合并（fork 的 `useI18n` + 上游的 `user-plugins`） |
+| `app/src/lib/docx-export.ts` / `markdown.ts` | 保留 fork 的 `.ts` 后缀导入（`node:test --experimental-strip-types` 需要），接受上游新增的 `parseImageAltSize` / `findMarkdownImagesInLine` |
+
+### 排除项
+
+- `app-store/release-notes/5.2.0/`、`5.2.1/`（34 个文件）：上游自家 App Store 文案，与本仓库无关。
+- 遥测：上游本轮在 `useExport` 等处重新引入 `track()`，全部剔除，`app/src` 内无任何 `track(` 调用与 telemetry 导入。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **753 / 753**（基线 729，上游新增 24 条）；`vite build` 成功，
+  入口 chunk **1,738.17 kB / gzip 530.03 kB**（与 5.1.1 基线一致）；`cargo metadata --locked` 两处通过；`git diff --check` 干净。
+
+---
+
 ## [5.1.1] — 2026-11-14
 
 ### 同步上游至 2f82da8b（25 个提交，v5.1.0）
