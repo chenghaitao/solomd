@@ -139,6 +139,9 @@ interface Settings {
   // live views instead of hiding them off the caret line, so clicking a line
   // doesn't reflow it. Styling (heading size, bold) still applies.
   alwaysShowMarkers: boolean;
+  // #303 — Pure WYSIWYG mode: keep Markdown syntax markers hidden even on the
+  // active cursor line so clicking a line never shifts text horizontally.
+  hideActiveLineMarkers: boolean;
   // Separate toggle for block-level live rendering (tables, Mermaid, PlantUML,
   // math blocks, etc.): when true (default), table and diagram source code is
   // hidden/collapsed into rendered widgets even if `alwaysShowMarkers` is on.
@@ -299,10 +302,15 @@ interface Settings {
   showRelationships: boolean;
   // v2.0 F2: CodeMirror Hunspell spell-check (separate from browser-native `spellCheck` above).
   spellcheckEnabled: boolean;
-  // v2.0 F3: daily notes
+  // v2.0 F3: daily notes (master toggle so users who don't keep a daily
+  // journal can hide the "Today / 今日" button in the sidebar & tags panel).
+  dailyNotesEnabled: boolean;
   dailyNotesFolder: string;
   dailyNotesFormat: string;
   dailyNotesTemplate: string;
+  // #571 — automatically update workspace wikilinks and relative Markdown
+  // links when renaming or moving files/folders inside the workspace.
+  autoUpdateLinksOnRename: boolean;
   showTagsPanel: boolean;
   // Workspace-wide task panel: every `- [ ]` in the vault, grouped by file.
   showTasksPanel: boolean;
@@ -440,7 +448,7 @@ interface Settings {
   syncOnlyRegisteredVaults: boolean;
   // #535 / #359 / #505 — Custom export dialog remembered directory & format.
   lastCustomExportDir: string;
-  lastCustomExportFormat: 'pdf' | 'html' | 'docx' | 'epub' | 'png' | 'textpack';
+  lastCustomExportFormat: 'pdf' | 'html' | 'docx' | 'epub' | 'odt' | 'latex' | 'rtf' | 'png' | 'textpack';
   // v2.5 F2: writing stats — show the per-doc word/char goal pill in the
   // status bar. Off-by-default-ish: the pill stays inert unless the doc's
   // YAML front matter sets a `goal:` key, so this toggle is a hard kill
@@ -469,9 +477,17 @@ interface Settings {
   // for a free MIT app), but explicitly toggleable in Settings → Export
   // for users who don't want the watermark on screenshots they share.
   imageExportBranding: boolean;
-  // #570 — Standalone HTML export includes a left multi-tab sidebar with
-  // bookmark navigation tree and global search panel.
+  // #570 / #572 — Standalone HTML & PDF export includes a left bookmark
+  // navigation tree (and global search panel in HTML).
   exportHtmlWithNav: boolean;
+  // #574 — Paginated HTML export (`<section class="page">`), splitting notes
+  // into per-note sections when `exportHtmlWithNav` is enabled.
+  exportHtmlPaginated: boolean;
+  // #584 — HTML export content max-width in px on desktop (`0` = unlimited).
+  exportHtmlContentWidth: number;
+  // #572 — Include a Table of Contents page (with page numbers) at the start
+  // of exported documents.
+  exportIncludeTocPage: boolean;
   // v4.3.0: global UI zoom (scales the entire app — editor, preview, chrome,
   // sidebars, modals). Helpful on high-DPI screens where everything renders
   // too small even at the OS default scale. Range 0.75x – 2.5x. Wired via
@@ -818,6 +834,7 @@ function defaults(): Settings {
     selectionBubble: true,
     formatBar: false,
     alwaysShowMarkers: false,
+    hideActiveLineMarkers: false,
     collapseBlockSource: true,
     highlightCurrentLine: true,
     tabTitleFromFirstLine: false,
@@ -903,9 +920,11 @@ function defaults(): Settings {
     showBacklinks: true,
     showRelationships: false,
     spellcheckEnabled: false,
+    dailyNotesEnabled: true,
     dailyNotesFolder: 'Daily',
     dailyNotesFormat: 'YYYY-MM-DD.md',
     dailyNotesTemplate: '',
+    autoUpdateLinksOnRename: true,
     showTagsPanel: true,
     showTasksPanel: false,
     showNeighborhood: false,
@@ -998,6 +1017,9 @@ function defaults(): Settings {
     fenceLanguageSuggestions: true,
     imageExportBranding: true,
     exportHtmlWithNav: true,
+    exportHtmlPaginated: false,
+    exportHtmlContentWidth: 960,
+    exportIncludeTocPage: true,
     globalZoom: 1,
     wheelZoomEnabled: true,
     quickCaptureEnabled: true,
@@ -1455,6 +1477,12 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleAlwaysShowMarkers() {
       this.alwaysShowMarkers = !this.alwaysShowMarkers;
+      if (this.alwaysShowMarkers) this.hideActiveLineMarkers = false;
+      this.persist();
+    },
+    toggleHideActiveLineMarkers() {
+      this.hideActiveLineMarkers = !this.hideActiveLineMarkers;
+      if (this.hideActiveLineMarkers) this.alwaysShowMarkers = false;
       this.persist();
     },
     toggleCollapseBlockSource() {
@@ -1936,7 +1964,7 @@ export const useSettingsStore = defineStore('settings', {
       this.lastCustomExportDir = dir;
       this.persist();
     },
-    setLastCustomExportFormat(fmt: 'pdf' | 'html' | 'docx' | 'epub' | 'png' | 'textpack') {
+    setLastCustomExportFormat(fmt: 'pdf' | 'html' | 'docx' | 'epub' | 'odt' | 'latex' | 'rtf' | 'png' | 'textpack') {
       this.lastCustomExportFormat = fmt;
       this.persist();
     },
@@ -2027,6 +2055,22 @@ export const useSettingsStore = defineStore('settings', {
     },
     toggleFenceLanguageSuggestions() {
       this.fenceLanguageSuggestions = !this.fenceLanguageSuggestions;
+      this.persist();
+    },
+    toggleDailyNotes() {
+      this.dailyNotesEnabled = !this.dailyNotesEnabled;
+      this.persist();
+    },
+    setDailyNotesEnabled(v: boolean) {
+      this.dailyNotesEnabled = Boolean(v);
+      this.persist();
+    },
+    toggleAutoUpdateLinksOnRename() {
+      this.autoUpdateLinksOnRename = !this.autoUpdateLinksOnRename;
+      this.persist();
+    },
+    setAutoUpdateLinksOnRename(v: boolean) {
+      this.autoUpdateLinksOnRename = Boolean(v);
       this.persist();
     },
     toggleImageExportBranding() {
@@ -2236,6 +2280,25 @@ export const useSettingsStore = defineStore('settings', {
     },
     setExportHtmlWithNav(enabled: boolean) {
       this.exportHtmlWithNav = Boolean(enabled);
+      this.persist();
+    },
+    setExportHtmlPaginated(enabled: boolean) {
+      this.exportHtmlPaginated = Boolean(enabled);
+      this.persist();
+    },
+    setExportHtmlContentWidth(widthPx: number) {
+      const n = Number.isFinite(widthPx) ? Math.max(0, Math.round(widthPx)) : 960;
+      this.exportHtmlContentWidth = n;
+      this.persist();
+    },
+    toggleExportIncludeTocPage() {
+      this.exportIncludeTocPage = !this.exportIncludeTocPage;
+      this.pdfDefaults.toc = this.exportIncludeTocPage;
+      this.persist();
+    },
+    setExportIncludeTocPage(enabled: boolean) {
+      this.exportIncludeTocPage = Boolean(enabled);
+      this.pdfDefaults.toc = this.exportIncludeTocPage;
       this.persist();
     },
     // #7 — Typora-style custom path template (used when attachmentMode==='custom').

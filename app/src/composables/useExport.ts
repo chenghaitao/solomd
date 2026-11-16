@@ -314,7 +314,19 @@ export function useExport() {
       && typeof (window as unknown as { ClipboardItem?: unknown }).ClipboardItem !== 'undefined';
   }
 
+  function shouldUseUnifiedDialog(): boolean {
+    if (isMobile()) return false;
+    if (typeof window !== 'undefined' && (window as unknown as { __solomdSavePathOverride?: string }).__solomdSavePathOverride) {
+      return false;
+    }
+    return true;
+  }
+
   async function exportHtml() {
+    if (shouldUseUnifiedDialog()) {
+      openCustomExportDialog({ scope: 'current', format: 'html' });
+      return;
+    }
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.html`;
@@ -330,6 +342,9 @@ export function useExport() {
         codeBlockLineNumbers: settings.codeBlockLineNumbers,
         codeBlockWrap: settings.codeBlockWrap,
         withNav: settings.exportHtmlWithNav,
+        paginated: settings.exportHtmlWithNav && settings.exportHtmlPaginated,
+        contentWidth: settings.exportHtmlContentWidth,
+        withTocPage: settings.exportIncludeTocPage,
         lang: settings.language,
       });
       toasts.dismiss(tid);
@@ -342,6 +357,10 @@ export function useExport() {
   }
 
   async function exportDocx() {
+    if (shouldUseUnifiedDialog()) {
+      openCustomExportDialog({ scope: 'current', format: 'docx' });
+      return;
+    }
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.docx`;
@@ -356,6 +375,7 @@ export function useExport() {
         t('docx.contents'),
         plantumlServer(),
         await docxReferenceBytes(),
+        settings.exportIncludeTocPage,
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       // Tauri 2 serializes Uint8Array as a number array which Rust accepts as Vec<u8>.
@@ -369,6 +389,10 @@ export function useExport() {
 
   /** Native-feel PDF export: build a real .pdf file via html2pdf.js. */
   async function exportPdf() {
+    if (shouldUseUnifiedDialog()) {
+      openCustomExportDialog({ scope: 'current', format: 'pdf' });
+      return;
+    }
     const ctx = activeOr();
     if (!ctx) return;
     const filename = `${ctx.baseName}.pdf`;
@@ -388,6 +412,11 @@ export function useExport() {
         ctx.filePath,
         plantumlServer(),
         settings.codeBlockLineNumbers,
+        {
+          includeOutline: settings.exportHtmlWithNav,
+          includeTocPage: settings.exportIncludeTocPage,
+          tocTitle: t('settings.pdfDefaults.tocTitle'),
+        },
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path, data: Array.from(buffer) });
@@ -456,6 +485,10 @@ export function useExport() {
    * WebKitGTK print on Linux).
    */
   async function exportPdfPrint(options?: { forcePrintDialog?: boolean }) {
+    if (!options?.forcePrintDialog && shouldUseUnifiedDialog()) {
+      openCustomExportDialog({ scope: 'current', format: 'pdf' });
+      return;
+    }
     const ctx = activeOr();
     if (!ctx) return;
 
@@ -743,6 +776,10 @@ export function useExport() {
    * of the whole document.
    */
   async function exportImage() {
+    if (shouldUseUnifiedDialog()) {
+      openCustomExportDialog({ scope: 'current', format: 'png' });
+      return;
+    }
     const ctx = activeOr();
     if (!ctx) return;
     const sel = getEditorSelectionMd(ctx.content);
@@ -848,8 +885,8 @@ export function useExport() {
   }
 
   /**
-   * #535 / #359 — Direct export of a single note to `outputPath` in the chosen
-   * format without opening a per-file Save dialog. Used by CustomExportDialog
+   * #535 / #359 / #572 — Direct export of a single note to `outputPath` in the
+   * chosen format without opening a per-file Save dialog. Used by CustomExportDialog
    * for both single-note custom export and batch folder export.
    */
   async function exportNoteToFile(input: {
@@ -857,31 +894,71 @@ export function useExport() {
     baseName: string;
     filePath?: string;
     outputPath: string;
-    format: 'pdf' | 'html' | 'docx' | 'epub' | 'png' | 'textpack';
+    format: 'pdf' | 'html' | 'docx' | 'epub' | 'odt' | 'latex' | 'rtf' | 'png' | 'textpack';
+    includeBookmarks?: boolean;
+    includeTocPage?: boolean;
+    htmlPaginated?: boolean;
+    htmlContentWidth?: number;
   }): Promise<void> {
-    const { content, baseName, filePath, outputPath, format } = input;
-    if (format === 'epub') {
+    const {
+      content,
+      baseName,
+      filePath,
+      outputPath,
+      format,
+      includeBookmarks = settings.exportHtmlWithNav,
+      includeTocPage = settings.exportIncludeTocPage,
+      htmlPaginated = settings.exportHtmlPaginated,
+      htmlContentWidth = settings.exportHtmlContentWidth,
+    } = input;
+    if (format === 'epub' || format === 'odt' || format === 'latex' || format === 'rtf') {
       const { preprocessMarkdown } = await import('../lib/markdown');
       const { pandocResourcePaths } = await import('../lib/pandoc-resource-paths');
       const { useWorkspaceStore } = await import('../stores/workspace');
       const workspace = useWorkspaceStore();
-      const cleanedMarkdown = preprocessMarkdown(content)
+      let cleanedMarkdown = preprocessMarkdown(content)
         .replace(/^[ \t]*\[toc\][ \t]*\r?$/gim, '')
-        .replace(/\s*<!--\s*solomd-toc-(?:level:\d+|folder)\s*-->/g, '');
-      const extraArgs = ['--toc', '--toc-depth=6', `--metadata=title:${baseName}`];
+        .replace(/\s*<!--\s*solomd-(?:toc-(?:level:\d+|folder)|page-break)\s*-->/g, '');
+      // #578 — Render Mermaid fences to high-DPI PNG data URIs before Pandoc
+      // runs so EPUB / ODT / RTF exports display real diagrams instead of raw code.
+      if (format === 'epub' || format === 'odt' || format === 'rtf') {
+        const { renderMermaidFencesInMarkdown } = await import('../lib/diagram-export');
+        cleanedMarkdown = await renderMermaidFencesInMarkdown(cleanedMarkdown);
+      }
+      const extraArgs: string[] = [`--metadata=title:${baseName}`];
+      if (includeBookmarks || includeTocPage) {
+        extraArgs.push('--toc', '--toc-depth=6');
+      }
+      if (format === 'latex' || format === 'rtf') {
+        extraArgs.push('--standalone');
+      }
       if (settings.markdownHardBreaks) {
         extraArgs.push('--from=markdown+hard_line_breaks');
       }
+      let cssContent: string | null = null;
+      if (format === 'epub') {
+        const { SOLOMD_EPUB_CSS } = await import('../lib/epub-style');
+        cssContent = SOLOMD_EPUB_CSS;
+      }
+      const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      const yaml = fmMatch ? fmMatch[1] : '';
+      const bibMatch = yaml.match(/^bibliography\s*:\s*(.+?)\s*$/m);
+      const cslMatch = yaml.match(/^csl\s*:\s*(.+?)\s*$/m);
+      const stripQ = (v?: string) => (v ? v.trim().replace(/^["']|["']$/g, '') : '');
+      const sAny = settings as unknown as { workspaceBibliography?: string; workspaceCsl?: string };
+      const bibliography = stripQ(bibMatch?.[1]) || (sAny.workspaceBibliography || '').trim() || null;
+      const csl = stripQ(cslMatch?.[1]) || (sAny.workspaceCsl || '').trim() || null;
       await invoke('pandoc_export', {
         args: {
           input_markdown: cleanedMarkdown,
-          format: 'epub',
+          format,
           output_path: outputPath,
-          bibliography: null,
-          csl: null,
+          bibliography,
+          csl,
           template: null,
           extra_args: extraArgs,
           resource_paths: pandocResourcePaths(filePath ?? null, workspace.currentFolder),
+          css_content: cssContent,
         },
       });
       return;
@@ -925,7 +1002,10 @@ export function useExport() {
         plantumlServer: plantumlServer(),
         codeBlockLineNumbers: settings.codeBlockLineNumbers,
         codeBlockWrap: settings.codeBlockWrap,
-        withNav: settings.exportHtmlWithNav,
+        withNav: includeBookmarks,
+        paginated: includeBookmarks && htmlPaginated,
+        contentWidth: htmlContentWidth,
+        withTocPage: includeTocPage,
         lang: settings.language,
       });
       await invoke('write_file', { path: outputPath, content: html, encoding: 'UTF-8' });
@@ -940,6 +1020,7 @@ export function useExport() {
         t('docx.contents'),
         plantumlServer(),
         await docxReferenceBytes(),
+        includeTocPage,
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path: outputPath, data: Array.from(buffer) });
@@ -958,6 +1039,11 @@ export function useExport() {
         filePath,
         plantumlServer(),
         settings.codeBlockLineNumbers,
+        {
+          includeOutline: includeBookmarks,
+          includeTocPage,
+          tocTitle: t('settings.pdfDefaults.tocTitle'),
+        },
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path: outputPath, data: Array.from(buffer) });
@@ -974,8 +1060,11 @@ export function useExport() {
     }
   }
 
-  function openCustomExportDialog() {
-    window.dispatchEvent(new CustomEvent('solomd:open-custom-export'));
+  function openCustomExportDialog(preset?: {
+    scope?: 'current' | 'folder';
+    format?: 'pdf' | 'html' | 'docx' | 'epub' | 'odt' | 'latex' | 'rtf' | 'png' | 'textpack';
+  }) {
+    window.dispatchEvent(new CustomEvent('solomd:open-custom-export', { detail: preset }));
   }
 
   return {

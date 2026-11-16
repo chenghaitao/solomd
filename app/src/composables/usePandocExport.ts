@@ -183,6 +183,19 @@ export function usePandocExport() {
     activeContent?: string,
     opts: ExportOptions = {}
   ): Promise<void> {
+    if (
+      format !== 'custom' &&
+      activeContent === undefined &&
+      typeof window !== 'undefined' &&
+      !(window as unknown as { __solomdSavePathOverride?: string }).__solomdSavePathOverride
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('solomd:open-custom-export', {
+          detail: { scope: 'current', format },
+        }),
+      );
+      return;
+    }
     const ctx = activeContext();
     if (!ctx) return;
     // Gitee IJXS8V — run the same leniency preprocessors the preview uses
@@ -246,9 +259,19 @@ export function usePandocExport() {
 
     const tid = toasts.info(t('toast.pandocExporting', { format }), 0);
     try {
+      let preparedInput = content;
+      if (format === 'epub' || format === 'odt' || format === 'rtf') {
+        const { renderMermaidFencesInMarkdown } = await import('../lib/diagram-export');
+        preparedInput = await renderMermaidFencesInMarkdown(preparedInput);
+      }
+      let cssContent: string | null = null;
+      if (format === 'epub') {
+        const { SOLOMD_EPUB_CSS } = await import('../lib/epub-style');
+        cssContent = SOLOMD_EPUB_CSS;
+      }
       await invoke('pandoc_export', {
         args: {
-          input_markdown: content,
+          input_markdown: preparedInput,
           format,
           output_path: outputPath,
           bibliography: bibliography ?? null,
@@ -256,6 +279,7 @@ export function usePandocExport() {
           template: opts.template ?? null,
           extra_args: extraArgs,
           resource_paths: pandocResourcePaths(ctx.filePath, workspace.currentFolder),
+          css_content: cssContent,
         },
       });
       toasts.dismiss(tid);

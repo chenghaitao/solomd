@@ -330,6 +330,8 @@ class ImageWidget extends WidgetType {
     localPath: string | null = null,
     lineNumber: number = 0,
     inline: boolean = false,
+    explicitWidth: string | null = null,
+    explicitHeight: string | null = null,
   ) {
     super();
     this.src = src;
@@ -339,8 +341,8 @@ class ImageWidget extends WidgetType {
     this.inline = inline;
     const parsed = parseImageAltSize(alt);
     this.cleanAlt = parsed.alt;
-    this.width = parsed.width;
-    this.height = parsed.height;
+    this.width = explicitWidth || parsed.width;
+    this.height = explicitHeight || parsed.height;
   }
 
   eq(other: ImageWidget): boolean {
@@ -349,7 +351,9 @@ class ImageWidget extends WidgetType {
       other.alt === this.alt &&
       other.localPath === this.localPath &&
       other.lineNumber === this.lineNumber &&
-      other.inline === this.inline
+      other.inline === this.inline &&
+      other.width === this.width &&
+      other.height === this.height
     );
   }
 
@@ -2113,7 +2117,15 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
               line.to,
               line.to,
               Decoration.widget({
-                widget: new ImageWidget(src, imgSpan.alt, needsFallback ? localPath : null, i),
+                widget: new ImageWidget(
+                  src,
+                  imgSpan.alt,
+                  needsFallback ? localPath : null,
+                  i,
+                  false,
+                  imgSpan.width ?? null,
+                  imgSpan.height ?? null,
+                ),
                 block: true,
                 side: 1,
               }),
@@ -2587,7 +2599,15 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
               line.to,
               line.to,
               Decoration.widget({
-                widget: new ImageWidget(src, firstImg.alt, needsFallback ? localPath : null, i),
+                widget: new ImageWidget(
+                  src,
+                  firstImg.alt,
+                  needsFallback ? localPath : null,
+                  i,
+                  false,
+                  firstImg.width ?? null,
+                  firstImg.height ?? null,
+                ),
                 block: true,
                 side: 1,
               }),
@@ -2628,6 +2648,8 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
                       needsFallback ? localPath : null,
                       i,
                       true,
+                      imgSpan.width ?? null,
+                      imgSpan.height ?? null,
                     ),
                   }),
                 });
@@ -2958,6 +2980,14 @@ export const liveBlocksTheme = EditorView.theme({
     padding: '1em 0',
     overflowX: 'auto',
     textAlign: 'center',
+  },
+  // #573 — Inline \dfrac / \frac inside consecutive list items or lines
+  // overflows a `display: inline` (line-height: 1.2) span and collides
+  // vertically. Promoting fraction-bearing inline math to `inline-block`
+  // with vertical margin makes the line box expand to fit the fraction.
+  '.cm-live-inline-math:has(.mfrac)': {
+    display: 'inline-block',
+    margin: '0.2em 0',
   },
   // #530 — Left-align Mermaid diagrams like images (instead of centered), and
   // style the `+` / `−` fold toggle button on the opening ` ```mermaid ` line.

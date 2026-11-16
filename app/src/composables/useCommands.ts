@@ -36,6 +36,7 @@ import { useGithubSync } from './useGithubSync';
 import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import { hasGitBackend } from '../lib/platform';
 import { useI18n } from '../i18n';
+import { getUserPlugins, runUserTransform } from '../lib/user-plugins';
 
 export interface Command {
   id: string;
@@ -164,6 +165,37 @@ export function useCommands(): Command[] {
     successMsg: string,
   ) {
     transformActive(pick(await loadChineseConvert()), successMsg);
+  }
+
+  function buildUserPluginCommands(): Command[] {
+    return getUserPlugins()
+      .filter((p) => p.enabled && Array.isArray(p.transforms))
+      .flatMap((plugin) =>
+        (plugin.transforms || []).map((tf) => ({
+          id: `plugin.${plugin.id}.${tf.id}`,
+          title: tf.title || `${plugin.name}: ${tf.id}`,
+          hint: tf.hint || plugin.name,
+          run: async () => {
+            const t = freshActiveTab();
+            if (!t) {
+              toasts.warning('No active document');
+              return;
+            }
+            try {
+              const res = await runUserTransform(tf, t.content, {
+                title: t.fileName,
+                filePath: t.filePath,
+              });
+              if (res.content !== t.content) {
+                tabs.setContent(t.id, res.content);
+              }
+              toasts.success(res.message);
+            } catch (e) {
+              toasts.error(`Plugin failed: ${e}`);
+            }
+          },
+        })),
+      );
   }
 
   const all: Command[] = [
@@ -579,6 +611,10 @@ export function useCommands(): Command[] {
         ['editor.deleteWord', 'Delete Word', 'deleteWord'],
         ['editor.selectLine', 'Select Line', 'selectLine'],
         ['editor.jumpToSelection', 'Jump to Selection', 'jumpToSelection'],
+        ['editor.selectNextOccurrence', 'Add Next Occurrence to Selection', 'selectNextOccurrence'],
+        ['editor.selectAllOccurrences', 'Select All Occurrences', 'selectAllOccurrences'],
+        ['editor.addCursorAbove', 'Add Cursor Above', 'addCursorAbove'],
+        ['editor.addCursorBelow', 'Add Cursor Below', 'addCursorBelow'],
         ['heading.promote', 'Increase Heading Level', 'headingPromote'],
         ['heading.demote', 'Decrease Heading Level', 'headingDemote'],
         ['heading.paragraph', 'Convert to Paragraph', 'headingParagraph'],
@@ -995,6 +1031,7 @@ export function useCommands(): Command[] {
       },
     },
   ];
+  all.push(...buildUserPluginCommands());
 
   // App Store builds strip AI / Agent commands (Apple 3.1.1).
   const built = IS_APP_STORE_BUILD
@@ -1007,10 +1044,17 @@ export function useCommands(): Command[] {
   // Quick capture is a desktop window opened by an OS-level hotkey; neither
   // half exists on a phone, so the command would only ever fail there.
   const desktopOnly = isMobile() ? built.filter((c) => c.id !== 'capture.quick') : built;
-  if (!hasGitBackend()) {
-    return desktopOnly.filter(
-      (c) => !c.id.startsWith('history.') && !c.id.startsWith('sync.'),
-    );
-  }
-  return desktopOnly;
+  const finalCommands = !hasGitBackend()
+    ? desktopOnly.filter(
+        (c) => !c.id.startsWith('history.') && !c.id.startsWith('sync.'),
+      )
+    : desktopOnly;
+  Object.defineProperty(finalCommands, '__refreshPlugins', {
+    value: () => [
+      ...finalCommands.filter((c) => !c.id.startsWith('plugin.')),
+      ...buildUserPluginCommands(),
+    ],
+    enumerable: false,
+  });
+  return finalCommands;
 }
