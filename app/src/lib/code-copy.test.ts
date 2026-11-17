@@ -9,7 +9,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { crlfForWindowsClipboard } from './code-copy.ts';
+import { crlfForWindowsClipboard, isArtworkFenceClass } from './code-copy.ts';
+
+test('mermaid fences are artwork: their copy button sits outside the diagram', () => {
+  assert.equal(isArtworkFenceClass('language-mermaid'), true);
+  assert.equal(isArtworkFenceClass('hljs language-mermaid'), true);
+});
+
+test('ordinary code fences keep the inset button', () => {
+  assert.equal(isArtworkFenceClass('language-ts'), false);
+  assert.equal(isArtworkFenceClass('language-mermaidx'), false);
+  assert.equal(isArtworkFenceClass(''), false);
+});
 
 test('Windows: every LF becomes CRLF', () => {
   const code = 'MA5:MA(C,5);\nMA10:MA(C,10);\nDRAWICON(MA5>MA10,1);';

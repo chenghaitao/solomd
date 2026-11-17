@@ -129,6 +129,22 @@ export interface CodeCopyOptions {
 }
 
 /**
+ * Fences the preview swaps for rendered artwork once the diagram is ready
+ * (Mermaid). The shell is built while the fence is still a `<pre>`, so the
+ * button survives that swap and ends up sitting on the diagram's own
+ * top-right corner. Tagging the shell lets CSS park the button outside the
+ * artwork; it still copies the fence source, which is what a copy affordance
+ * on a diagram should hand back.
+ */
+const ARTWORK_FENCE_CLASSES = ['language-mermaid'];
+
+/** Whether a fence's `class` attribute marks it as rendered-artwork source. */
+export function isArtworkFenceClass(className: string): boolean {
+  const names = className.split(/\s+/);
+  return ARTWORK_FENCE_CLASSES.some((cls) => names.includes(cls));
+}
+
+/**
  * Give every `<pre><code>` inside `host` a copy button. Idempotent: blocks
  * already wrapped in a `.code-block-shell` are skipped, so it's safe to
  * call after every re-render.
@@ -149,6 +165,9 @@ export function attachCodeCopyButtons(
 
     const shell = document.createElement('div');
     shell.className = 'code-block-shell';
+    if (isArtworkFenceClass(code.className)) {
+      shell.classList.add('code-block-shell--artifact');
+    }
     pre.replaceWith(shell);
     shell.appendChild(pre);
 

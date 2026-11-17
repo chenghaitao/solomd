@@ -1106,6 +1106,19 @@ body.solomd-printing--dark {
   outline: none;
 }
 
+/* Diagram fences (```mermaid) keep their copy button, but the preview swaps
+ * the `<pre>` for the rendered SVG after the button is already in place — at
+ * the default 8px inset it covers the diagram's own top-right corner (the
+ * subgraph border in a flowchart). The artifact margin is the slot the button
+ * parks in, just above the artwork. Plain code blocks keep the inset button. */
+.code-block-shell--artifact {
+  margin-top: 2.5em;
+}
+.code-block-shell--artifact > .code-copy-button {
+  top: -28px;
+  right: 0;
+}
+
 /* #271 — short table cells (tagged by markdown.ts `table_short_cells`) stay on
    one line. Global, not preview-scoped: live edit renders the same table HTML
    outside .preview-content (CodeMirror table widgets, the Windows block
