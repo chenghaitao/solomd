@@ -19,6 +19,45 @@
 
 ---
 
+## [5.2.4] — 2026-11-17
+
+同步上游 v5.2.2（7 个提交），加一处预览区修复。
+
+### 同步上游至 db74f22e（7 个提交，v5.2.1 → v5.2.2）
+
+- **#591 文档内搜索不再冻结**编辑器与预览；搜索结果定位抽出 `preview-search-hits` 统一处理。
+- **#586 / #590 / #592 / #593 批量修复**：PDF 书签 `/Dest` 坐标改用
+  `pageInfo.pageContext.mediaBox` 直算，仅 mediaBox 不可用时回退
+  `getVerticalCoordinateString`；Pandoc 导出补齐 `pandoc-markdown.ts`。
+- **Android 分发**：新增 Fastlane 元数据（IzzyOnDroid / F-Droid），AtomGit 镜像下载与
+  Obtainium 自动更新入口；App Store 构建移除残留 `solomd.app` 请求，准备 CN ICP 豁免。
+- 官网 `web/`、`whats-new` 多语言文案、`mcp-server` 版本同步跟随上游。
+
+### 修复
+
+- **预览区 Mermaid 图的「复制」按钮压在图上**。`#522` 把图渲染改成 IntersectionObserver
+  排队后，`attachCodeCopyButtons()` 先于渲染执行，把当时的 `<pre><code>` 包进
+  `.code-block-shell` 并插入按钮；图渲染完成只替换 `<pre>`，外壳与按钮留在原处，8px 内缩
+  正好盖住流程图右上角的 subgraph 边框。现在给 `language-mermaid` 的外壳打
+  `.code-block-shell--artifact`，按钮抬到渲染区外侧（`top:-28px` / `right:0`，
+  `margin-top:2.5em` 留出槽位），仍复制围栏源码；普通代码块保持原有内缩位置。
+
+### 冲突处理
+
+| 文件 | 处理 |
+| --- | --- |
+| `app/package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock` | 取 fork 的 5.2.3，再由 `bump-version.js` 统一抬到 5.2.4 |
+| `app/src/lib/cm-live-render.ts` | 合成：保留 fork 的 #589 高亮 token 装饰，接受上游的可见行裁剪（`loopStart/loopEnd`），高亮块置于循环之前 |
+| `app/src/lib/pdf-export.ts` | 书签 `/Dest` 取上游 #590 的 mediaBox 实现（比 fork 更准且带 `getVert` 回退），补回 fork 关于回退前提的注释 |
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **787 / 787**（基线 771，上游新增 34 条：搜索命中 10 条、
+  v5.2.2 回归 24 条）；`vite build` 成功，3,494 个模块，入口 chunk
+  **1,738.17 kB / gzip 530.03 kB**（与 5.2.3 基线一致）。
+
+---
+
 ## [5.2.3] — 2026-11-17
 
 纯修复版，不含上游同步（基线仍是 `51463af2` / v5.2.1）。一个会让 PDF 打不开的导出
