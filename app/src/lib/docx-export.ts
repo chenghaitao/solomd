@@ -863,6 +863,47 @@ const REFERENCE_STYLE_PARTS = [
 ];
 const THEME_PART = 'word/theme/theme1.xml';
 
+/**
+ * #603 — One `<w:style>` element, as written by either generator.
+ *
+ * Word and WPS write heading styles with ids like `1`, `2`, `5`… (the id is a
+ * number, the *name* is `heading 1`), while the `docx` library always uses
+ * `Heading1`. Swapping a template's `styles.xml` into a document that still
+ * says `<w:pStyle w:val="Heading1"/>` therefore leaves every heading pointing
+ * at a style that does not exist: Word draws the text as body copy and drops
+ * it from the navigation pane / TOC. Both the name and the id have to be read
+ * to line the two vocabularies up.
+ */
+const STYLE_ELEMENT_RE = /<w:style\b[^>]*\/>|<w:style\b[^>]*>[\s\S]*?<\/w:style>/g;
+const HEADING_STYLE_NAME_RE = /^(?:heading|标题)\s*([1-9])$/i;
+
+interface StyleSurvey {
+  ids: Set<string>;
+  names: Set<string>;
+  /** Heading level → the style id this stylesheet uses for it. */
+  headingIdByLevel: Map<number, string>;
+  elements: string[];
+}
+
+function surveyStyles(xml: string): StyleSurvey {
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  const headingIdByLevel = new Map<number, string>();
+  const elements = xml.match(STYLE_ELEMENT_RE) ?? [];
+  for (const el of elements) {
+    const id = /w:styleId="([^"]+)"/.exec(el)?.[1];
+    const name = (/<w:name w:val="([^"]+)"/.exec(el)?.[1] ?? '').trim();
+    if (id) ids.add(id);
+    if (name) names.add(name.toLowerCase());
+    const level = HEADING_STYLE_NAME_RE.exec(name);
+    if (level && id) {
+      const n = Number(level[1]);
+      if (!headingIdByLevel.has(n)) headingIdByLevel.set(n, id);
+    }
+  }
+  return { ids, names, headingIdByLevel, elements };
+}
+
 async function applyDocxReference(blob: Blob, reference: Uint8Array): Promise<Blob> {
   let generated: Record<string, Uint8Array>;
   let template: Record<string, Uint8Array>;
@@ -884,6 +925,48 @@ async function applyDocxReference(blob: Blob, reference: Uint8Array): Promise<Bl
   }
   for (const name of REFERENCE_STYLE_PARTS) {
     if (template[name] && merged[name]) merged[name] = template[name];
+  }
+
+  // #603 — reconcile the two stylesheets instead of swapping one for the other:
+  // re-point our heading paragraphs at the template's heading styles (so the
+  // user's design and Word's outline both survive), and append the handful of
+  // generated styles the template has no counterpart for (lists, tables,
+  // hyperlinks, code) so those paragraphs do not fall back to body text either.
+  if (generated['word/styles.xml'] && merged['word/styles.xml']) {
+    const generatedStylesXml = strFromU8(generated['word/styles.xml']);
+    let templateStylesXml = strFromU8(merged['word/styles.xml']);
+    const genStyles = surveyStyles(generatedStylesXml);
+    const tplStyles = surveyStyles(templateStylesXml);
+
+    const headingRemap = new Map<string, string>();
+    for (const [level, templateId] of tplStyles.headingIdByLevel) {
+      const generatedId = genStyles.headingIdByLevel.get(level) ?? `Heading${level}`;
+      if (templateId !== generatedId) headingRemap.set(generatedId, templateId);
+    }
+
+    const appended: string[] = [];
+    for (const el of genStyles.elements) {
+      const id = /w:styleId="([^"]+)"/.exec(el)?.[1];
+      const name = (/<w:name w:val="([^"]+)"/.exec(el)?.[1] ?? '').trim().toLowerCase();
+      if (!id || tplStyles.ids.has(id)) continue;
+      // Same style, different id (e.g. `Normal` vs the template's `1`): the
+      // template's own definition wins, and appending a second default style
+      // would make Word reject the file.
+      if (name && tplStyles.names.has(name)) continue;
+      appended.push(el);
+    }
+    if (appended.length > 0) {
+      templateStylesXml = templateStylesXml.replace('</w:styles>', `${appended.join('')}</w:styles>`);
+    }
+    merged['word/styles.xml'] = strToU8(templateStylesXml);
+
+    if (headingRemap.size > 0 && merged['word/document.xml']) {
+      let docXml = strFromU8(merged['word/document.xml']);
+      for (const [from, to] of headingRemap) {
+        docXml = docXml.split(`w:val="${from}"`).join(`w:val="${to}"`);
+      }
+      merged['word/document.xml'] = strToU8(docXml);
+    }
   }
 
   // The generated package has no theme part of its own, so the template's

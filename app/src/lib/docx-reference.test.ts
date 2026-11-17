@@ -48,8 +48,20 @@ async function generatedParts(reference?: Uint8Array | null): Promise<Record<str
 test('#553 a reference .docx replaces styles/fonts/theme and the page setup', async () => {
   const parts = await generatedParts(referenceDocx());
   const docXml = strFromU8(parts['word/document.xml']);
+  const mergedStyles = strFromU8(parts['word/styles.xml']);
 
-  assert.equal(strFromU8(parts['word/styles.xml']), STYLES_XML);
+  // The template's stylesheet is the base; generated-only styles are appended
+  // after it (see #603) instead of replacing it outright.
+  assert.ok(
+    mergedStyles.startsWith(STYLES_XML.replace('</w:styles>', '')),
+    'template stylesheet is kept as the base',
+  );
+  assert.ok(mergedStyles.includes('w:styleId="Normal"'), 'template Normal kept');
+  assert.equal(
+    (mergedStyles.match(/<w:name w:val="Normal"\/>/g) || []).length,
+    1,
+    'the generated default style must not be appended a second time',
+  );
   assert.equal(strFromU8(parts['word/fontTable.xml']), FONT_TABLE_XML);
   assert.equal(strFromU8(parts['word/theme/theme1.xml']), THEME_XML);
   assert.ok(docXml.includes(PG_SZ), 'paper size comes from the template');
@@ -75,4 +87,62 @@ test('#553 with no reference the package is byte-for-byte the normal output', as
     Array.from(baseline['word/styles.xml']),
   );
   assert.ok(strFromU8(without['word/document.xml']).includes('正文内容 Body text'));
+});
+
+// #603 — Word/WPS templates number their heading style ids (`1`, `2`, …) while
+// the `docx` library writes `Heading1`: the references have to be re-pointed,
+// or Word shows every heading as body text and the outline stays empty.
+const NUMERIC_STYLES_XML =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+  '<w:docDefaults/>' +
+  '<w:style w:type="paragraph" w:default="1" w:styleId="1"><w:name w:val="Normal"/></w:style>' +
+  '<w:style w:type="paragraph" w:styleId="2"><w:name w:val="heading 1"/>' +
+  '<w:pPr><w:outlineLvl w:val="0"/></w:pPr></w:style>' +
+  '<w:style w:type="paragraph" w:styleId="5"><w:name w:val="heading 2"/>' +
+  '<w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>' +
+  '</w:styles>';
+
+function numericReferenceDocx(): Uint8Array {
+  const templateDocXml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:body><w:p/><w:sectPr/></w:body></w:document>';
+  return zipSync(
+    {
+      '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+      'word/document.xml': strToU8(templateDocXml),
+      'word/styles.xml': strToU8(NUMERIC_STYLES_XML),
+      'word/fontTable.xml': strToU8(FONT_TABLE_XML),
+    },
+    { level: 6 },
+  );
+}
+
+test('#603 a template whose heading styles are numbered still yields real Word headings', async () => {
+  const blob = await markdownToDocxBlob(
+    '# 一级标题\n\n正文\n\n## 二级标题\n\n更多正文',
+    '测试文档',
+    undefined,
+    'plain',
+    'Contents',
+    null,
+    numericReferenceDocx(),
+  );
+  const parts = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+  const docXml = strFromU8(parts['word/document.xml']);
+  const stylesXml = strFromU8(parts['word/styles.xml']);
+
+  const usedStyles = Array.from(docXml.matchAll(/<w:pStyle w:val="([^"]+)"\/>/g)).map((m) => m[1]);
+  assert.ok(usedStyles.includes('2'), `H1 must use the template's heading 1 style, got ${usedStyles}`);
+  assert.ok(usedStyles.includes('5'), `H2 must use the template's heading 2 style, got ${usedStyles}`);
+  assert.ok(!usedStyles.includes('Heading1'), 'no dangling Heading1 reference may survive');
+  assert.ok(!usedStyles.includes('Heading2'), 'no dangling Heading2 reference may survive');
+
+  // Every referenced style must exist in the merged stylesheet.
+  for (const id of new Set(usedStyles)) {
+    assert.ok(stylesXml.includes(`w:styleId="${id}"`), `style ${id} used by a paragraph is missing`);
+  }
+  // And the template's own heading styles must not be shadowed by duplicates.
+  assert.equal((stylesXml.match(/<w:name w:val="heading 1"\/>/g) || []).length, 1);
 });
