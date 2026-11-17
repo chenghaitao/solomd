@@ -376,6 +376,7 @@ export function useExport() {
         plantumlServer(),
         await docxReferenceBytes(),
         settings.exportIncludeTocPage,
+        docTitle,
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       // Tauri 2 serializes Uint8Array as a number array which Rust accepts as Vec<u8>.
@@ -899,6 +900,9 @@ export function useExport() {
     includeTocPage?: boolean;
     htmlPaginated?: boolean;
     htmlContentWidth?: number;
+    /** #597 — merged books: folder name stays the document title even though
+     *  the root heading no longer sits at the top of the body. */
+    docTitle?: string;
   }): Promise<void> {
     const {
       content,
@@ -910,6 +914,7 @@ export function useExport() {
       includeTocPage = settings.exportIncludeTocPage,
       htmlPaginated = settings.exportHtmlPaginated,
       htmlContentWidth = settings.exportHtmlContentWidth,
+      docTitle,
     } = input;
     if (format === 'epub' || format === 'odt' || format === 'latex' || format === 'rtf') {
       const { preprocessMarkdown } = await import('../lib/markdown');

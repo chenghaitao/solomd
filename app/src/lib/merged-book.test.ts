@@ -188,3 +188,41 @@ test('#570: single-note standalone HTML export without [TOC] builds hierarchical
   assert.ok(html.includes('1.1 安装说明'));
   assert.ok(html.includes('id="solomd-search-input"'));
 });
+
+test('#597: omitRootHeading drops the folder title heading and lifts every other heading one level', () => {
+  const notes = [
+    { relDir: '', baseName: 'K8S环境铲除流程', content: '# 环境说明\n\n## 1.1 前置条件\n\n正文' },
+    { relDir: '附录', baseName: '附录A', content: '# 附录 A\n\n正文' },
+  ];
+
+  const withRoot = buildMergedBookMarkdown('01 书籍名', notes);
+  assert.ok(withRoot.startsWith('# 01 书籍名\n\n[TOC]'), 'root heading kept by default');
+  assert.match(withRoot, /^## 环境说明$/m);
+  assert.match(withRoot, /^### 1\.1 前置条件$/m);
+  assert.match(withRoot, /^## 附录 <!-- solomd-toc-folder -->$/m);
+  assert.match(withRoot, /^### 附录 A$/m);
+
+  const withoutRoot = buildMergedBookMarkdown('01 书籍名', notes, { omitRootHeading: true });
+  assert.ok(withoutRoot.startsWith('[TOC]'), 'body opens directly on the TOC block');
+  assert.doesNotMatch(withoutRoot, /^#\s+01 书籍名$/m, 'folder name is not a body heading');
+  // First note is a top-level chapter again, its H2 stays the second level.
+  assert.match(withoutRoot, /^# 环境说明$/m);
+  assert.match(withoutRoot, /^## 1\.1 前置条件$/m);
+  // A subfolder that was H2 under the root H1 becomes H1, and its note H2.
+  assert.match(withoutRoot, /^# 附录 <!-- solomd-toc-folder -->$/m);
+  assert.match(withoutRoot, /^## 附录 A$/m);
+  // A note without any H1 still gets a synthesized chapter heading at the new base level.
+  const synthesized = buildMergedBookMarkdown(
+    '01 书籍名',
+    [{ relDir: '', baseName: '无标题笔记', content: '只有正文，没有标题。' }],
+    { omitRootHeading: true },
+  );
+  assert.match(synthesized, /^# 无标题笔记$/m);
+});
+
+test('#597: resolveDocxTemplate prefers an explicit title override over the body heading', async () => {
+  const { resolveDocxTemplate } = await import('./docx-template');
+  const src = '[TOC]\n\n# 环境说明\n\n正文';
+  assert.equal(resolveDocxTemplate('plain', src, 'fallback').title, '环境说明');
+  assert.equal(resolveDocxTemplate('plain', src, 'fallback', '01 书籍名').title, '01 书籍名');
+});

@@ -951,6 +951,9 @@ export async function markdownToDocxBlob(
   referenceDocx?: Uint8Array | null,
   /** #572 — explicit override for whether to generate a leading Table of Contents page. */
   includeTocPage?: boolean,
+  /** #597 — cover / running-header title that must win over the body's first
+   *  heading (merged books are named after their folder). */
+  titleOverride?: string,
 ): Promise<Blob> {
   srcImages.clear();
   nextOrderedListInstance = 0;
@@ -965,7 +968,7 @@ export async function markdownToDocxBlob(
   const blocks = await buildBody(tokens, imageRoot, filePath);
   if (blocks.length === 0) blocks.push(new Paragraph({ text: '' }));
 
-  const tpl = resolveDocxTemplate(preset, source ?? '', _title);
+  const tpl = resolveDocxTemplate(preset, source ?? '', _title, titleOverride);
   const headerText = renderHeaderText(tpl);
 
   const front: BlockChild[] = [];

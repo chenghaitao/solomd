@@ -205,6 +205,9 @@ export function transformNoteForMergedBook(
   folderDepth: number,
   relDirSegments: string[] = [],
   numberState?: MergedHeadingNumberState,
+  /** #597 — shift every emitted heading by this many levels (`-1` when the
+   *  book's root folder heading is not part of the document body). */
+  levelOffset = 0,
 ): string {
   const noteImageRoot = extractImageRoot(rawContent || '');
   const stripped = (rawContent || '')
@@ -212,7 +215,7 @@ export function transformNoteForMergedBook(
     .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '')
     .trim();
 
-  const noteBaseLevel = 2 + Math.max(0, folderDepth);
+  const noteBaseLevel = 2 + Math.max(0, folderDepth) + levelOffset;
   const lines = stripped ? stripped.split(/\r?\n/) : [];
   const outLines: string[] = [];
 
@@ -359,12 +362,27 @@ export function transformNoteForMergedBook(
   return body;
 }
 
+export interface MergedBookOptions {
+  /**
+   * #597 — Leave the exported root folder out of the document body: no
+   * `# <folder>` heading between the TOC page and the first chapter, and no
+   * bookmark root. The title (Word's opening document title, PDF metadata,
+   * the file name) still comes from the folder name, and the nested headings
+   * move up one level so the first note stays a top-level chapter. HTML
+   * exports keep the root heading, so they never set this.
+   */
+  omitRootHeading?: boolean;
+}
+
 export function buildMergedBookMarkdown(
   folderName: string,
   notes: MergedNoteInput[],
+  options: MergedBookOptions = {},
 ): string {
   const bookTitle = (folderName || 'Exported-Book').trim() || 'Exported-Book';
-  const leadHeader = `# ${bookTitle}\n\n[TOC]`;
+  const omitRoot = options.omitRootHeading === true;
+  const levelOffset = omitRoot ? -1 : 0;
+  const leadHeader = omitRoot ? '[TOC]' : `# ${bookTitle}\n\n[TOC]`;
   const noteSections: string[] = [];
   let activeFolders: string[] = [];
   const numberState: MergedHeadingNumberState = { h1Count: 0 };
@@ -381,7 +399,7 @@ export function buildMergedBookMarkdown(
     }
     const folderHeadings: string[] = [];
     for (let d = common; d < segs.length; d++) {
-      folderHeadings.push(formatMergedHeading(2 + d, segs[d], true));
+      folderHeadings.push(formatMergedHeading(2 + d + levelOffset, segs[d], true));
     }
     activeFolders = segs;
 
@@ -398,6 +416,7 @@ export function buildMergedBookMarkdown(
       segs.length,
       segs,
       numberState,
+      levelOffset,
     );
     noteSections.push([...folderHeadings, noteMarkdown].join('\n\n'));
   }

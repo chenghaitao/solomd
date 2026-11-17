@@ -524,7 +524,13 @@ async function runCustomExport() {
             content: raw,
           });
         }
-        const mergedContent = buildMergedBookMarkdown(folderName, mergedNotes);
+        // #597 — PDF / Word / EPUB / ODT / RTF / LaTeX treat the folder as the
+        // document *title* only; repeating it as a chapter heading right after
+        // the TOC page (and as the bookmark root) just adds a redundant level.
+        // The single-file HTML export keeps its root heading on purpose.
+        const mergedContent = buildMergedBookMarkdown(folderName, mergedNotes, {
+          omitRootHeading: format.value !== 'html',
+        });
         const finalFileName = splitExportPath(targetPath).fileName;
         progressText.value = isZh.value
           ? `正在生成合集文档：${finalFileName}…`
@@ -539,6 +545,10 @@ async function runCustomExport() {
           includeTocPage: settings.exportIncludeTocPage,
           htmlPaginated: settings.exportHtmlPaginated,
           htmlContentWidth: settings.exportHtmlContentWidth,
+          // #597 — the folder name is still the document title on Word's cover
+          // page and in the running header, even though the body now starts at
+          // the first chapter.
+          docTitle: format.value === 'html' ? undefined : folderName,
         });
         lastExportedPath.value = targetPath;
         const msg = isZh.value
