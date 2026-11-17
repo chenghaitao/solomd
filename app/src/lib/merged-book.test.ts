@@ -255,3 +255,27 @@ test('#594: a paginated book keeps the TOC on its own <section>, shown first, wi
   assert.ok(firstNotePage.includes('第一章'), 'first note keeps its own page');
   assert.ok(!firstNotePage.includes('<nav class="md-toc"'), 'TOC is not mixed into the first note');
 });
+
+test('#598: paginated exports carry zh/en pager labels and the pager styling', async () => {
+  const zh = await buildStandaloneHtml({
+    content: '# 第一章\n\n正文',
+    title: '书籍',
+    withNav: true,
+    paginated: true,
+    lang: 'zh',
+  });
+  assert.ok(zh.includes('data-pager-prev="&lt; 上一主题"'), 'zh prev label');
+  assert.ok(zh.includes('data-pager-next="下一主题 &gt;"'), 'zh next label');
+  assert.ok(zh.includes('data-pager-toc="目录"'), 'zh toc label');
+  assert.ok(zh.includes('.solomd-pager--top') && zh.includes('.solomd-pager--bottom'));
+
+  const en = await buildStandaloneHtml({
+    content: '# Chapter 1\n\nBody',
+    title: 'Book',
+    withNav: true,
+    paginated: true,
+    lang: 'en',
+  });
+  assert.ok(en.includes('data-pager-prev="&lt; Previous"'));
+  assert.ok(en.includes('data-pager-next="Next &gt;"'));
+});

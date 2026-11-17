@@ -394,6 +394,50 @@ const NAV_SIDEBAR_CSS = `
       display: block !important;
     }
   }
+  /* #598 — topic pager: quiet technical-document styling, a hairline rule on
+     the content side, and nothing at all on paper. */
+  .solomd-pager {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .solomd-pager--top {
+    justify-content: flex-end;
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+    border-bottom: 1px solid var(--rule, #e4e6e9);
+  }
+  .solomd-pager--bottom {
+    justify-content: center;
+    padding-top: 14px;
+    margin-top: 36px;
+    border-top: 1px solid var(--rule, #e4e6e9);
+  }
+  .solomd-pager__btn {
+    padding: 4px 12px;
+    border: 1px solid var(--rule, #d0d7de);
+    border-radius: 4px;
+    background: var(--paper, #fff);
+    color: var(--link, #0b5cad);
+    cursor: pointer;
+    line-height: 1.6;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .solomd-pager__btn:hover {
+    border-color: var(--link, #0b5cad);
+    background: #f4f8fd;
+  }
+  .solomd-pager__btn[aria-disabled="true"] {
+    border-color: var(--rule, #e4e6e9);
+    background: transparent;
+    color: #9aa4ae;
+    cursor: default;
+  }
+  @media print {
+    .solomd-pager { display: none !important; }
+  }
   /* #594 — the table of contents gets its own page; its title is a div, not an
      h1, so it never joins the document outline or the heading numbering. */
   .solomd-page-title {
@@ -428,6 +472,10 @@ const NAV_SIDEBAR_SCRIPT = `<script>
   var mainEl = document.getElementById('solomd-export-main');
   var articleEl = document.getElementById('solomd-export-article');
   if (!navPane || !searchPane || !mainEl || !articleEl) return;
+  // #598 — pager labels come from the export's language (see HTML_TEMPLATE).
+  var PREV_LABEL = articleEl.getAttribute('data-pager-prev') || 'Previous';
+  var NEXT_LABEL = articleEl.getAttribute('data-pager-next') || 'Next';
+  var TOC_LABEL = articleEl.getAttribute('data-pager-toc') || 'Contents';
 
   // 1) Resizable navigation sidebar (#574)
   if (resizerEl && sidebarEl) {
@@ -582,13 +630,93 @@ const NAV_SIDEBAR_SCRIPT = `<script>
       pageSections[p].style.display = show ? 'block' : 'none';
     }
     if (changed) mainEl.scrollTop = 0;
+    updatePager(sec);
     return changed;
+  }
+
+  function activePageSection() {
+    for (var a = 0; a < pageSections.length; a++) {
+      if (pageSections[a].style.display !== 'none') return pageSections[a];
+    }
+    return pageSections[0] || null;
   }
 
   function activatePageForElement(el) {
     if (!el || !pageSections.length) return;
     var sec = el.closest ? el.closest('section.page') : null;
     if (sec) activatePageSection(sec);
+  }
+
+  // #598 — "< 上一主题 / 下一主题 >" pagers: one right-aligned above the
+  // content, one centred below it. They live beside the sections (not inside
+  // one) so they stay on screen while pages switch.
+  var pagerTop = null;
+  var pagerBottom = null;
+  function sectionLabel(sec) {
+    if (!sec) return '';
+    if (sec.id === 'solomd-page-toc') return TOC_LABEL;
+    var h = sec.querySelector('h1, h2, h3');
+    return h ? (h.textContent || '').trim() : '';
+  }
+  function updatePager(sec) {
+    if (!pagerTop || !pagerBottom) return;
+    var idx = pageSections.indexOf(sec);
+    var prev = idx > 0 ? pageSections[idx - 1] : null;
+    var next = idx >= 0 && idx < pageSections.length - 1 ? pageSections[idx + 1] : null;
+    var bars = [pagerTop, pagerBottom];
+    for (var b = 0; b < bars.length; b++) {
+      var buttons = bars[b].querySelectorAll('.solomd-pager__btn');
+      for (var i2 = 0; i2 < buttons.length; i2++) {
+        var isPrev = buttons[i2].getAttribute('data-dir') === 'prev';
+        var target = isPrev ? prev : next;
+        var label = isPrev ? PREV_LABEL : NEXT_LABEL;
+        var targetLabel = sectionLabel(target);
+        buttons[i2].textContent = label;
+        buttons[i2].setAttribute('aria-disabled', target ? 'false' : 'true');
+        buttons[i2].setAttribute('title', targetLabel || '');
+        buttons[i2].setAttribute('data-target', target ? target.id : '');
+      }
+    }
+  }
+  function buildPager(className) {
+    var bar = document.createElement('div');
+    bar.className = 'solomd-pager ' + className;
+    var prevBtn = document.createElement('a');
+    prevBtn.className = 'solomd-pager__btn';
+    prevBtn.setAttribute('role', 'button');
+    prevBtn.setAttribute('data-dir', 'prev');
+    var nextBtn = document.createElement('a');
+    nextBtn.className = 'solomd-pager__btn';
+    nextBtn.setAttribute('role', 'button');
+    nextBtn.setAttribute('data-dir', 'next');
+    bar.appendChild(prevBtn);
+    bar.appendChild(nextBtn);
+    bar.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('.solomd-pager__btn') : null;
+      if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
+      e.preventDefault();
+      var targetId = btn.getAttribute('data-target') || '';
+      for (var s = 0; s < pageSections.length; s++) {
+        if (pageSections[s].id === targetId) {
+          activatePageSection(pageSections[s]);
+          break;
+        }
+      }
+    });
+    return bar;
+  }
+
+  if (pageSections.length > 1) {
+    pagerTop = buildPager('solomd-pager--top');
+    pagerBottom = buildPager('solomd-pager--bottom');
+    var firstSection = pageSections[0];
+    var lastSection = pageSections[pageSections.length - 1];
+    firstSection.parentNode.insertBefore(pagerTop, firstSection);
+    if (lastSection.nextSibling) {
+      lastSection.parentNode.insertBefore(pagerBottom, lastSection.nextSibling);
+    } else {
+      lastSection.parentNode.appendChild(pagerBottom);
+    }
   }
 
   if (pageSections.length > 0) {
@@ -602,6 +730,7 @@ const NAV_SIDEBAR_SCRIPT = `<script>
     if (!hasVisiblePage) {
       activatePageSection(pageSections[0]);
     }
+    updatePager(activePageSection());
   }
 
   var flashTimer = null;
@@ -1081,7 +1210,10 @@ ${
 </aside>
 <div id="solomd-sidebar-resizer" class="solomd-sidebar-resizer" role="separator" aria-orientation="vertical" title="${navOptions.isZh ? '拖拽调整导航面板宽度' : 'Drag to resize navigation panel'}"></div>
 <main id="solomd-export-main" class="solomd-export-main">
-  <article id="solomd-export-article" class="solomd-export-article">
+  <article id="solomd-export-article" class="solomd-export-article"
+    data-pager-prev="${navOptions.isZh ? '&lt; 上一主题' : '&lt; Previous'}"
+    data-pager-next="${navOptions.isZh ? '下一主题 &gt;' : 'Next &gt;'}"
+    data-pager-toc="${navOptions.isZh ? '目录' : 'Contents'}">
 ${body}
   </article>
 </main>
