@@ -200,16 +200,19 @@ test('#576 & #575 populatePdfOutline passes topMm and patches renderItems to emi
   const root: { children: FakeOutlineItem[] } = { children: [] };
   let nextId = 10;
   const emittedLines: string[] = [];
-  let currentPage = 1;
 
   const outline: JsPdfOutlineLike = {
     ctx: {
       pdf: {
-        setPage(p: number) {
-          currentPage = p;
+        // jsPDF's `API.setPage` ends with `setOutputDestination(pages[currentPage])`,
+        // so calling it while the outline renders (inside `postPutResources`,
+        // i.e. mid-`buildDocument`) redirects the rest of the document — Info,
+        // Catalog, xref, trailer, %%EOF — into a page's content stream and
+        // yields a PDF no viewer can open. Rendering must never switch pages.
+        setPage() {
+          throw new Error('renderItems must not call pdf.setPage()');
         },
         internal: {
-          getCurrentPageInfo: () => ({ pageNumber: currentPage }),
           getPageInfo: (pageNo: number) => ({ objId: pageNo * 100 + 3 }),
           // A4 height 297mm = 841.89pt; PDF Y grows bottom-up: (297 - topMm) * (72 / 25.4)
           getVerticalCoordinateString: (topMm: number) =>

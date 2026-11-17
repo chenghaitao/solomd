@@ -361,9 +361,9 @@ export interface JsPdfOutlineLike {
   ctx?: {
     val?: string;
     pdf?: {
+      /** Must not be called while an outline renders — see `populatePdfOutline`. */
       setPage?: (page: number) => unknown;
       internal?: {
-        getCurrentPageInfo?: () => { pageNumber?: number };
         getPageInfo?: (pageNumber: number) => { objId: number };
         getVerticalCoordinateString?: (y: number) => string;
       };
@@ -687,7 +687,15 @@ export function populatePdfOutline(
       const pdfDoc = this.ctx?.pdf;
       const getVert = pdfDoc?.internal?.getVerticalCoordinateString;
       const getPageInfo = pdfDoc?.internal?.getPageInfo;
-      const prevPage = pdfDoc?.internal?.getCurrentPageInfo?.()?.pageNumber;
+      // NOTE — never call `pdfDoc.setPage()` in here. `renderItems` runs inside
+      // jsPDF's `postPutResources` event, i.e. while `buildDocument()` is still
+      // appending to the document body; `API.setPage` ends with
+      // `setOutputDestination(pages[currentPage])`, which would redirect every
+      // later write (Info object, Catalog, xref, trailer, %%EOF) into that
+      // page's content stream and hand back a PDF that no viewer can open.
+      // `getVerticalCoordinateString` only needs the page height, and every
+      // html2pdf page shares one pageSize, so the current page yields the same
+      // `/XYZ` value the target page would.
       for (let n = 0; n < children.length; n++) {
         const item = children[n];
         this.objStart?.(item);
@@ -705,18 +713,12 @@ export function populatePdfOutline(
         const opts = item.options as JsPdfOutlineOptions | undefined;
         if (opts && !opts.noDest && opts.pageNumber && getPageInfo && getVert) {
           const pageInfo = getPageInfo.call(pdfDoc?.internal, opts.pageNumber);
-          if (typeof pdfDoc?.setPage === 'function') {
-            pdfDoc.setPage(opts.pageNumber);
-          }
           const topMm =
             typeof opts.top === 'number' && Number.isFinite(opts.top) ? Math.max(0, opts.top) : 0;
           const yCoord = getVert.call(pdfDoc?.internal, topMm);
           this.line?.(`/Dest [${pageInfo.objId} 0 R /XYZ null ${yCoord} null]`);
         }
         this.objEnd?.();
-      }
-      if (typeof prevPage === 'number' && prevPage >= 1 && typeof pdfDoc?.setPage === 'function') {
-        pdfDoc.setPage(prevPage);
       }
       for (let s = 0; s < children.length; s++) {
         this.renderItems?.(children[s]);
@@ -1224,7 +1226,19 @@ export async function capturePdfRaster(
             console.warn('[pdf] link annotation generation skipped', err);
           }
         }
-        return await worker.outputPdf('blob');
+        const blob = (await worker.outputPdf('blob')) as Blob;
+        // Silent-corruption guard: a PDF only counts as finished when it ends
+        // with `%%EOF` (after `startxref`). jsPDF drops that tail whenever a
+        // plugin reroutes its output destination mid-build, and the resulting
+        // file is rejected by every viewer with a bare "can't open this file".
+        // Better to fail the export than to hand the user an unopenable file.
+        const tail = new TextDecoder('latin1').decode(
+          new Uint8Array(await blob.slice(Math.max(0, blob.size - 128)).arrayBuffer()),
+        );
+        if (!blob.size || !tail.includes('%%EOF')) {
+          throw new Error('PDF export produced an incomplete file (missing %%EOF)');
+        }
+        return blob;
       },
       dispose,
     };
