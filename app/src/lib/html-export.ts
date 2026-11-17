@@ -1041,7 +1041,8 @@ ${headCss ? `<style>${headCss}</style>\n` : ''}<style>
   }
   h3 { font-size: 1.25em; color: var(--md-h3, var(--ink)); }
   h4 { font-size: 1.05em; color: var(--md-h4, var(--ink)); }
-  h5, h6 { font-size: 1em; color: var(--md-h5, var(--ink-muted)); }
+  h5 { font-size: 1em; color: var(--md-h5, var(--ink-muted)); }
+  h6 { font-size: 1em; color: var(--md-h6, var(--ink-muted)); }
   p { margin: .9em 0; }
   a {
     color: var(--link);

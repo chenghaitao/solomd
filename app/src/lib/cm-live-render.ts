@@ -19,8 +19,10 @@
  *   - `> quote` → indented + left bar via a `Decoration.line` class; the
  *     `>` itself stays visible (Typora hides it; we keep it because hiding
  *     the `>` makes new-line-into-quote ergonomics worse).
- *   - Fenced code blocks (`` ``` ``) → grey background; existing syntax
- *     coloring from the markdown package handles the inner tokens.
+ *   - Fenced code blocks (`` ``` ``) → grey background *and* highlight.js
+ *     token colours (#589) laid over the source as mark decorations carrying
+ *     hljs' own class names, so `hljs-theme.css` paints the editor and the
+ *     preview from the same `--syn-*` palette.
  *   - `~~strike~~` → strikethrough; markers hidden when caret outside.
  *
  * Caret reveal model: a marker decoration is suppressed (raw markdown
@@ -37,7 +39,7 @@
  */
 
 import { syntaxTree, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import type { Range } from '@codemirror/state';
+import type { EditorState, Range } from '@codemirror/state';
 
 // Minimal structural view of a lezer `SyntaxNode`. `@lezer/common` is only a
 // transitive dependency (not in our package.json), so we describe just the
@@ -72,6 +74,9 @@ import { copyPlainText, dedentFenced, dedentIndented } from './code-copy';
 // #395 — URL nodes that are a link *destination* (and so should be hidden)
 // versus URL nodes that are the visible label. Leaf module so it is testable.
 import { isStandaloneImageLine } from './md-image-url';
+// #589 — code-block syntax colours. hljs gives HTML; this gives offsets.
+import { highlightCodeTokens } from './hljs-tokens';
+import { onRenderDepsChange, renderDepsVersion } from './render-deps';
 
 // ---------------------------------------------------------------------------
 // Marker nodes that we hide off-line. Brackets/parens for links and
@@ -233,6 +238,24 @@ export function listItemHasTask(listMark: MdSyntaxNode): boolean {
   return false;
 }
 
+/**
+ * #589 — the language tag of a fenced block (```` ```ts ```` → `ts`), or `''`
+ * when it carries none (indented code, or a bare fence). Read straight off the
+ * `CodeInfo` child: that node is *hidden* as a marker when the caret is
+ * elsewhere, never removed, so the tag is still there to read.
+ */
+export function fenceLanguage(node: MdSyntaxNode | null, state: EditorState): string {
+  if (!node) return '';
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name === 'CodeInfo') {
+      // ```` ```js title="x" ```` — hljs wants the tag only.
+      const info = state.doc.sliceString(child.from, child.to).trim();
+      return info.split(/\s+/)[0] ?? '';
+    }
+  }
+  return '';
+}
+
 // ---------------------------------------------------------------------------
 // Code-block copy button (v4.11.18)
 //
@@ -388,6 +411,7 @@ export function buildDecorations(
   const seenListLines = new Set<number>();
   const seenInlineHtmlLines = new Set<number>();
   const seenDefLines = new Set<number>();
+  const seenTokenBlocks = new Set<number>();
 
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
@@ -605,6 +629,39 @@ export function buildDecorations(
             endLine > startLine &&
             /^\s*(`{3,}|~{3,})\s*$/.test(view.state.doc.line(endLine).text);
           const bodyEnd = hasClosingFence ? endLine - 1 : endLine;
+
+          // #589 — colour the code itself. The preview gets its colours from
+          // markdown-it's `highlight` hook; a fenced block in the editor is
+          // plain text in a contenteditable, so the tokens have to arrive as
+          // mark decorations over the exact source offsets. The class names
+          // are hljs' own, which is what lets `styles/hljs-theme.css` colour
+          // this and the preview from the same `--syn-*` variables.
+          if (bodyEnd >= bodyStart) {
+            const bodyFrom = view.state.doc.line(bodyStart).from;
+            const bodyTo = view.state.doc.line(bodyEnd).to;
+            // A block that straddles two of `visibleRanges` must not emit its
+            // tokens twice.
+            if (bodyTo > bodyFrom && !seenTokenBlocks.has(bodyFrom)) {
+              seenTokenBlocks.add(bodyFrom);
+              const body = view.state.doc.sliceString(bodyFrom, bodyTo);
+              for (const token of highlightCodeTokens(
+                body,
+                fenceLanguage(node.node as unknown as MdSyntaxNode, view.state),
+              )) {
+                // Plugin decorations have to stay inside the range we were
+                // asked about, so a token straddling the viewport edge is
+                // clipped rather than dropped: its visible half keeps its
+                // colour.
+                const markFrom = Math.max(bodyFrom + token.from, from);
+                const markTo = Math.min(bodyFrom + token.to, to);
+                if (markTo <= markFrom) continue;
+                ranges.push(
+                  Decoration.mark({ class: token.classes.join(' ') }).range(markFrom, markTo),
+                );
+              }
+            }
+          }
+
           for (let ln = startLine; ln <= endLine; ln++) {
             const lineObj = view.state.doc.line(ln);
             if (!seenFencedLines.has(lineObj.from)) {
@@ -885,15 +942,48 @@ export function buildDecorations(
   return Decoration.set(ranges, true);
 }
 
+// #589 — the code-block token colours need highlight.js, which loads after the
+// first paint (render-deps.ts). Decorations built before it lands are plain
+// text, and nothing would rebuild them until the user types. So the live
+// editors are nudged with an empty transaction when a dependency arrives; the
+// plugin sees `renderDepsVersion()` change and recomputes.
+const liveViews = new Set<EditorView>();
+onRenderDepsChange(() => {
+  for (const view of Array.from(liveViews)) {
+    try {
+      view.dispatch({});
+    } catch {
+      // A view torn down mid-dispatch is not an error worth reporting.
+    }
+  }
+});
+
 const makeLiveRenderPlugin = (showMarkers: boolean, hideActiveLineMarkers = false) => ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    /** Which render-deps generation `decorations` was built against. */
+    deps = renderDepsVersion();
+    private readonly view: EditorView;
 
     constructor(view: EditorView) {
+      this.view = view;
+      liveViews.add(view);
       this.decorations = buildDecorations(view, showMarkers, hideActiveLineMarkers);
     }
 
+    destroy() {
+      liveViews.delete(this.view);
+    }
+
     update(u: ViewUpdate) {
+      // KaTeX / highlight.js just landed — the code-block token colours (and
+      // the math widgets) can be painted now.
+      const deps = renderDepsVersion();
+      if (deps !== this.deps) {
+        this.deps = deps;
+        this.decorations = buildDecorations(u.view, showMarkers, hideActiveLineMarkers);
+        return;
+      }
       // IME composition guard (#108) — don't rebuild decorations on the
       // composing line while a Windows IME (Sogou) candidate window is open,
       // or the mid-composition DOM swap drops the composition ("吃字").
@@ -990,28 +1080,30 @@ const liveEditTheme = EditorView.theme({
   // line breaks CodeMirror's posAtCoords math (it caches line-box metrics
   // measured against the base lineHeight), making click-to-position land
   // on the wrong line. Keep line-height uniform at the .cm-scroller base.
-  // 5.0 §2 type scale — H1 30/650 −0.015em, H2 20/620, H3 17/600 at the
-  // 16px default, written in em so the user's font size scales them.
+  // 5.0 §2 type scale, re-cut for #589: H1 26/650 −0.015em, H2 23/620,
+  // H3 20.5/600 at the 16px default, written in em so the user's font size
+  // scales them. Each step is ~1.11× the next (26, 23, 20.5, 18.5, 17, 16),
+  // so the drop from H1 to H2 is 3px rather than the old 10px cliff.
   '.cm-md-heading-line-1': {
-    fontSize: '1.875em',
+    fontSize: '1.625em',
     fontWeight: '650',
     letterSpacing: '-0.015em',
     paddingTop: '0.2em',
     paddingBottom: '0.1em',
   },
   '.cm-md-heading-line-2': {
-    fontSize: '1.25em',
+    fontSize: '1.4375em',
     fontWeight: '620',
     paddingTop: '0.3em',
   },
   '.cm-md-heading-line-3': {
-    fontSize: '1.0625em',
+    fontSize: '1.28125em',
     fontWeight: '600',
     paddingTop: '0.2em',
   },
-  '.cm-md-heading-line-4': { fontWeight: '600' },
-  '.cm-md-heading-line-5': { fontWeight: '600' },
-  '.cm-md-heading-line-6': { fontWeight: '600', color: 'var(--text-2)' },
+  '.cm-md-heading-line-4': { fontSize: '1.15625em', fontWeight: '600' },
+  '.cm-md-heading-line-5': { fontSize: '1.0625em', fontWeight: '600' },
+  '.cm-md-heading-line-6': { fontSize: '1em', fontWeight: '600', color: 'var(--text-2)' },
 
   // Heading text color (from the heading mark). The line decoration sets
   // size; this paints the color so emphasis/strong inside a heading
@@ -1108,6 +1200,13 @@ const liveEditTheme = EditorView.theme({
     fontSize: '0.8125em',
     // Containing block for the copy button that rides the block's first line.
     position: 'relative',
+  },
+  // #589 — our hljs token marks wrap CodeMirror's *own* token spans (the
+  // markdown parser tags the code text too), and those carry a `color` of
+  // their own that would beat the colour the mark passes down. Hand every
+  // nested span back to the mark so `hljs-theme.css` decides the colour.
+  '.cm-md-fenced-body-line [class*="hljs-"] *': {
+    color: 'inherit',
   },
   '.cm-md-block-first': {
     paddingTop: '10px',

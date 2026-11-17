@@ -51,13 +51,16 @@
   --type-green: #3a9d4e;
   --type-yellow: #c9a227;
 
-  /* Markdown element colors (light) */
+  /* Markdown element colors (light). #589 — one distinct step per heading
+     level, growing lighter as the outline deepens. h1/h2/h3 used to share one
+     value, so an H2 read as "another H1" and a long document had only two
+     visual depths. */
   --md-h1: #1f1e1c;
-  --md-h2: #1f1e1c;
-  --md-h3: #1f1e1c;
-  --md-h4: #2f2e2b;
-  --md-h5: #3f3d39;
-  --md-h6: #5e5b55;
+  --md-h2: #2b2925;
+  --md-h3: #3a3732;
+  --md-h4: #4a463f;
+  --md-h5: #5e5b55;
+  --md-h6: #78746a;
   --md-strong: #1f1e1c;
   --md-em: #1f1e1c;
   --md-link: #b4561b;
@@ -146,13 +149,14 @@
   --type-green: #6cc77f;
   --type-yellow: #e0c350;
 
-  /* Markdown element colors (dark) */
+  /* Markdown element colors (dark). #589 — six distinct steps, same idea as
+     light: h1 is the brightest, h6 the quietest. */
   --md-h1: #f2f0ec;
-  --md-h2: #f2f0ec;
-  --md-h3: #eceae6;
-  --md-h4: #d8d6d1;
-  --md-h5: #c2bfba;
-  --md-h6: #a9a6a0;
+  --md-h2: #e6e3dd;
+  --md-h3: #d8d5ce;
+  --md-h4: #c6c2ba;
+  --md-h5: #b0aca4;
+  --md-h6: #98948c;
   --md-strong: #f2f0ec;
   --md-em: #eceae6;
   --md-link: #f4a26b;
@@ -188,8 +192,8 @@
   --text-faint: #616e88;
   --accent: #88c0d0;
   --accent-fg: #2e3440;
-  --md-h1: #eceff4; --md-h2: #e5e9f0; --md-h3: #d8dee9;
-  --md-h4: #c8ced8; --md-h5: #a8b0c0; --md-h6: #8890a0;
+  --md-h1: #eceff4; --md-h2: #e2e7ee; --md-h3: #d4dbe5;
+  --md-h4: #c4ccd9; --md-h5: #aab4c3; --md-h6: #919cae;
   --md-strong: #eceff4; --md-em: #d8dee9; --md-link: #88c0d0;
   --md-url: #5e81ac; --md-code: #bf616a; --md-code-bg: #3b4252;
   --md-quote: #616e88; --md-list: #88c0d0; --md-hr: #4c566a;
@@ -210,8 +214,8 @@
   --text-faint: #93a1a1;
   --accent: #268bd2;
   --accent-fg: #fdf6e3;
-  --md-h1: #073642; --md-h2: #586e75; --md-h3: #657b83;
-  --md-h4: #839496; --md-h5: #93a1a1; --md-h6: #93a1a1;
+  --md-h1: #073642; --md-h2: #2f4f5a; --md-h3: #4e6a72;
+  --md-h4: #657b83; --md-h5: #7d9299; --md-h6: #93a1a1;
   --md-strong: #073642; --md-em: #586e75; --md-link: #268bd2;
   --md-url: #2aa198; --md-code: #d33682; --md-code-bg: #eee8d5;
   --md-quote: #93a1a1; --md-list: #cb4b16; --md-hr: #d3cbb7;
@@ -233,8 +237,8 @@
   --text-faint: #586e75;
   --accent: #268bd2;
   --accent-fg: #fdf6e3;
-  --md-h1: #93a1a1; --md-h2: #839496; --md-h3: #657b83;
-  --md-h4: #586e75; --md-h5: #586e75; --md-h6: #586e75;
+  --md-h1: #93a1a1; --md-h2: #839496; --md-h3: #6c8085;
+  --md-h4: #586e75; --md-h5: #4b6169; --md-h6: #3f555d;
   --md-strong: #93a1a1; --md-em: #839496; --md-link: #268bd2;
   --md-url: #2aa198; --md-code: #d33682; --md-code-bg: #073642;
   --md-quote: #586e75; --md-list: #cb4b16; --md-hr: #0a4050;
@@ -256,8 +260,8 @@
   --text-faint: #75715e;
   --accent: #f92672;
   --accent-fg: #ffffff;
-  --md-h1: #f8f8f2; --md-h2: #f8f8f2; --md-h3: #e8e8d2;
-  --md-h4: #a6a68a; --md-h5: #a6a68a; --md-h6: #75715e;
+  --md-h1: #f8f8f2; --md-h2: #e8e8d2; --md-h3: #d2d2b8;
+  --md-h4: #b6b69a; --md-h5: #9c9c82; --md-h6: #85856d;
   --md-strong: #f8f8f2; --md-em: #e6db74; --md-link: #66d9ef;
   --md-url: #a6e22e; --md-code: #f92672; --md-code-bg: #3e3d32;
   --md-quote: #75715e; --md-list: #a6e22e; --md-hr: #49483e;
@@ -278,8 +282,8 @@
   --text-faint: #8b949e;
   --accent: #0366d6;
   --accent-fg: #ffffff;
-  --md-h1: #24292e; --md-h2: #24292e; --md-h3: #586069;
-  --md-h4: #6a737d; --md-h5: #8b949e; --md-h6: #8b949e;
+  --md-h1: #24292e; --md-h2: #3a4149; --md-h3: #4e555d;
+  --md-h4: #61686f; --md-h5: #767d84; --md-h6: #8b949e;
   --md-strong: #24292e; --md-em: #24292e; --md-link: #0366d6;
   --md-url: #0366d6; --md-code: #d73a49; --md-code-bg: #f6f8fa;
   --md-quote: #6a737d; --md-list: #e36209; --md-hr: #d0d7de;
@@ -301,8 +305,8 @@
   --text-faint: #6272a4;
   --accent: #bd93f9;
   --accent-fg: #282a36;
-  --md-h1: #f8f8f2; --md-h2: #f8f8f2; --md-h3: #bfbfdc;
-  --md-h4: #bfbfdc; --md-h5: #6272a4; --md-h6: #6272a4;
+  --md-h1: #f8f8f2; --md-h2: #e6e6f4; --md-h3: #d0d0e6;
+  --md-h4: #b8b8d6; --md-h5: #9b9bc2; --md-h6: #7f7fae;
   --md-strong: #f8f8f2; --md-em: #f1fa8c; --md-link: #8be9fd;
   --md-url: #50fa7b; --md-code: #ff79c6; --md-code-bg: #44475a;
   --md-quote: #6272a4; --md-list: #50fa7b; --md-hr: #44475a;

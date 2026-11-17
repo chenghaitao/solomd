@@ -1172,20 +1172,23 @@ defineExpose({ scrollToLine, openSearch });
   line-height: 1.3;
   margin: 1.6em 0 0.5em;
 }
+/* #589 — one geometric step per level (26, 23, 20.5, 18.5, 17, 16px at the
+   16px base). The old scale jumped 30px → 20px between H1 and H2 and then
+   crawled, so the outline read as "title + everything else". */
 :where(.preview-content) h1 {
-  font-size: 1.875em;
+  font-size: 1.625em;
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.015em;
   margin: 1.2em 0 0.6em;
 }
 :where(.preview-content) h2 {
-  font-size: 1.25em;
+  font-size: 1.4375em;
   font-weight: 620;
 }
-:where(.preview-content) h3 { font-size: 1.125em; }
-:where(.preview-content) h4 { font-size: 1.0625em; }
-:where(.preview-content) h5,
+:where(.preview-content) h3 { font-size: 1.28125em; }
+:where(.preview-content) h4 { font-size: 1.15625em; }
+:where(.preview-content) h5 { font-size: 1.0625em; }
 :where(.preview-content) h6 { font-size: 1em; }
 :where(.preview-content) > :first-child { margin-top: 0; }
 :where(.preview-content) p { margin: 0.9em 0; }

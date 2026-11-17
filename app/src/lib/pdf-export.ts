@@ -130,7 +130,8 @@ const PDF_CSS = `
   }
   :where(.pdf-page) h3 { font-size: 1.2em; color: var(--md-h3, var(--text, #1f2328)); }
   :where(.pdf-page) h4 { font-size: 1.05em; color: var(--md-h4, var(--text, #1f2328)); }
-  :where(.pdf-page) h5, :where(.pdf-page) h6 { font-size: 1em; color: var(--md-h5, #59636e); }
+  :where(.pdf-page) h5 { font-size: 1em; color: var(--md-h5, #59636e); }
+  :where(.pdf-page) h6 { font-size: 1em; color: var(--md-h6, #59636e); }
   :where(.pdf-page) p { margin: .85em 0; }
   :where(.pdf-page) a {
     color: var(--accent-text, var(--md-link, #0b5cad));

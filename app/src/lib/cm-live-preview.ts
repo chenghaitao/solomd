@@ -171,12 +171,12 @@ const makeLiveMarkdownPlugin = (showMarkers: boolean, hideActiveLineMarkers = fa
 // stronger (h1) to softer (h6) for visual hierarchy.
 export const markdownRichStyle = HighlightStyle.define([
   // 5.0 §2 type scale (30/650, 20/620, 17/600 at the 16px default).
-  { tag: t.heading1, fontSize: '1.875em', fontWeight: '650', lineHeight: '1.25', letterSpacing: '-0.015em', color: 'var(--md-h1)' },
-  { tag: t.heading2, fontSize: '1.25em', fontWeight: '620', lineHeight: '1.3', color: 'var(--md-h2)' },
-  { tag: t.heading3, fontSize: '1.0625em', fontWeight: '600', color: 'var(--md-h3)' },
-  { tag: t.heading4, fontWeight: '600', color: 'var(--md-h4)' },
-  { tag: t.heading5, fontWeight: '600', color: 'var(--md-h5)' },
-  { tag: t.heading6, fontWeight: '600', color: 'var(--md-h6)' },
+  { tag: t.heading1, fontSize: '1.625em', fontWeight: '650', lineHeight: '1.25', letterSpacing: '-0.015em', color: 'var(--md-h1)' },
+  { tag: t.heading2, fontSize: '1.4375em', fontWeight: '620', lineHeight: '1.3', color: 'var(--md-h2)' },
+  { tag: t.heading3, fontSize: '1.28125em', fontWeight: '600', color: 'var(--md-h3)' },
+  { tag: t.heading4, fontSize: '1.15625em', fontWeight: '600', color: 'var(--md-h4)' },
+  { tag: t.heading5, fontSize: '1.0625em', fontWeight: '600', color: 'var(--md-h5)' },
+  { tag: t.heading6, fontSize: '1em', fontWeight: '600', color: 'var(--md-h6)' },
   { tag: t.strong, fontWeight: '700', color: 'var(--md-strong)' },
   { tag: t.emphasis, fontStyle: 'italic', color: 'var(--md-em)' },
   { tag: t.strikethrough, textDecoration: 'line-through', color: 'var(--text-muted)' },
