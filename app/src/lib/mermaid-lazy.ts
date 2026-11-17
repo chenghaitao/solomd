@@ -70,6 +70,30 @@ export function quoteUnquotedMermaidLabels(code: string): string {
   });
 }
 
+/**
+ * #600 — Mermaid has no `**bold**` in flowchart labels: Typora pre-processes
+ * it, we showed the asterisks verbatim. Rewrite each `**…**` pair into `<b>`,
+ * which mermaid puts straight into the HTML label (`htmlLabels` is on) and
+ * every renderer — preview widget, PNG/PDF export, standalone HTML — already
+ * understands. Skipped when the pair is empty, spans lines, or is already
+ * inside a `<b>`/`<strong>` tag, so repeated passes are no-ops.
+ */
+const MERMAID_BOLD_RE = /\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*/g;
+
+export function mermaidBoldToHtml(code: string): string {
+  if (!code.includes('**')) return code;
+  return code.replace(MERMAID_BOLD_RE, (match, body: string, offset: number) => {
+    const before = code.slice(Math.max(0, offset - 12), offset).toLowerCase();
+    if (before.includes('<b>') || before.includes('<strong>')) return match;
+    return `<b>${body}</b>`;
+  });
+}
+
+/** Source rewrites that must happen before mermaid parses, in order. */
+export function normalizeMermaidSource(code: string): string {
+  return mermaidBoldToHtml(code);
+}
+
 export function formatMermaidError(err: unknown, code?: string): string {
   const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
   if (code && /\[[^\]"\n]*[@()][^\]"\n]*\]/.test(code) && !raw.includes('A["')) {
@@ -104,13 +128,14 @@ export async function safeRender(
       'visibility:hidden;pointer-events:none;overflow:hidden;',
   );
   doc.body.appendChild(host);
+  const source = normalizeMermaidSource(code);
   try {
-    return await mermaid.render(renderId, code, host);
+    return await mermaid.render(renderId, source, host);
   } catch (firstErr) {
     // #276 — if the diagram failed to parse and contains unquoted `@` or `()`
     // inside `[...]` node labels, retry once with those labels quoted.
-    const quoted = quoteUnquotedMermaidLabels(code);
-    if (quoted !== code) {
+    const quoted = quoteUnquotedMermaidLabels(source);
+    if (quoted !== source) {
       removeMermaidLeftovers(renderId, doc);
       host.innerHTML = '';
       const retryId = `${id}-r${++renderSeq}`;
