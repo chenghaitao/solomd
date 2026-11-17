@@ -376,7 +376,6 @@ export function useExport() {
         plantumlServer(),
         await docxReferenceBytes(),
         settings.exportIncludeTocPage,
-        docTitle,
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       // Tauri 2 serializes Uint8Array as a number array which Rust accepts as Vec<u8>.
@@ -1026,6 +1025,7 @@ export function useExport() {
         plantumlServer(),
         await docxReferenceBytes(),
         includeTocPage,
+        docTitle,
       );
       const buffer = new Uint8Array(await blob.arrayBuffer());
       await invoke('write_binary_file', { path: outputPath, data: Array.from(buffer) });
