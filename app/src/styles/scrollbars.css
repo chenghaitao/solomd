@@ -34,3 +34,22 @@
 ::-webkit-scrollbar-thumb:active {
   background-color: var(--text-3);
 }
+
+/* Editor panes — a long document needs a thumb that is findable at rest.
+ * `--fill-2` is 8% ink, which reads as "no thumb at all" in a 4px pill until
+ * the pointer is already on it; the document scroller gets a solid neutral
+ * instead, so you can see where you are without hunting for the bar.
+ * Kept to the editor's own scrollers so panels / menus keep the quiet look.
+ */
+.cm-scroller::-webkit-scrollbar-thumb,
+.plain-editor::-webkit-scrollbar-thumb,
+.preview-host::-webkit-scrollbar-thumb {
+  background-color: #c1c1c1;
+}
+/* Dark surfaces: #c1c1c1 would glare, so the same "clearly visible at rest"
+ * step is taken in the other direction. */
+:root[data-theme="dark"] .cm-scroller::-webkit-scrollbar-thumb,
+:root[data-theme="dark"] .plain-editor::-webkit-scrollbar-thumb,
+:root[data-theme="dark"] .preview-host::-webkit-scrollbar-thumb {
+  background-color: #6b6b6b;
+}
