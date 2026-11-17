@@ -226,3 +226,32 @@ test('#597: resolveDocxTemplate prefers an explicit title override over the body
   assert.equal(resolveDocxTemplate('plain', src, 'fallback').title, '环境说明');
   assert.equal(resolveDocxTemplate('plain', src, 'fallback', '01 书籍名').title, '01 书籍名');
 });
+
+test('#594: a paginated book keeps the TOC on its own <section>, shown first, without an h1', async () => {
+  const merged = buildMergedBookMarkdown('01 书籍名', [
+    { relDir: '', baseName: 'note1', content: '# 第一章\n\n第一章正文' },
+    { relDir: '', baseName: 'note2', content: '# 第二章\n\n第二章正文' },
+  ]);
+  const html = await buildStandaloneHtml({
+    content: merged,
+    title: '01 书籍名',
+    withNav: true,
+    paginated: true,
+    withTocPage: true,
+    lang: 'zh',
+  });
+
+  assert.ok(
+    html.includes('<section class="page solomd-page--toc" id="solomd-page-toc" style="display:none">'),
+    'TOC page is its own section',
+  );
+  const tocSection = /<section class="page solomd-page--toc"[\s\S]*?<\/section>/.exec(html)?.[0] || '';
+  assert.ok(tocSection.includes('<nav class="md-toc"'), 'TOC page carries the table of contents');
+  assert.ok(tocSection.includes('class="solomd-page-title"'), 'book title moves onto the TOC page');
+  assert.doesNotMatch(tocSection, /<h1\b/, 'TOC page must not add a level-1 heading');
+
+  // The first note page no longer starts with the TOC block.
+  const firstNotePage = /<section class="page" id="solomd-page-1"[\s\S]*?<\/section>/.exec(html)?.[0] || '';
+  assert.ok(firstNotePage.includes('第一章'), 'first note keeps its own page');
+  assert.ok(!firstNotePage.includes('<nav class="md-toc"'), 'TOC is not mixed into the first note');
+});

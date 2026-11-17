@@ -394,6 +394,21 @@ const NAV_SIDEBAR_CSS = `
       display: block !important;
     }
   }
+  /* #594 — the table of contents gets its own page; its title is a div, not an
+     h1, so it never joins the document outline or the heading numbering. */
+  .solomd-page-title {
+    margin: 0 0 1.4em;
+    padding-bottom: .35em;
+    border-bottom: 2px solid var(--accent-rule, #3d444d);
+    font-size: 2.15em;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--md-h1, var(--ink, #1f2328));
+  }
+  .solomd-page--toc nav.md-toc {
+    margin-top: 0;
+  }
 `;
 
 const NAV_SIDEBAR_SCRIPT = `<script>
@@ -622,6 +637,23 @@ const NAV_SIDEBAR_SCRIPT = `<script>
       }
     });
   }
+
+  // #594 — the in-page table of contents sits on its own page now, so a click
+  // there has to switch to the page that owns the target before scrolling.
+  articleEl.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if (!a || a.getAttribute('data-no-jump') === '1') return;
+    var rawId = (a.getAttribute('href') || '').slice(1);
+    if (!rawId) return;
+    var decodedId = rawId;
+    try { decodedId = decodeURIComponent(rawId); } catch (_) {}
+    var target = document.getElementById(decodedId) || document.getElementById(rawId);
+    if (!target) return;
+    e.preventDefault();
+    activatePageForElement(target);
+    target.scrollIntoView({ behavior: pageSections.length ? 'auto' : 'smooth', block: 'start' });
+    flashTarget(target);
+  });
 
   var headings = Array.prototype.slice.call(articleEl.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]'));
   mainEl.addEventListener('scroll', function () {
@@ -1119,10 +1151,50 @@ export function buildNestedTocHtml(headings: ExtractedHeading[]): string {
 }
 
 /**
+ * #594 — A leading "book title + [TOC]" block: an optional `<h1>` followed by
+ * the rendered `[TOC]` nav and the horizontal rule that separates it from the
+ * first note.
+ */
+const LEADING_TOC_BLOCK_RE =
+  /^\s*(?:<h1\b([^>]*)>([\s\S]*?)<\/h1>\s*)?(<nav\s+class=(["'])md-toc\4[\s\S]*?<\/nav>)\s*(?:<hr\b[^>]*>\s*)?/i;
+
+/**
  * #574 — Split rendered HTML body into `<section class="page" id="solomd-page-N" style="display:none">`
  * fragments along note page-break markers (`<hr data-solomd-page-break="1">`).
+ *
+ * #594 — With `tocAsOwnPage`, the leading title + `[TOC]` block becomes a page
+ * of its own (`#solomd-page-toc`) ahead of the notes, so the table of contents
+ * no longer shares a page with the first note. The title keeps its `id` but is
+ * emitted as a `<div>`: the TOC page must not contribute a level-1 heading to
+ * the document outline, while clicking the sidebar's root node still lands on
+ * this page.
  */
-export function paginateHtmlBody(rawBody: string): string {
+export function paginateHtmlBody(
+  rawBody: string,
+  options: { tocAsOwnPage?: boolean } = {},
+): string {
+  let tocPageHtml = '';
+  let source = rawBody;
+  if (options.tocAsOwnPage) {
+    const m = LEADING_TOC_BLOCK_RE.exec(rawBody);
+    if (m) {
+      const h1Attrs = m[1] || '';
+      const h1Inner = m[2] || '';
+      const navHtml = m[3] || '';
+      let titleHtml = '';
+      if (h1Inner.trim()) {
+        const idMatch = /\bid=(["'])([^"']+)\1/i.exec(h1Attrs);
+        const idAttr = idMatch ? ` id="${idMatch[2]}"` : '';
+        titleHtml = `<div class="solomd-page-title"${idAttr}>${h1Inner}</div>\n`;
+      }
+      tocPageHtml = `<section class="page solomd-page--toc" id="solomd-page-toc" style="display:none">\n${titleHtml}${navHtml}\n</section>\n`;
+      source = rawBody.slice(m[0].length);
+    }
+  }
+  return tocPageHtml + paginateBodySections(source);
+}
+
+function paginateBodySections(rawBody: string): string {
   const parts = rawBody
     .split(/<hr\b[^>]*\bdata-solomd-page-break=(?:"1"|'1')[^>]*\/?>/gi)
     .map((chunk) => chunk.trim())
@@ -1268,7 +1340,9 @@ export async function buildStandaloneHtml(input: StandaloneHtmlInput): Promise<s
   let navOptions: HtmlNavOptions | undefined;
   if (input.withNav) {
     const prepared = prepareHtmlNavSidebar(body, input.title, input.withTocPage === true);
-    body = input.paginated ? paginateHtmlBody(prepared.body) : prepared.body;
+    body = input.paginated
+      ? paginateHtmlBody(prepared.body, { tocAsOwnPage: input.withTocPage === true })
+      : prepared.body;
     const isZh =
       input.lang !== undefined
         ? input.lang === 'zh'
