@@ -2,6 +2,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { IS_APP_STORE_BUILD } from './app-build';
 
 import { DEFAULT_CHANNEL, type UpdateChannel } from './release-channels';
 
@@ -58,7 +59,7 @@ export function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-const MAS_BUILD = import.meta.env.VITE_MAS_BUILD === '1';
+const MAS_BUILD = import.meta.env.VITE_MAS_BUILD === '1' || IS_APP_STORE_BUILD;
 
 export const isMasBuild = (): boolean => MAS_BUILD;
 

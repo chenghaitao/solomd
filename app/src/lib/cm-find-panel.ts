@@ -106,6 +106,9 @@ export function selectAllOccurrencesCommand(target: {
 
 /** Stop counting here — "1000+" is all anyone needs past that. */
 const COUNT_LIMIT = 1000;
+/** Debounce live-typing query commits on large documents so rapid typing never stalls. */
+const LARGE_DOC_DEBOUNCE_CHARS = 24_000;
+const LARGE_DOC_DEBOUNCE_MS = 60;
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -146,7 +149,23 @@ export function replaceCurrent(view: EditorView): boolean {
   if (target.from !== from || target.to !== to) {
     view.dispatch({ selection: { anchor: target.from, head: target.to } });
   }
-  return replaceNext(view);
+  const beforeLen = view.state.doc.length;
+  const replaced = replaceNext(view);
+  // Guard zero-length regexp matches (`^`, `$`, `\b`, `a*`): if `target.from === target.to`
+  // and `replaceNext` left the selection anchored at the same origin, advance by 1
+  // past the inserted text so repeated Replace clicks progress instead of looping.
+  if (replaced && target.from === target.to) {
+    const delta = Math.max(0, view.state.doc.length - beforeLen);
+    const curSel = view.state.selection.main;
+    if (curSel.from <= target.from + delta && curSel.empty) {
+      const nextAnchor = Math.min(view.state.doc.length, target.from + delta + 1);
+      const nextHit = matchFrom(view.state, query, nextAnchor);
+      if (nextHit && nextHit.from >= nextAnchor) {
+        view.dispatch({ selection: { anchor: nextHit.from, head: nextHit.to } });
+      }
+    }
+  }
+  return replaced;
 }
 
 export function createFindPanel(view: EditorView, labels: FindPanelLabels): Panel {
@@ -185,7 +204,10 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
     return b;
   };
   const toggle = (name: string, title: string, glyph: string, key: 'caseSensitive' | 'regexp' | 'wholeWord') => {
-    const b = iconBtn(name, title, glyph, () => commit({ [key]: !query[key] }));
+    const b = iconBtn(name, title, glyph, () => {
+      flushPendingCommit();
+      commit({ [key]: !query[key] });
+    });
     b.setAttribute('aria-pressed', 'false');
     return b;
   };
@@ -233,12 +255,19 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
   findRow.append(
     findField,
     count,
-    iconBtn('prev', labels.prev, '‹', () => findPrevious(view)),
-    iconBtn('next', labels.next, '›', () => findNext(view)),
+    iconBtn('prev', labels.prev, '‹', () => {
+      flushPendingCommit();
+      findPrevious(view);
+    }),
+    iconBtn('next', labels.next, '›', () => {
+      flushPendingCommit();
+      findNext(view);
+    }),
     caseBtn,
     reBtn,
     wordBtn,
     iconBtn('close', labels.close, '✕', () => {
+      clearCommitTimer();
       closeSearchPanel(view);
       view.focus();
     }),
@@ -250,13 +279,40 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
     replaceRow.hidden = true;
     replaceRow.append(
       replaceField,
-      textBtn('replace', labels.replaceOne, () => replaceCurrent(view)),
-      textBtn('replaceAll', labels.replaceAll, () => replaceAll(view)),
+      textBtn('replace', labels.replaceOne, () => {
+        flushPendingCommit();
+        replaceCurrent(view);
+      }),
+      textBtn('replaceAll', labels.replaceAll, () => {
+        flushPendingCommit();
+        replaceAll(view);
+      }),
     );
     dom.append(replaceRow);
   }
 
+  let commitTimer: ReturnType<typeof setTimeout> | null = null;
+  let recountTimer: ReturnType<typeof setTimeout> | null = null;
+  function clearCommitTimer() {
+    if (commitTimer !== null) {
+      clearTimeout(commitTimer);
+      commitTimer = null;
+    }
+    if (recountTimer !== null) {
+      clearTimeout(recountTimer);
+      recountTimer = null;
+    }
+  }
+  function flushPendingCommit() {
+    if (commitTimer !== null) {
+      clearTimeout(commitTimer);
+      commitTimer = null;
+      commit();
+    }
+  }
+
   function commit(patch: Partial<{ caseSensitive: boolean; regexp: boolean; wholeWord: boolean }> = {}) {
+    clearCommitTimer();
     const next = new SearchQuery({
       search: findField.value,
       replace: replaceField.value,
@@ -266,6 +322,21 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
       literal: query.literal,
     });
     if (!next.eq(query)) view.dispatch({ effects: setSearchQuery.of(next) });
+  }
+
+  function scheduleInputCommit() {
+    if (
+      findField.value.length > 0 &&
+      (view.state.doc.length > LARGE_DOC_DEBOUNCE_CHARS || query.regexp)
+    ) {
+      if (commitTimer !== null) clearTimeout(commitTimer);
+      commitTimer = setTimeout(() => {
+        commitTimer = null;
+        commit();
+      }, LARGE_DOC_DEBOUNCE_MS);
+      return;
+    }
+    commit();
   }
 
   function recount() {
@@ -312,7 +383,7 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
     });
     field.addEventListener('input', (e) => {
       if (composing || (e as InputEvent).isComposing) return;
-      commit();
+      scheduleInputCommit();
     });
   }
 
@@ -330,6 +401,7 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
           findField.focus();
           findField.select();
         } else {
+          clearCommitTimer();
           closeSearchPanel(view);
           view.focus();
         }
@@ -343,6 +415,7 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
           replaceField.focus();
           replaceField.select();
         } else if (e.target === replaceField) {
+          clearCommitTimer();
           closeSearchPanel(view);
           view.focus();
         } else {
@@ -353,14 +426,17 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
       }
     }
     if (runScopeHandlers(view, e, 'search-panel')) {
+      clearCommitTimer();
       e.preventDefault();
       return;
     }
     if (e.key === 'Enter' && e.target === findField) {
       e.preventDefault();
+      flushPendingCommit();
       (e.shiftKey ? findPrevious : findNext)(view);
     } else if (e.key === 'Enter' && e.target === replaceField) {
       e.preventDefault();
+      flushPendingCommit();
       replaceCurrent(view);
     }
   });
@@ -374,6 +450,9 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
     // As the stock panel: a fresh bar takes the caret, text selected.
     mount() {
       findField.select();
+    },
+    destroy() {
+      clearCommitTimer();
     },
     update(update: ViewUpdate) {
       let queryChanged = false;
@@ -394,8 +473,25 @@ export function createFindPanel(view: EditorView, labels: FindPanelLabels): Pane
         }
         syncToggles();
       }
-      if (queryChanged || update.docChanged) recount();
-      else if (update.selectionSet) renderCount();
+      if (queryChanged) {
+        if (recountTimer !== null) {
+          clearTimeout(recountTimer);
+          recountTimer = null;
+        }
+        recount();
+      } else if (update.docChanged) {
+        if (update.state.doc.length > LARGE_DOC_DEBOUNCE_CHARS) {
+          if (recountTimer !== null) clearTimeout(recountTimer);
+          recountTimer = setTimeout(() => {
+            recountTimer = null;
+            recount();
+          }, 120);
+        } else {
+          recount();
+        }
+      } else if (update.selectionSet) {
+        renderCount();
+      }
     },
   };
 }

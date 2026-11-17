@@ -6,6 +6,7 @@ import { DsModal } from '../ui';
 import BrandMark from './BrandMark.vue';
 import Icons from './Icons.vue';
 import { useI18n } from '../i18n';
+import { IS_APP_STORE_BUILD } from '../lib/app-build';
 import {
   supporterRecord,
   badgeInfo,
@@ -40,7 +41,7 @@ const sponsors = ref<string[]>([]);
 const testers = ref<string[]>([]);
 let sponsorsLoaded = false;
 async function loadSponsors() {
-  if (sponsorsLoaded) return;
+  if (IS_APP_STORE_BUILD || sponsorsLoaded) return;
   sponsorsLoaded = true;
   try {
     const res = await fetch('https://solomd.app/sponsors.json', { signal: AbortSignal.timeout(5000) });

@@ -688,15 +688,7 @@ export function populatePdfOutline(
       const pdfDoc = this.ctx?.pdf;
       const getVert = pdfDoc?.internal?.getVerticalCoordinateString;
       const getPageInfo = pdfDoc?.internal?.getPageInfo;
-      // NOTE — never call `pdfDoc.setPage()` in here. `renderItems` runs inside
-      // jsPDF's `postPutResources` event, i.e. while `buildDocument()` is still
-      // appending to the document body; `API.setPage` ends with
-      // `setOutputDestination(pages[currentPage])`, which would redirect every
-      // later write (Info object, Catalog, xref, trailer, %%EOF) into that
-      // page's content stream and hand back a PDF that no viewer can open.
-      // `getVerticalCoordinateString` only needs the page height, and every
-      // html2pdf page shares one pageSize, so the current page yields the same
-      // `/XYZ` value the target page would.
+      const scaleFactor = Number((pdfDoc?.internal as { scaleFactor?: number } | undefined)?.scaleFactor) || 0;
       for (let n = 0; n < children.length; n++) {
         const item = children[n];
         this.objStart?.(item);
@@ -712,11 +704,30 @@ export function populatePdfOutline(
         this.count = subCount;
         if (subCount > 0) this.line?.('/Count ' + subCount);
         const opts = item.options as JsPdfOutlineOptions | undefined;
-        if (opts && !opts.noDest && opts.pageNumber && getPageInfo && getVert) {
-          const pageInfo = getPageInfo.call(pdfDoc?.internal, opts.pageNumber);
+        if (opts && !opts.noDest && opts.pageNumber && getPageInfo && (scaleFactor > 0 || getVert)) {
+          const pageInfo = getPageInfo.call(pdfDoc?.internal, opts.pageNumber) as {
+            objId: number;
+            pageContext?: { mediaBox?: { topRightY?: number; bottomLeftY?: number } };
+          };
+          // #590 — NEVER call `pdfDoc.setPage(...)` inside `renderItems`!
+          // `renderItems` runs mid-`buildDocument()`, and `jsPDF.API.setPage`
+          // calls `setOutputDestination(pages[currentPage])`, hijacking jsPDF's
+          // output stream away from the PDF file buffer and dropping `Outlines`,
+          // `Catalog`, `xref`, `trailer`, and `%%EOF`! Compute `yCoord` directly
+          // from `pageInfo.pageContext.mediaBox` instead.
+          // The `getVert` fallback only needs the page height, and every
+          // html2pdf page shares one pageSize, so the current page yields the
+          // same `/XYZ` value the target page would.
           const topMm =
             typeof opts.top === 'number' && Number.isFinite(opts.top) ? Math.max(0, opts.top) : 0;
-          const yCoord = getVert.call(pdfDoc?.internal, topMm);
+          const mediaBox = pageInfo?.pageContext?.mediaBox;
+          const yCoord =
+            mediaBox &&
+            typeof mediaBox.topRightY === 'number' &&
+            typeof mediaBox.bottomLeftY === 'number' &&
+            scaleFactor > 0
+              ? (mediaBox.topRightY - mediaBox.bottomLeftY - topMm * scaleFactor).toFixed(2)
+              : getVert!.call(pdfDoc?.internal, topMm);
           this.line?.(`/Dest [${pageInfo.objId} 0 R /XYZ null ${yCoord} null]`);
         }
         this.objEnd?.();
@@ -1099,6 +1110,22 @@ export async function capturePdfRaster(
 
     // Capture here rather than letting `outputPdf()` do it, so the raster can
     // be re-paginated first.
+    // #590 — Clamp `html2canvas.scale` on multi-chapter merged books so the
+    // full-document `<canvas>` height stays safely below Chromium/WebView2's
+    // 32,767px canvas dimension limit.
+    const fullCssHeight = Math.max(
+      containerHeightCss,
+      containerEl.scrollHeight || 0,
+      page.scrollHeight || 0,
+    );
+    const workerOpt = (worker as unknown as { opt?: { html2canvas?: { scale?: number } } }).opt;
+    const requestedScale = workerOpt?.html2canvas?.scale ?? 2;
+    if (workerOpt?.html2canvas && fullCssHeight * requestedScale > 28_000) {
+      workerOpt.html2canvas.scale = Math.max(
+        0.5,
+        Math.floor((28_000 / fullCssHeight) * 100) / 100,
+      );
+    }
     await worker.toCanvas();
     const canvas = prop?.canvas ?? null;
     const inner = prop?.pageSize?.inner;

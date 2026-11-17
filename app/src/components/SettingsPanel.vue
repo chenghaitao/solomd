@@ -3070,7 +3070,7 @@ function onSelectPdfFont(v: string) {
           <label>{{ t('settings.customCss') }}</label>
           <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
             <button @click="pickCustomCss">{{ t('settings.pickCss') }}</button>
-            <button @click="openThemeMarketplace">{{ t('themes.browseBtn') }}</button>
+            <button v-if="!IS_APP_STORE_BUILD" @click="openThemeMarketplace">{{ t('themes.browseBtn') }}</button>
             <button v-if="!IS_APP_STORE_BUILD && !isMobile" type="button" @click="invoke('open_devtools_window').catch(() => {})">DevTools (F12)</button>
             <button v-if="settings.customCssPath" @click="settings.setCustomCssPath('')">{{ t('settings.clear') }}</button>
           </div>
@@ -3083,7 +3083,7 @@ function onSelectPdfFont(v: string) {
               </svg>
             </button>
           </div>
-          <p class="setting-hint">{{ t('themes.browseHint') }}</p>
+          <p v-if="!IS_APP_STORE_BUILD" class="setting-hint">{{ t('themes.browseHint') }}</p>
         </section>
 
         <section v-if="!isPhoneOrTablet" data-cat="advanced">
