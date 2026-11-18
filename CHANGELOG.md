@@ -55,6 +55,16 @@
 - Mermaid 图的「复制」按钮移出渲染区（`.code-block-shell--artifact`）。
 - App Store 构建的 `solomd.app` 残留请求清理。
 
+### 修复（合并后补的）
+
+- **Rust 侧缺依赖导致 CI 构建失败**。上游 `94dc356e` 给 `app/src-tauri/Cargo.toml`
+  新增了 `lopdf 0.34`（#607 PDF 书签注入）、`image 0.25`（#606 粘贴图片格式转换）
+  以及 Linux 的 `gtk 0.18` / `webkit2gtk 2.0`；解冲突时 `Cargo.toml` 被当作纯版本号
+  冲突取了本地版本，四条依赖一起丢失。前端构建不碰 Rust，本地 `vue-tsc` /
+  `vite build` 全绿，CI 的 rust job 才在 `commands.rs` 上报 24 个 `E0433`。
+  现以上游 `Cargo.toml` / `Cargo.lock` 为基底、仅保留 5.2.5 版本号；
+  本地 `cargo check --lib` 与 `cargo test --lib --no-run` 均通过。
+
 ### 验证
 
 - `vue-tsc --noEmit` 0 错误。
