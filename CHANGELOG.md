@@ -19,6 +19,51 @@
 
 ---
 
+## [5.2.5] — 2026-11-18
+
+同步上游 v5.2.3（3 个提交），一次大范围冲突合并。
+
+### 同步上游至 a33fd4b2（3 个提交，v5.2.2 → v5.2.3）
+
+- **#588–#610 共 17 个 issue 的上游实现**：导出（HTML / Word / PDF / EPUB）、编辑器、
+  快捷键、Android SAF、Gitee 相关修复。70 个文件、+3664 / −530。
+- **App Store / 分发**：v5.2.3 的 App Store 多语言更新说明，Fastlane 元数据补充。
+- **GitHub 同步**：`github_sync.rs` 新增能力与设置面板调整。
+- **src-tauri 回归测试**：v5.2.3 新增的 Rust 端用例。
+
+> 注意：上游这批提交与本地 5.2.3 修的是**同一批 issue**（#589 / #594 / #597 / #598 /
+> #600 / #603），两边是各自独立的实现，因此 23 个文件产生冲突。
+
+### 合并取舍
+
+| 模块 | 采用 | 理由 |
+| --- | --- | --- |
+| `docx-export.ts` / `docx-template.ts` | 上游 | #603 用 `parseTemplateHeadingStyles` 并合并 `numbering.xml`（本地 `surveyStyles` 没有 numbering）；#597 用 `isMergedBook` + `preferFallbackTitle`；另带 mermaid / PlantUML 图片内嵌 |
+| `merged-book.ts` / 测试 | 上游 | `includeRootHeading` 与本地 `omitRootHeading` 语义等价（默认含根标题） |
+| `html-export.ts` / `useExport.ts` / `CustomExportDialog.vue` | 上游 | #594 / #598 用 `topicNav` + `syncNavToSection`，功能与本地 pager 等价且联动侧栏 |
+| `Toolbar.vue` | 上游 | 标题栏显示当前文档名（`activeTabDisplayTitle`） |
+| `mermaid-lazy.ts` / 测试 | 上游 | #600 额外保护 `%%` 注释与 native markdown 字符串 |
+| `cm-live-render.ts` 代码块着色 | 上游 | `hljsFallbackExtension`：语言别名表、IME 防护、跳过图块；删除本地 `hljs-tokens.ts`，避免两套装饰重复上色 |
+| 标题字号 | 本地 | 保留等比阶梯 `1.625 / 1.4375 / 1.28125 / 1.15625 / 1.0625 / 1`（上游 1.85 → 1.52 落差仍有 5px）；三引擎同步 |
+| 标题颜色值 | 本地 | 保留 5.2.3 发布的灰阶色阶 |
+| 标题逐级上色 | 上游 | 本地原实现只在 h1 应用了 `--md-hN`，h2–h6 实际同色，issue 只落实了一级；现补齐 |
+
+### 本地修复全部保留
+
+- PDF 导出的 `%%EOF` 完整性护栏。
+- 滚动条滑块默认 `#c1c1c1`（暗色 `#6b6b6b`）。
+- Mermaid 图的「复制」按钮移出渲染区（`.code-block-shell--artifact`）。
+- App Store 构建的 `solomd.app` 残留请求清理。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误。
+- `node:test` **777 / 777**（5.2.4 为 787；删除本地 `hljs-tokens` 的 10 条用例，
+  由上游 `hljsFallbackExtension` 的等价覆盖替代）。
+- `vite build` 成功，入口 chunk **1,738.17 kB / gzip 530.03 kB**（与 5.2.4 持平）。
+
+---
+
 ## [5.2.4] — 2026-11-17
 
 同步上游 v5.2.2（7 个提交），加一处预览区修复。
