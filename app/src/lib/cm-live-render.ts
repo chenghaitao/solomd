@@ -19,10 +19,8 @@
  *   - `> quote` → indented + left bar via a `Decoration.line` class; the
  *     `>` itself stays visible (Typora hides it; we keep it because hiding
  *     the `>` makes new-line-into-quote ergonomics worse).
- *   - Fenced code blocks (`` ``` ``) → grey background *and* highlight.js
- *     token colours (#589) laid over the source as mark decorations carrying
- *     hljs' own class names, so `hljs-theme.css` paints the editor and the
- *     preview from the same `--syn-*` palette.
+ *   - Fenced code blocks (`` ``` ``) → grey background; existing syntax
+ *     coloring from the markdown package handles the inner tokens.
  *   - `~~strike~~` → strikethrough; markers hidden when caret outside.
  *
  * Caret reveal model: a marker decoration is suppressed (raw markdown
@@ -39,7 +37,8 @@
  */
 
 import { syntaxTree, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import type { EditorState, Range } from '@codemirror/state';
+import type { Range } from '@codemirror/state';
+import { hljsFallbackExtension } from './cm-hljs-fallback';
 
 // Minimal structural view of a lezer `SyntaxNode`. `@lezer/common` is only a
 // transitive dependency (not in our package.json), so we describe just the
@@ -71,12 +70,7 @@ import {
   type LiveInlineHtmlKind,
 } from './html-live-render';
 import { copyPlainText, dedentFenced, dedentIndented } from './code-copy';
-// #395 — URL nodes that are a link *destination* (and so should be hidden)
-// versus URL nodes that are the visible label. Leaf module so it is testable.
 import { isStandaloneImageLine } from './md-image-url';
-// #589 — code-block syntax colours. hljs gives HTML; this gives offsets.
-import { highlightCodeTokens } from './hljs-tokens';
-import { onRenderDepsChange, renderDepsVersion } from './render-deps';
 
 // ---------------------------------------------------------------------------
 // Marker nodes that we hide off-line. Brackets/parens for links and
@@ -238,24 +232,6 @@ export function listItemHasTask(listMark: MdSyntaxNode): boolean {
   return false;
 }
 
-/**
- * #589 — the language tag of a fenced block (```` ```ts ```` → `ts`), or `''`
- * when it carries none (indented code, or a bare fence). Read straight off the
- * `CodeInfo` child: that node is *hidden* as a marker when the caret is
- * elsewhere, never removed, so the tag is still there to read.
- */
-export function fenceLanguage(node: MdSyntaxNode | null, state: EditorState): string {
-  if (!node) return '';
-  for (let child = node.firstChild; child; child = child.nextSibling) {
-    if (child.name === 'CodeInfo') {
-      // ```` ```js title="x" ```` — hljs wants the tag only.
-      const info = state.doc.sliceString(child.from, child.to).trim();
-      return info.split(/\s+/)[0] ?? '';
-    }
-  }
-  return '';
-}
-
 // ---------------------------------------------------------------------------
 // Code-block copy button (v4.11.18)
 //
@@ -411,7 +387,7 @@ export function buildDecorations(
 ): DecorationSet {
   const sel = view.state.selection.main;
   const dragging = isDragging(view.state);
-  const suppressCaretReveal = dragging || (hideActiveLineMarkers && sel.empty);
+  const suppressCaretReveal = dragging || hideActiveLineMarkers;
   const realFromLine = dragging ? -1 : view.state.doc.lineAt(sel.from).number;
   const realToLine = dragging ? -1 : view.state.doc.lineAt(sel.to).number;
   const fromLine = suppressCaretReveal ? -1 : realFromLine;
@@ -433,7 +409,6 @@ export function buildDecorations(
   const seenListLines = new Set<number>();
   const seenInlineHtmlLines = new Set<number>();
   const seenDefLines = new Set<number>();
-  const seenTokenBlocks = new Set<number>();
 
   for (const { from, to } of view.visibleRanges) {
     const firstVisibleLine = view.state.doc.lineAt(from).number;
@@ -459,28 +434,30 @@ export function buildDecorations(
           Math.min(nTo, view.state.doc.length),
         ).number;
         const caretTouches = lineEndAtNode >= fromLine && lineAtNode <= toLine;
-        const realCaretTouches = lineEndAtNode >= realFromLine && lineAtNode <= realToLine;
         const nodeLineText =
           lineAtNode === lineEndAtNode ? view.state.doc.line(lineAtNode).text : '';
-        // #561 — Standalone image lines always keep their Markdown source line
-        // visible above the rendered ImageWidget so entering/leaving the line
-        // never shifts layout. Keep their markers dimmed (never hidden).
+        // #561 / #605 — Standalone image lines keep their Markdown source line
+        // visible above the rendered ImageWidget by default, unless Pure WYSIWYG
+        // (`hideActiveLineMarkers`) is enabled where all raw syntax stays hidden.
         const onStandaloneImage =
-          nodeLineText !== '' && isStandaloneImageLine(nodeLineText);
+          !hideActiveLineMarkers &&
+          nodeLineText !== '' &&
+          isStandaloneImageLine(nodeLineText);
 
-        // #506 — When `showMarkers` is off and the caret is off a non-standalone
-        // line (e.g. `- ![alt](url)`), `liveBlocksExtension` replaces the inline
-        // `Image` range with an `ImageWidget`. Skip emitting overlapping
-        // `hideDeco` replacements on child nodes inside that inline `Image`.
-        if (name === 'Image' && !onStandaloneImage && !showMarkers && !realCaretTouches) {
+        // #506 / #605 — When `showMarkers` is off and the caret does not reveal
+        // source (`!caretTouches`), `liveBlocksExtension` replaces the `Image`
+        // range with an `ImageWidget`. Skip emitting overlapping `hideDeco`
+        // replacements on child nodes inside that `Image`.
+        if (name === 'Image' && !onStandaloneImage && !showMarkers && !caretTouches) {
           return false;
         }
 
         // ---- Marker hiding (off-line only) ----
         if (HIDDEN_MARK_NODES.has(name)) {
-          // #530 — Keep ` ```mermaid ` visible on the opening fence line next
-          // to the `+`/`−` fold toggle button even when `showMarkers` is off.
+          // #530 / #605 — Keep ` ```mermaid ` visible on the opening fence line next
+          // to the `+`/`−` fold toggle button unless Pure WYSIWYG is on.
           const isMermaidHeaderMark =
+            !hideActiveLineMarkers &&
             (name === 'CodeMark' || name === 'CodeInfo') &&
             /^\s*(`{3,}|~{3,})\s*mermaid\s*$/i.test(
               view.state.doc.lineAt(nFrom).text,
@@ -659,39 +636,6 @@ export function buildDecorations(
           const bodyEnd = hasClosingFence ? endLine - 1 : endLine;
           const loopStart = Math.max(startLine, firstVisibleLine);
           const loopEnd = Math.min(endLine, lastVisibleLine);
-
-          // #589 — colour the code itself. The preview gets its colours from
-          // markdown-it's `highlight` hook; a fenced block in the editor is
-          // plain text in a contenteditable, so the tokens have to arrive as
-          // mark decorations over the exact source offsets. The class names
-          // are hljs' own, which is what lets `styles/hljs-theme.css` colour
-          // this and the preview from the same `--syn-*` variables.
-          if (bodyEnd >= bodyStart) {
-            const bodyFrom = view.state.doc.line(bodyStart).from;
-            const bodyTo = view.state.doc.line(bodyEnd).to;
-            // A block that straddles two of `visibleRanges` must not emit its
-            // tokens twice.
-            if (bodyTo > bodyFrom && !seenTokenBlocks.has(bodyFrom)) {
-              seenTokenBlocks.add(bodyFrom);
-              const body = view.state.doc.sliceString(bodyFrom, bodyTo);
-              for (const token of highlightCodeTokens(
-                body,
-                fenceLanguage(node.node as unknown as MdSyntaxNode, view.state),
-              )) {
-                // Plugin decorations have to stay inside the range we were
-                // asked about, so a token straddling the viewport edge is
-                // clipped rather than dropped: its visible half keeps its
-                // colour.
-                const markFrom = Math.max(bodyFrom + token.from, from);
-                const markTo = Math.min(bodyFrom + token.to, to);
-                if (markTo <= markFrom) continue;
-                ranges.push(
-                  Decoration.mark({ class: token.classes.join(' ') }).range(markFrom, markTo),
-                );
-              }
-            }
-          }
-
           for (let ln = loopStart; ln <= loopEnd; ln++) {
             const lineObj = view.state.doc.line(ln);
             if (!seenFencedLines.has(lineObj.from)) {
@@ -765,21 +709,13 @@ export function buildDecorations(
           return;
         }
 
-        // ---- List markers (v4.7.1) + hanging indent (#469, #486) ----
+        // ---- List markers (v4.7.1) + hanging indent (#469) ----
         // Bullets (`-`/`*`/`+`) become a • glyph; ordered numbers stay; a
         // task item's dash is hidden so the checkbox widget leads. Revealed
         // (raw) on the caret line so the marker stays editable.
         // #469: apply a matched `padding-left: X; text-indent: -X` line
         // decoration so soft-wrapped continuation lines hang aligned with the
         // list item body instead of wrapping back under the number/bullet.
-        // #486: measure X in `ch`, not in em. The body starts exactly after
-        // the marker and the single space that separates it, i.e. a whole
-        // number of characters, and the editor is monospaced — so `ch` (the
-        // advance width of "0" in the active font) lands on that column for
-        // any font or font size. The old em estimate (`markCols * 0.58`)
-        // drifted by a fraction of a character, which is what pushed every
-        // wrapped continuation line slightly right of the first line and made
-        // the left edges of a numbered list look ragged.
         if (name === 'ListMark') {
           const lineObj = view.state.doc.lineAt(nFrom);
           const mark = view.state.doc.sliceString(nFrom, nTo);
@@ -985,48 +921,15 @@ export function buildDecorations(
   return Decoration.set(ranges, true);
 }
 
-// #589 — the code-block token colours need highlight.js, which loads after the
-// first paint (render-deps.ts). Decorations built before it lands are plain
-// text, and nothing would rebuild them until the user types. So the live
-// editors are nudged with an empty transaction when a dependency arrives; the
-// plugin sees `renderDepsVersion()` change and recomputes.
-const liveViews = new Set<EditorView>();
-onRenderDepsChange(() => {
-  for (const view of Array.from(liveViews)) {
-    try {
-      view.dispatch({});
-    } catch {
-      // A view torn down mid-dispatch is not an error worth reporting.
-    }
-  }
-});
-
 const makeLiveRenderPlugin = (showMarkers: boolean, hideActiveLineMarkers = false) => ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
-    /** Which render-deps generation `decorations` was built against. */
-    deps = renderDepsVersion();
-    private readonly view: EditorView;
 
     constructor(view: EditorView) {
-      this.view = view;
-      liveViews.add(view);
       this.decorations = buildDecorations(view, showMarkers, hideActiveLineMarkers);
     }
 
-    destroy() {
-      liveViews.delete(this.view);
-    }
-
     update(u: ViewUpdate) {
-      // KaTeX / highlight.js just landed — the code-block token colours (and
-      // the math widgets) can be painted now.
-      const deps = renderDepsVersion();
-      if (deps !== this.deps) {
-        this.deps = deps;
-        this.decorations = buildDecorations(u.view, showMarkers, hideActiveLineMarkers);
-        return;
-      }
       // IME composition guard (#108) — don't rebuild decorations on the
       // composing line while a Windows IME (Sogou) candidate window is open,
       // or the mid-composition DOM swap drops the composition ("吃字").
@@ -1049,11 +952,7 @@ const makeLiveRenderPlugin = (showMarkers: boolean, hideActiveLineMarkers = fals
       // Same when `hideActiveLineMarkers` (#303) is enabled and the caret moves
       // between collapsed positions.
       if (!showMarkers && u.selectionSet && !isDragging(u.state)) {
-        if (
-          hideActiveLineMarkers &&
-          u.startState.selection.main.empty &&
-          u.state.selection.main.empty
-        ) {
+        if (hideActiveLineMarkers) {
           return;
         }
         this.decorations = buildDecorations(u.view, showMarkers, hideActiveLineMarkers);
@@ -1066,11 +965,10 @@ const makeLiveRenderPlugin = (showMarkers: boolean, hideActiveLineMarkers = fals
 // Rich syntax highlighting — same palette as cm-live-preview.ts but kept
 // here so live-edit can be used independently of the live-preview toggle.
 const liveEditHighlightStyle = HighlightStyle.define([
-  // 5.0 — weights follow the §2 scale; list ITEM text stays body colour
-  // (lezer tags the whole item `list`), only the marks are muted.
-  { tag: t.heading1, fontWeight: '650', color: 'var(--md-h1)' },
-  { tag: t.heading2, fontWeight: '620', color: 'var(--md-h2)' },
-  { tag: t.heading3, fontWeight: '600', color: 'var(--md-h3)' },
+  // 5.0 / #588 / #589 — gradual heading scale & 6 distinct heading colours.
+  { tag: t.heading1, fontWeight: '700', color: 'var(--md-h1)' },
+  { tag: t.heading2, fontWeight: '650', color: 'var(--md-h2)' },
+  { tag: t.heading3, fontWeight: '620', color: 'var(--md-h3)' },
   { tag: t.heading4, fontWeight: '600', color: 'var(--md-h4)' },
   { tag: t.heading5, fontWeight: '600', color: 'var(--md-h5)' },
   { tag: t.heading6, fontWeight: '600', color: 'var(--md-h6)' },
@@ -1080,31 +978,26 @@ const liveEditHighlightStyle = HighlightStyle.define([
   { tag: t.link, color: 'var(--accent-text)' },
   { tag: t.url, color: 'var(--accent-text)' },
   { tag: t.monospace, fontFamily: 'var(--font-mono)', color: 'var(--text)' },
-  { tag: t.quote, color: 'var(--text-2)' },
+  { tag: t.quote, color: 'var(--md-quote, var(--text-2))' },
   { tag: t.contentSeparator, color: 'var(--text-3)' },
   { tag: t.processingInstruction, color: 'var(--text-3)' },
-  // Code-block syntax (nested languages)
-  { tag: t.keyword, color: 'var(--syn-keyword)' },
-  { tag: t.string, color: 'var(--syn-string)' },
-  { tag: t.number, color: 'var(--syn-number)' },
+  // Code-block syntax (nested Lezer languages)
+  { tag: [t.keyword, t.controlKeyword, t.operatorKeyword, t.definitionKeyword, t.moduleKeyword, t.modifier, t.self], color: 'var(--syn-keyword)' },
+  { tag: [t.string, t.special(t.string), t.regexp, t.escape], color: 'var(--syn-string)' },
+  { tag: [t.number, t.integer, t.float, t.bool, t.null, t.atom], color: 'var(--syn-number)' },
   { tag: t.comment, color: 'var(--syn-comment)', fontStyle: 'italic' },
-  { tag: t.function(t.variableName), color: 'var(--syn-function)' },
-  { tag: t.variableName, color: 'var(--syn-variable)' },
-  { tag: t.typeName, color: 'var(--syn-type)' },
-  { tag: t.className, color: 'var(--syn-type)' },
-  { tag: t.propertyName, color: 'var(--syn-property)' },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName], color: 'var(--syn-function)' },
+  { tag: [t.definition(t.variableName), t.constant(t.variableName), t.variableName], color: 'var(--syn-variable)' },
+  { tag: [t.typeName, t.className, t.namespace, t.labelName], color: 'var(--syn-type)' },
+  { tag: [t.propertyName, t.definition(t.propertyName)], color: 'var(--syn-property)' },
   { tag: t.operator, color: 'var(--syn-operator)' },
   { tag: t.punctuation, color: 'var(--text-muted)' },
   { tag: t.bracket, color: 'var(--text-muted)' },
-  { tag: t.bool, color: 'var(--syn-number)' },
-  { tag: t.null, color: 'var(--syn-number)' },
   { tag: t.tagName, color: 'var(--syn-keyword)' },
   { tag: t.attributeName, color: 'var(--syn-property)' },
   { tag: t.attributeValue, color: 'var(--syn-string)' },
 ]);
 
-// Theme: heading sizes match the Preview pane sizes (h1 2em, h2 1.5em,
-// h3 1.2em) so toggling between liveEdit and preview feels seamless.
 const liveEditTheme = EditorView.theme({
   '.cm-line': {
     fontVariantLigatures: 'none',
@@ -1118,35 +1011,46 @@ const liveEditTheme = EditorView.theme({
   },
   // Heading lines — use line-decoration to size whole line so layout
   // doesn't jump when markers are revealed/hidden.
-  // Note: do NOT set a custom lineHeight here. Heading visual height is
-  // achieved through fontSize + padding alone. Overriding lineHeight per
-  // line breaks CodeMirror's posAtCoords math (it caches line-box metrics
-  // measured against the base lineHeight), making click-to-position land
-  // on the wrong line. Keep line-height uniform at the .cm-scroller base.
-  // 5.0 §2 type scale, re-cut for #589: H1 26/650 −0.015em, H2 23/620,
-  // H3 20.5/600 at the 16px default, written in em so the user's font size
-  // scales them. Each step is ~1.11× the next (26, 23, 20.5, 18.5, 17, 16),
-  // so the drop from H1 to H2 is 3px rather than the old 10px cliff.
+  // Note: do NOT set a custom lineHeight here (keeps CodeMirror's posAtCoords accurate).
+  // #589 — one geometric step per level (26, 23, 20.5, 18.5, 17, 16px at the
+  // 16px base), matching the preview pane and cm-live-preview. The old scale
+  // dropped 10px from H1 to H2 and then crawled, so the outline read as
+  // "title + everything else".
   '.cm-md-heading-line-1': {
     fontSize: '1.625em',
     fontWeight: '650',
     letterSpacing: '-0.015em',
     paddingTop: '0.2em',
     paddingBottom: '0.1em',
+    color: 'var(--md-h1)',
   },
   '.cm-md-heading-line-2': {
     fontSize: '1.4375em',
     fontWeight: '620',
     paddingTop: '0.3em',
+    color: 'var(--md-h2)',
   },
   '.cm-md-heading-line-3': {
     fontSize: '1.28125em',
     fontWeight: '600',
     paddingTop: '0.2em',
+    color: 'var(--md-h3)',
   },
-  '.cm-md-heading-line-4': { fontSize: '1.15625em', fontWeight: '600' },
-  '.cm-md-heading-line-5': { fontSize: '1.0625em', fontWeight: '600' },
-  '.cm-md-heading-line-6': { fontSize: '1em', fontWeight: '600', color: 'var(--text-2)' },
+  '.cm-md-heading-line-4': {
+    fontSize: '1.15625em',
+    fontWeight: '600',
+    color: 'var(--md-h4)',
+  },
+  '.cm-md-heading-line-5': {
+    fontSize: '1.0625em',
+    fontWeight: '600',
+    color: 'var(--md-h5)',
+  },
+  '.cm-md-heading-line-6': {
+    fontSize: '1em',
+    fontWeight: '600',
+    color: 'var(--md-h6)',
+  },
 
   // Heading text color (from the heading mark). The line decoration sets
   // size; this paints the color so emphasis/strong inside a heading
@@ -1217,11 +1121,13 @@ const liveEditTheme = EditorView.theme({
     verticalAlign: 'middle',
   },
 
-  // 5.0 §5 — quote: an --bg-elev card, 10px corners, no left bar, --text-2.
+  // #588 — quote: distinct `--md-quote-bg` card + left accent bar so quotes and
+  // fenced code blocks (`--md-code-bg`) are visually unmistakable.
   '.cm-md-quote-line': {
     padding: '0 16px',
-    color: 'var(--text-2)',
-    backgroundColor: 'var(--bg-elev)',
+    color: 'var(--md-quote, var(--text-2))',
+    backgroundColor: 'var(--md-quote-bg, var(--bg-elev))',
+    borderLeft: '3px solid var(--md-quote-border, var(--accent))',
   },
   // #285 — Definition list (`Term\n: Definition`) styling in Live Edit mode.
   '.cm-md-dt-line': {
@@ -1235,21 +1141,14 @@ const liveEditTheme = EditorView.theme({
     color: 'var(--text-2)',
   },
 
-  // 5.0 §5 — code block: --bg-elev card, 10px corners, 13px mono.
+  // #588 — code block: `--md-code-bg` card, 10px corners, 13px mono.
   '.cm-md-fenced-line': {
     padding: '0 16px',
-    backgroundColor: 'var(--bg-elev)',
+    backgroundColor: 'var(--md-code-bg, var(--bg-elev))',
     fontFamily: 'var(--font-mono)',
     fontSize: '0.8125em',
     // Containing block for the copy button that rides the block's first line.
     position: 'relative',
-  },
-  // #589 — our hljs token marks wrap CodeMirror's *own* token spans (the
-  // markdown parser tags the code text too), and those carry a `color` of
-  // their own that would beat the colour the mark passes down. Hand every
-  // nested span back to the mark so `hljs-theme.css` decides the colour.
-  '.cm-md-fenced-body-line [class*="hljs-"] *': {
-    color: 'inherit',
   },
   '.cm-md-block-first': {
     paddingTop: '10px',
@@ -1349,6 +1248,7 @@ export function liveEditExtension(
 ) {
   return [
     syntaxHighlighting(liveEditHighlightStyle),
+    hljsFallbackExtension(),
     opts.showMarkers
       ? liveRenderPluginShowMarkers
       : opts.hideActiveLineMarkers

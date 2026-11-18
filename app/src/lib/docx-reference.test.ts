@@ -89,60 +89,47 @@ test('#553 with no reference the package is byte-for-byte the normal output', as
   assert.ok(strFromU8(without['word/document.xml']).includes('正文内容 Body text'));
 });
 
-// #603 — Word/WPS templates number their heading style ids (`1`, `2`, …) while
-// the `docx` library writes `Heading1`: the references have to be re-pointed,
-// or Word shows every heading as body text and the outline stays empty.
-const NUMERIC_STYLES_XML =
-  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-  '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-  '<w:docDefaults/>' +
-  '<w:style w:type="paragraph" w:default="1" w:styleId="1"><w:name w:val="Normal"/></w:style>' +
-  '<w:style w:type="paragraph" w:styleId="2"><w:name w:val="heading 1"/>' +
-  '<w:pPr><w:outlineLvl w:val="0"/></w:pPr></w:style>' +
-  '<w:style w:type="paragraph" w:styleId="5"><w:name w:val="heading 2"/>' +
-  '<w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>' +
-  '</w:styles>';
-
-function numericReferenceDocx(): Uint8Array {
-  const templateDocXml =
+test('#603 remaps Heading1..6 to WPS/Word custom styleIds and merges numbering without collision', async () => {
+  const wpsStylesXml =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-    '<w:body><w:p/><w:sectPr/></w:body></w:document>';
-  return zipSync(
-    {
-      '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
-      'word/document.xml': strToU8(templateDocXml),
-      'word/styles.xml': strToU8(NUMERIC_STYLES_XML),
-      'word/fontTable.xml': strToU8(FONT_TABLE_XML),
-    },
-    { level: 6 },
-  );
-}
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="1"><w:name w:val="Normal"/></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="2"><w:name w:val="heading 1"/><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:outlineLvl w:val="0"/></w:pPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="5"><w:name w:val="heading 2"/><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="2"/></w:numPr><w:outlineLvl w:val="1"/></w:pPr></w:style>' +
+    '</w:styles>';
+  const wpsNumberingXml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>' +
+    '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>' +
+    '<w:num w:numId="2"><w:abstractNumId w:val="0"/></w:num>' +
+    '</w:numbering>';
+  const tplZip = zipSync({
+    '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+    'word/document.xml': strToU8(
+      '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p/></w:body></w:document>',
+    ),
+    'word/styles.xml': strToU8(wpsStylesXml),
+    'word/numbering.xml': strToU8(wpsNumberingXml),
+  });
 
-test('#603 a template whose heading styles are numbered still yields real Word headings', async () => {
-  const blob = await markdownToDocxBlob(
-    '# 一级标题\n\n正文\n\n## 二级标题\n\n更多正文',
-    '测试文档',
-    undefined,
-    'plain',
-    'Contents',
-    null,
-    numericReferenceDocx(),
-  );
+  const md = '# K8S环境铲除流程\n\n## 1、清除k8s环境信息\n\n### 子步骤\n\n- 列表项 A\n1. 有序项 B\n';
+  const blob = await markdownToDocxBlob(md, 'K8S', undefined, 'plain', 'Contents', null, tplZip);
   const parts = unzipSync(new Uint8Array(await blob.arrayBuffer()));
   const docXml = strFromU8(parts['word/document.xml']);
-  const stylesXml = strFromU8(parts['word/styles.xml']);
+  const numXml = strFromU8(parts['word/numbering.xml']);
 
-  const usedStyles = Array.from(docXml.matchAll(/<w:pStyle w:val="([^"]+)"\/>/g)).map((m) => m[1]);
-  assert.ok(usedStyles.includes('2'), `H1 must use the template's heading 1 style, got ${usedStyles}`);
-  assert.ok(usedStyles.includes('5'), `H2 must use the template's heading 2 style, got ${usedStyles}`);
-  assert.ok(!usedStyles.includes('Heading1'), 'no dangling Heading1 reference may survive');
-  assert.ok(!usedStyles.includes('Heading2'), 'no dangling Heading2 reference may survive');
-
-  // Every referenced style must exist in the merged stylesheet.
-  for (const id of new Set(usedStyles)) {
-    assert.ok(stylesXml.includes(`w:styleId="${id}"`), `style ${id} used by a paragraph is missing`);
-  }
-  // And the template's own heading styles must not be shadowed by duplicates.
-  assert.equal((stylesXml.match(/<w:name w:val="heading 1"\/>/g) || []).length, 1);
+  // H1 -> styleId "2", H2 -> styleId "5", no dangling Heading1/Heading2
+  assert.ok(docXml.includes('<w:pStyle w:val="2"/>'), 'H1 mapped to template styleId 2');
+  assert.ok(docXml.includes('<w:pStyle w:val="5"/>'), 'H2 mapped to template styleId 5');
+  assert.ok(!docXml.includes('w:val="Heading1"'), 'no dangling Heading1');
+  assert.ok(!docXml.includes('w:val="Heading2"'), 'no dangling Heading2');
+  // Unmapped H3 gets fallback Normal styleId "1" + explicit outlineLvl="2"
+  assert.ok(docXml.includes('<w:outlineLvl w:val="2"/>'), 'unmapped H3 preserves outlineLvl=2');
+  // Template heading numId="1" preserved AND generated list numIds shifted past 12
+  assert.ok(numXml.includes('<w:num w:numId="1">'), 'template heading numId=1 intact');
+  const docListNumIds = [...docXml.matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => Number(m[1]));
+  assert.ok(docListNumIds.length >= 2 && docListNumIds.every((id) => id >= 12), 'markdown list numIds shifted away from template heading numIds');
+  // OOXML schema order: all abstractNum elements appear before any w:num element
+  assert.ok(numXml.lastIndexOf('</w:abstractNum>') < numXml.indexOf('<w:num '), 'all abstractNum precede num');
 });

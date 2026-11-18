@@ -71,27 +71,26 @@ export function quoteUnquotedMermaidLabels(code: string): string {
 }
 
 /**
- * #600 — Mermaid has no `**bold**` in flowchart labels: Typora pre-processes
- * it, we showed the asterisks verbatim. Rewrite each `**…**` pair into `<b>`,
- * which mermaid puts straight into the HTML label (`htmlLabels` is on) and
- * every renderer — preview widget, PNG/PDF export, standalone HTML — already
- * understands. Skipped when the pair is empty, spans lines, or is already
- * inside a `<b>`/`<strong>` tag, so repeated passes are no-ops.
+ * #600 — Convert Typora-style `**bold**` spans inside Mermaid node labels,
+ * edge labels, and subgraph titles into `<b>bold</b>` HTML tags, while leaving
+ * `%%` comment lines and native Mermaid markdown strings (`` "`...`" ``) untouched.
  */
-const MERMAID_BOLD_RE = /\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*/g;
-
-export function mermaidBoldToHtml(code: string): string {
+export function formatMermaidInlineBold(code: string): string {
   if (!code.includes('**')) return code;
-  return code.replace(MERMAID_BOLD_RE, (match, body: string, offset: number) => {
-    const before = code.slice(Math.max(0, offset - 12), offset).toLowerCase();
-    if (before.includes('<b>') || before.includes('<strong>')) return match;
-    return `<b>${body}</b>`;
-  });
-}
-
-/** Source rewrites that must happen before mermaid parses, in order. */
-export function normalizeMermaidSource(code: string): string {
-  return mermaidBoldToHtml(code);
+  return code
+    .split('\n')
+    .map((line) => {
+      if (/^\s*%%/.test(line) || !line.includes('**')) return line;
+      // Preserve Mermaid native markdown strings ("`...`") verbatim
+      const parts = line.split(/("`[^`]*`")/g);
+      return parts
+        .map((seg, idx) => {
+          if (idx % 2 === 1) return seg;
+          return seg.replace(/\*\*([^\s*](?:[^*\n]*?[^\s*])?)\*\*/g, '<b>$1</b>');
+        })
+        .join('');
+    })
+    .join('\n');
 }
 
 export function formatMermaidError(err: unknown, code?: string): string {
@@ -128,14 +127,14 @@ export async function safeRender(
       'visibility:hidden;pointer-events:none;overflow:hidden;',
   );
   doc.body.appendChild(host);
-  const source = normalizeMermaidSource(code);
+  const prepared = formatMermaidInlineBold(code);
   try {
-    return await mermaid.render(renderId, source, host);
+    return await mermaid.render(renderId, prepared, host);
   } catch (firstErr) {
     // #276 — if the diagram failed to parse and contains unquoted `@` or `()`
     // inside `[...]` node labels, retry once with those labels quoted.
-    const quoted = quoteUnquotedMermaidLabels(source);
-    if (quoted !== source) {
+    const quoted = quoteUnquotedMermaidLabels(prepared);
+    if (quoted !== prepared) {
       removeMermaidLeftovers(renderId, doc);
       host.innerHTML = '';
       const retryId = `${id}-r${++renderSeq}`;

@@ -66,8 +66,10 @@
   --md-link: #b4561b;
   --md-url: #78756e;
   --md-code: #1f1e1c;
-  --md-code-bg: #f6f5f2;
-  --md-quote: #5e5b55;
+  --md-code-bg: #f3f4f6;
+  --md-quote: #555049;
+  --md-quote-bg: #fcf8f1;
+  --md-quote-border: #e07b39;
   --md-list: #78756e;
   --md-hr: #dedcd6;
 
@@ -162,8 +164,10 @@
   --md-link: #f4a26b;
   --md-url: #8c8984;
   --md-code: #eceae6;
-  --md-code-bg: #262628;
-  --md-quote: #a9a6a0;
+  --md-code-bg: #24262a;
+  --md-quote: #b8b3ab;
+  --md-quote-bg: #2b2722;
+  --md-quote-border: #f0965a;
   --md-list: #8c8984;
   --md-hr: #3a3a3d;
 
@@ -195,8 +199,9 @@
   --md-h1: #eceff4; --md-h2: #e2e7ee; --md-h3: #d4dbe5;
   --md-h4: #c4ccd9; --md-h5: #aab4c3; --md-h6: #919cae;
   --md-strong: #eceff4; --md-em: #d8dee9; --md-link: #88c0d0;
-  --md-url: #5e81ac; --md-code: #bf616a; --md-code-bg: #3b4252;
-  --md-quote: #616e88; --md-list: #88c0d0; --md-hr: #4c566a;
+  --md-url: #5e81ac; --md-code: #bf616a; --md-code-bg: #363d4c;
+  --md-quote: #c8d0df; --md-quote-bg: #3e4758; --md-quote-border: #88c0d0;
+  --md-list: #88c0d0; --md-hr: #4c566a;
   --syn-keyword: #81a1c1; --syn-string: #a3be8c; --syn-number: #b48ead;
   --syn-comment: #616e88; --syn-function: #88c0d0; --syn-variable: #d8dee9;
   --syn-type: #8fbcbb; --syn-property: #88c0d0; --syn-operator: #81a1c1;
@@ -217,8 +222,9 @@
   --md-h1: #073642; --md-h2: #2f4f5a; --md-h3: #4e6a72;
   --md-h4: #657b83; --md-h5: #7d9299; --md-h6: #93a1a1;
   --md-strong: #073642; --md-em: #586e75; --md-link: #268bd2;
-  --md-url: #2aa198; --md-code: #d33682; --md-code-bg: #eee8d5;
-  --md-quote: #93a1a1; --md-list: #cb4b16; --md-hr: #d3cbb7;
+  --md-url: #2aa198; --md-code: #d33682; --md-code-bg: #ede7d3;
+  --md-quote: #586e75; --md-quote-bg: #f6efdc; --md-quote-border: #b58900;
+  --md-list: #cb4b16; --md-hr: #d3cbb7;
   --syn-keyword: #859900; --syn-string: #2aa198; --syn-number: #d33682;
   --syn-comment: #93a1a1; --syn-function: #268bd2; --syn-variable: #657b83;
   --syn-type: #b58900; --syn-property: #268bd2; --syn-operator: #657b83;
@@ -240,8 +246,9 @@
   --md-h1: #93a1a1; --md-h2: #839496; --md-h3: #6c8085;
   --md-h4: #586e75; --md-h5: #4b6169; --md-h6: #3f555d;
   --md-strong: #93a1a1; --md-em: #839496; --md-link: #268bd2;
-  --md-url: #2aa198; --md-code: #d33682; --md-code-bg: #073642;
-  --md-quote: #586e75; --md-list: #cb4b16; --md-hr: #0a4050;
+  --md-url: #2aa198; --md-code: #d33682; --md-code-bg: #06333f;
+  --md-quote: #93a1a1; --md-quote-bg: #0b3c49; --md-quote-border: #2aa198;
+  --md-list: #cb4b16; --md-hr: #0a4050;
   --syn-keyword: #859900; --syn-string: #2aa198; --syn-number: #d33682;
   --syn-comment: #586e75; --syn-function: #268bd2; --syn-variable: #839496;
   --syn-type: #b58900; --syn-property: #268bd2; --syn-operator: #839496;
@@ -263,8 +270,9 @@
   --md-h1: #f8f8f2; --md-h2: #e8e8d2; --md-h3: #d2d2b8;
   --md-h4: #b6b69a; --md-h5: #9c9c82; --md-h6: #85856d;
   --md-strong: #f8f8f2; --md-em: #e6db74; --md-link: #66d9ef;
-  --md-url: #a6e22e; --md-code: #f92672; --md-code-bg: #3e3d32;
-  --md-quote: #75715e; --md-list: #a6e22e; --md-hr: #49483e;
+  --md-url: #a6e22e; --md-code: #f92672; --md-code-bg: #33342c;
+  --md-quote: #cfcfc2; --md-quote-bg: #3d3b30; --md-quote-border: #fd971f;
+  --md-list: #a6e22e; --md-hr: #49483e;
   --syn-keyword: #f92672; --syn-string: #e6db74; --syn-number: #ae81ff;
   --syn-comment: #75715e; --syn-function: #a6e22e; --syn-variable: #f8f8f2;
   --syn-type: #66d9ef; --syn-property: #a6e22e; --syn-operator: #f92672;
@@ -286,7 +294,8 @@
   --md-h4: #61686f; --md-h5: #767d84; --md-h6: #8b949e;
   --md-strong: #24292e; --md-em: #24292e; --md-link: #0366d6;
   --md-url: #0366d6; --md-code: #d73a49; --md-code-bg: #f6f8fa;
-  --md-quote: #6a737d; --md-list: #e36209; --md-hr: #d0d7de;
+  --md-quote: #57606a; --md-quote-bg: #f0f6fc; --md-quote-border: #0969da;
+  --md-list: #e36209; --md-hr: #d0d7de;
   --syn-keyword: #d73a49; --syn-string: #032f62; --syn-number: #005cc5;
   --syn-comment: #6a737d; --syn-function: #6f42c1; --syn-variable: #24292e;
   --syn-type: #e36209; --syn-property: #005cc5; --syn-operator: #d73a49;
@@ -308,8 +317,9 @@
   --md-h1: #f8f8f2; --md-h2: #e6e6f4; --md-h3: #d0d0e6;
   --md-h4: #b8b8d6; --md-h5: #9b9bc2; --md-h6: #7f7fae;
   --md-strong: #f8f8f2; --md-em: #f1fa8c; --md-link: #8be9fd;
-  --md-url: #50fa7b; --md-code: #ff79c6; --md-code-bg: #44475a;
-  --md-quote: #6272a4; --md-list: #50fa7b; --md-hr: #44475a;
+  --md-url: #50fa7b; --md-code: #ff79c6; --md-code-bg: #343746;
+  --md-quote: #d6d6ec; --md-quote-bg: #3c3f52; --md-quote-border: #bd93f9;
+  --md-list: #50fa7b; --md-hr: #44475a;
   --syn-keyword: #ff79c6; --syn-string: #f1fa8c; --syn-number: #bd93f9;
   --syn-comment: #6272a4; --syn-function: #50fa7b; --syn-variable: #f8f8f2;
   --syn-type: #8be9fd; --syn-property: #50fa7b; --syn-operator: #ff79c6;
@@ -328,11 +338,12 @@
   --text-faint: #7c8f7c;
   --accent: #3a7d44;
   --accent-fg: #ffffff;
-  --md-h1: #1f4e2c; --md-h2: #245330; --md-h3: #283328;
-  --md-h4: #374737; --md-h5: #4a5a4a; --md-h6: #526352;
+  --md-h1: #163d22; --md-h2: #1f5c35; --md-h3: #23636b;
+  --md-h4: #4c6b28; --md-h5: #785a28; --md-h6: #526352;
   --md-strong: #1e291e; --md-em: #283328; --md-link: #2b6cb0;
-  --md-url: #526352; --md-code: #2e6f40; --md-code-bg: #e3ece0;
-  --md-quote: #526352; --md-list: #3a7d44; --md-hr: #cfd9ca;
+  --md-url: #526352; --md-code: #2e6f40; --md-code-bg: #e1eadc;
+  --md-quote: #465746; --md-quote-bg: #e8efe2; --md-quote-border: #3a7d44;
+  --md-list: #3a7d44; --md-hr: #cfd9ca;
   --syn-keyword: #2e6f40; --syn-string: #3b7a57; --syn-number: #8c5a2b;
   --syn-comment: #7c8f7c; --syn-function: #2b5b84; --syn-variable: #283328;
   --syn-type: #7a5c2e; --syn-property: #2b5b84; --syn-operator: #2e6f40;
@@ -903,10 +914,30 @@ div.mermaidTooltip {
     overflow-x: visible !important;
   }
   body.solomd-printing .md-toc {
-    break-inside: avoid-page;
     background: transparent;
     border: none;
     padding: 0;
+  }
+  /* #607 / #595 — Honor merged-book chapter page breaks (`<hr data-solomd-page-break="1">`)
+   * in native vector print-to-PDF exports as well as `withPrintPagination` measurements. */
+  body.solomd-printing .solomd-print-content hr[data-solomd-page-break="1"] {
+    break-after: page;
+    page-break-after: always;
+    border: none !important;
+    margin: 0 !important;
+    height: 0 !important;
+  }
+  body.solomd-printing .solomd-print-content .pdf-book-cover {
+    padding: 180px 24px 120px;
+    text-align: center;
+    break-after: page;
+    page-break-after: always;
+  }
+  body.solomd-printing .solomd-print-content .pdf-book-cover__title {
+    font-size: 2.2em;
+    font-weight: 700;
+    line-height: 1.35;
+    word-break: break-word;
   }
   /* #347 / #566 — a TOC at the top of the document (Settings → PDF "table of
    * contents", a leading [TOC], or H1 + [TOC] in merged book export) is a page
@@ -963,8 +994,10 @@ body.solomd-printing {
   --md-link: #0b5cad;
   --md-url: #0b5cad;
   --md-code: #1f2328;
-  --md-code-bg: #f6f8fa;
-  --md-quote: #6a6a6a;
+  --md-code-bg: #f3f5f8;
+  --md-quote: #555555;
+  --md-quote-bg: #fbf8f1;
+  --md-quote-border: #d0873c;
   --md-list: #59636e;
   --md-hr: #c0bdb3;
   --syn-keyword: #a626a4;
@@ -1004,8 +1037,10 @@ body.solomd-printing {
   --md-link: #ff9f40;
   --md-url: #ffb874;
   --md-code: #ff9f9f;
-  --md-code-bg: #2a2a2a;
-  --md-quote: #888888;
+  --md-code-bg: #26282c;
+  --md-quote: #b8b1a6;
+  --md-quote-bg: #2d2923;
+  --md-quote-border: #ffa54d;
   --md-list: #ff9f40;
   --md-hr: #444444;
   --syn-keyword: #c678dd;

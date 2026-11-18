@@ -2,9 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   quoteUnquotedMermaidLabels,
+  formatMermaidInlineBold,
   formatMermaidError,
-  mermaidBoldToHtml,
-  normalizeMermaidSource,
   safeRender,
   type MermaidRenderer,
 } from './mermaid-lazy';
@@ -65,41 +64,21 @@ test('formatMermaidError appends a helpful quoting hint when a diagram with @ or
   assert.ok(msg.includes('Hint: Wrap node labels containing "@" or "()" in quotes'));
 });
 
-test('mermaidBoldToHtml turns **…** in node and subgraph labels into <b> (#600)', () => {
-  const src = [
+test('#600: formatMermaidInlineBold converts **bold** spans in nodes, edges, and subgraphs to <b>...</b> while preserving %% comments and "`...`"', () => {
+  const input = [
     'graph LR',
-    '  A[**程序员转型方向**] --> B[**技术路线：成为专家**]',
-    '  B1[**AI/ML工程师**<br>学Python]',
-    '  subgraph C[**业务路线**]',
-    '    C1[**AI产品经理**]',
+    '  %% **comment untouched**',
+    '  A[**程序员转型方向**] -->|**核心路线**| B[**技术路线：成为专家**]',
+    '  subgraph B[**技术路线：成为专家**]',
+    '    B1[**AI/ML工程师**<br>学Python、PyTorch/TensorFlow框架]',
+    '    B2["`**native markdown**`"]',
     '  end',
   ].join('\n');
-  assert.equal(
-    mermaidBoldToHtml(src),
-    [
-      'graph LR',
-      '  A[<b>程序员转型方向</b>] --> B[<b>技术路线：成为专家</b>]',
-      '  B1[<b>AI/ML工程师</b><br>学Python]',
-      '  subgraph C[<b>业务路线</b>]',
-      '    C1[<b>AI产品经理</b>]',
-      '  end',
-    ].join('\n'),
-  );
-});
 
-test('mermaidBoldToHtml leaves single asterisks, empty pairs, multi-line spans and existing <b> alone (#600)', () => {
-  const cases = [
-    'A[*italic*] --> B[plain]',
-    'A[**] --> B[x]',
-    'A[**spans\nlines**]',
-    'A[<b>already</b>]',
-  ];
-  for (const src of cases) assert.equal(mermaidBoldToHtml(src), src, src);
-  // A second pass over an already-converted label must be a no-op.
-  const once = mermaidBoldToHtml('A[**x**]');
-  assert.equal(mermaidBoldToHtml(once), once);
-});
-
-test('normalizeMermaidSource is what every render path feeds mermaid (#600)', () => {
-  assert.equal(normalizeMermaidSource('graph LR\n A[**x**]'), 'graph LR\n A[<b>x</b>]');
+  const out = formatMermaidInlineBold(input);
+  assert.ok(out.includes('%% **comment untouched**'));
+  assert.ok(out.includes('A[<b>程序员转型方向</b>] -->|<b>核心路线</b>| B[<b>技术路线：成为专家</b>]'));
+  assert.ok(out.includes('subgraph B[<b>技术路线：成为专家</b>]'));
+  assert.ok(out.includes('B1[<b>AI/ML工程师</b><br>学Python、PyTorch/TensorFlow框架]'));
+  assert.ok(out.includes('B2["`**native markdown**`"]'));
 });

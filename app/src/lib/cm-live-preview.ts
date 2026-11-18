@@ -26,6 +26,7 @@ import { frozenDuringComposition, isImeSafeFlushTransaction } from './cm-ime-gua
 import { tags as t } from '@lezer/highlight';
 import { isDragging, isDragEndTransaction } from './cm-drag-aware';
 import { bulletDeco, hrDeco, listItemHasTask, type MdSyntaxNode } from './cm-live-render';
+import { hljsFallbackExtension } from './cm-hljs-fallback';
 
 // Marker node names (from @lezer/markdown) we want to hide off-line.
 // LinkMark (brackets) and CodeMark (backticks) intentionally kept visible —
@@ -70,11 +71,7 @@ const makeLiveMarkdownPlugin = (showMarkers: boolean, hideActiveLineMarkers = fa
         return;
       }
       if (!showMarkers && update.selectionSet && !isDragging(update.state)) {
-        if (
-          hideActiveLineMarkers &&
-          update.startState.selection.main.empty &&
-          update.state.selection.main.empty
-        ) {
+        if (hideActiveLineMarkers) {
           return;
         }
         this.decorations = this.build(update.view);
@@ -85,7 +82,7 @@ const makeLiveMarkdownPlugin = (showMarkers: boolean, hideActiveLineMarkers = fa
       const builder = new RangeSetBuilder<Decoration>();
       const sel = view.state.selection.main;
       const dragging = isDragging(view.state);
-      const suppressCaretReveal = dragging || (hideActiveLineMarkers && sel.empty);
+      const suppressCaretReveal = dragging || hideActiveLineMarkers;
       const fromLine = suppressCaretReveal ? -1 : view.state.doc.lineAt(sel.from).number;
       const toLine = suppressCaretReveal ? -1 : view.state.doc.lineAt(sel.to).number;
       const tree = syntaxTree(view.state);
@@ -183,24 +180,21 @@ export const markdownRichStyle = HighlightStyle.define([
   { tag: t.link, color: 'var(--accent-text)', textDecoration: 'underline' },
   { tag: t.url, color: 'var(--accent-text)', textDecoration: 'underline' },
   { tag: t.monospace, fontFamily: 'var(--font-mono)', color: 'var(--text)', backgroundColor: 'var(--fill-1)' },
-  { tag: t.quote, color: 'var(--text-2)' },
+  { tag: t.quote, color: 'var(--md-quote, var(--text-2))' },
   { tag: t.processingInstruction, color: 'var(--text-3)' },
   { tag: t.contentSeparator, color: 'var(--text-3)' },
   // Code block syntax highlighting (provided by nested language packages)
-  { tag: t.keyword, color: 'var(--syn-keyword)' },
-  { tag: t.string, color: 'var(--syn-string)' },
-  { tag: t.number, color: 'var(--syn-number)' },
+  { tag: [t.keyword, t.controlKeyword, t.operatorKeyword, t.definitionKeyword, t.moduleKeyword, t.modifier, t.self], color: 'var(--syn-keyword)' },
+  { tag: [t.string, t.special(t.string), t.regexp, t.escape], color: 'var(--syn-string)' },
+  { tag: [t.number, t.integer, t.float, t.bool, t.null, t.atom], color: 'var(--syn-number)' },
   { tag: t.comment, color: 'var(--syn-comment)', fontStyle: 'italic' },
-  { tag: t.function(t.variableName), color: 'var(--syn-function)' },
-  { tag: t.variableName, color: 'var(--syn-variable)' },
-  { tag: t.typeName, color: 'var(--syn-type)' },
-  { tag: t.className, color: 'var(--syn-type)' },
-  { tag: t.propertyName, color: 'var(--syn-property)' },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName], color: 'var(--syn-function)' },
+  { tag: [t.definition(t.variableName), t.constant(t.variableName), t.variableName], color: 'var(--syn-variable)' },
+  { tag: [t.typeName, t.className, t.namespace, t.labelName], color: 'var(--syn-type)' },
+  { tag: [t.propertyName, t.definition(t.propertyName)], color: 'var(--syn-property)' },
   { tag: t.operator, color: 'var(--syn-operator)' },
   { tag: t.punctuation, color: 'var(--text-muted)' },
   { tag: t.bracket, color: 'var(--text-muted)' },
-  { tag: t.bool, color: 'var(--syn-number)' },
-  { tag: t.null, color: 'var(--syn-number)' },
   { tag: t.tagName, color: 'var(--syn-keyword)' },
   { tag: t.attributeName, color: 'var(--syn-property)' },
   { tag: t.attributeValue, color: 'var(--syn-string)' },
@@ -245,6 +239,7 @@ export function livePreviewExtension(
 ) {
   return [
     syntaxHighlighting(markdownRichStyle),
+    hljsFallbackExtension(),
     opts.showMarkers
       ? liveMarkdownPluginShowMarkers
       : opts.hideActiveLineMarkers
@@ -282,19 +277,22 @@ export const markdownPlainStyle = HighlightStyle.define([
   { tag: t.processingInstruction, color: 'var(--text-faint)' },
   { tag: t.contentSeparator, color: 'var(--md-hr)' },
   // Fenced-code syntax — genuinely code, keep the colors (no size changes).
-  { tag: t.keyword, color: 'var(--syn-keyword)' },
-  { tag: t.string, color: 'var(--syn-string)' },
-  { tag: t.number, color: 'var(--syn-number)' },
+  { tag: [t.keyword, t.controlKeyword, t.operatorKeyword, t.definitionKeyword, t.moduleKeyword, t.modifier, t.self], color: 'var(--syn-keyword)' },
+  { tag: [t.string, t.special(t.string), t.regexp, t.escape], color: 'var(--syn-string)' },
+  { tag: [t.number, t.integer, t.float, t.bool, t.null, t.atom], color: 'var(--syn-number)' },
   { tag: t.comment, color: 'var(--syn-comment)' },
-  { tag: t.function(t.variableName), color: 'var(--syn-function)' },
-  { tag: t.variableName, color: 'var(--syn-variable)' },
-  { tag: t.typeName, color: 'var(--syn-type)' },
-  { tag: t.propertyName, color: 'var(--syn-property)' },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName], color: 'var(--syn-function)' },
+  { tag: [t.definition(t.variableName), t.constant(t.variableName), t.variableName], color: 'var(--syn-variable)' },
+  { tag: [t.typeName, t.className, t.namespace, t.labelName], color: 'var(--syn-type)' },
+  { tag: [t.propertyName, t.definition(t.propertyName)], color: 'var(--syn-property)' },
   { tag: t.operator, color: 'var(--syn-operator)' },
   { tag: t.punctuation, color: 'var(--text-muted)' },
   { tag: t.bracket, color: 'var(--text-muted)' },
+  { tag: t.tagName, color: 'var(--syn-keyword)' },
+  { tag: t.attributeName, color: 'var(--syn-property)' },
+  { tag: t.attributeValue, color: 'var(--syn-string)' },
 ]);
 
 export function richHighlightOnly() {
-  return [Prec.high(syntaxHighlighting(markdownPlainStyle)), liveTheme];
+  return [Prec.high(syntaxHighlighting(markdownPlainStyle)), hljsFallbackExtension(), liveTheme];
 }

@@ -225,10 +225,7 @@ export function resolveDocxTemplate(
   preset: DocxPreset,
   source: string,
   fallbackTitle = '',
-  /** #597 — title the caller knows better than the body does: a merged book
-   *  names itself after its folder, and after the root heading moved out of
-   *  the body the first H1 is just the first chapter. */
-  titleOverride = '',
+  options?: { preferFallbackTitle?: boolean },
 ): DocxTemplate {
   const fm = parseDocxFrontMatter(source);
   const base = DOCX_PRESETS[fm.preset ?? preset] ?? DOCX_PRESETS.plain;
@@ -244,11 +241,9 @@ export function resolveDocxTemplate(
     lineSpacing: fm.lineSpacing ?? base.lineSpacing,
     paragraphSpacingPt: fm.paragraphSpacing ?? base.paragraphSpacingPt,
     title:
-      titleOverride ||
       fm.title ||
       frontMatterScalar(source, 'title') ||
-      firstHeading(source) ||
-      fallbackTitle,
+      (options?.preferFallbackTitle ? fallbackTitle || firstHeading(source) : firstHeading(source) || fallbackTitle),
     author: fm.author || frontMatterScalar(source, 'author'),
     date: fm.date || frontMatterScalar(source, 'date'),
   };
