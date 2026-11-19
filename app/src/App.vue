@@ -13,6 +13,7 @@ import { setMarkdownHardBreaks, setMarkdownAutoNumberHeadings, setMarkdownSmartQ
 import { openNewWindow } from './lib/new-window';
 import { ensureSpellDict } from './lib/spell-suggest';
 import { buildInsertTableSnippet } from './lib/table-cell-edit';
+import { getActiveTableCellSession } from './lib/cm-live-blocks';
 import Toolbar from './components/Toolbar.vue';
 import TileRoot from './components/TileRoot.vue';
 import StatsPill from './components/StatsPill.vue';
@@ -736,6 +737,14 @@ watchEffect(() => {
     '--content-font-size',
     `${settings.previewFontSize || settings.fontSize || 16}px`,
   );
+  document.documentElement.style.setProperty(
+    '--editor-line-height',
+    String(settings.lineHeight || 1.8),
+  );
+  document.documentElement.style.setProperty(
+    '--paragraph-spacing',
+    `${settings.paragraphSpacing ?? 0.9}em`,
+  );
 });
 
 // #141 — keep the markdown-it singleton's `breaks` option in lockstep with
@@ -1251,9 +1260,21 @@ function dispatchMenuAction(id: string) {
         })
         .catch(() => {});
       return;
-    case 'edit.selectAll':
+    case 'edit.selectAll': {
+      const cellSession = getActiveTableCellSession();
+      if (cellSession?.cellEl?.isConnected) {
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(cellSession.cellEl);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          return;
+        }
+      }
       document.execCommand('selectAll');
       return;
+    }
   }
   // A bindable action: exactly what its shortcut does. `false` means it
   // declined (e.g. formatting while a settings field has focus) — that is an
@@ -1431,14 +1452,24 @@ onMounted(async () => {
     // persisted (takePersistableUriPermission). If that grant is gone (revoked,
     // or a fresh install), drop the stale vault so the user gets a clean "Open
     // Folder" prompt instead of a tree that errors on every read.
-    if (workspace.safTreeUri) {
+    if (workspace.safTreeUri || (workspace.currentFolder && workspace.currentFolder.startsWith('saf:'))) {
       const checkUri = workspace.safTreeUri;
+      const curFolder = workspace.currentFolder;
       void (async () => {
         try {
-          const { safPersistedTrees } = await import('./lib/saf-fs');
-          const held = await safPersistedTrees();
-          if (!held.includes(checkUri)) {
-            workspace.setFolder(null);
+          const { safPersistedTrees, safRecoverVaultForPath } = await import('./lib/saf-fs');
+          if (checkUri) {
+            const held = await safPersistedTrees();
+            if (!held.includes(checkUri)) {
+              workspace.setFolder(null);
+            }
+          } else if (curFolder && curFolder.startsWith('saf:')) {
+            const recovered = await safRecoverVaultForPath(curFolder);
+            if (recovered) {
+              workspace.setSafVault(recovered.treeUri, curFolder, recovered.name);
+            } else {
+              workspace.setFolder(null);
+            }
           }
         } catch (e) {
           console.warn('SAF vault restore check failed', e);

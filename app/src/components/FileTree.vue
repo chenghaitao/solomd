@@ -17,7 +17,17 @@ import { useTabsStore } from '../stores/tabs';
 import { useI18n } from '../i18n';
 import { isIOS, isMobile, revealLabelKey, usesCommandKey } from '../lib/platform';
 import { usePendingDeletes, isDeletePending, UNDO_WINDOW_MS } from '../composables/usePendingDeletes';
-import { isSafPath, fromSafPath, safList, safRead, safCreate, safCreateDir } from '../lib/saf-fs';
+import {
+  isSafPath,
+  fromSafPath,
+  safList,
+  safRead,
+  safCreate,
+  safCreateDir,
+  safRecoverVaultForPath,
+  safAllFilesAccessStatus,
+  safRequestAllFilesAccess,
+} from '../lib/saf-fs';
 import { renderMarkdown } from '../lib/markdown';
 import { resolveImageSrc, rewriteImageUrls } from '../lib/image-resolve';
 import {
@@ -197,6 +207,40 @@ const rootMissing = ref(false);
  *  "permission denied" vs "no such file" without a debugger. */
 const rootError = ref('');
 
+// #611 — On Android 11+ / ColorOS 16 sideload APKs, Scoped Storage hides `.md`
+// files created by external sync apps (Syncthing / FolderSync / VNote) inside
+// `/storage/emulated/0/...` unless "All Files Access" (MANAGE_EXTERNAL_STORAGE)
+// is granted. Surface a one-tap prompt and auto-refresh once granted.
+const needsAllFilesAccess = ref(false);
+
+async function checkAndroidAllFilesAccess(autoRefreshOnGrant = false) {
+  if (isIOS() || !isMobile()) {
+    needsAllFilesAccess.value = false;
+    return;
+  }
+  const folder = workspace.currentFolder;
+  if (!folder || !isSafPath(folder) || !fromSafPath(folder).startsWith('primary:')) {
+    needsAllFilesAccess.value = false;
+    return;
+  }
+  const wasNeeded = needsAllFilesAccess.value;
+  const status = await safAllFilesAccessStatus();
+  const stillNeeded = Boolean(status.supported && !status.granted);
+  needsAllFilesAccess.value = stillNeeded;
+  if (autoRefreshOnGrant && wasNeeded && !stillNeeded) {
+    void refreshTreePreservingExpansion();
+  }
+}
+
+async function grantAndroidAllFilesAccess() {
+  await safRequestAllFilesAccess();
+}
+
+function onAndroidStorageResume() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  void checkAndroidAllFilesAccess(true);
+}
+
 /**
  * #325 — attachment folders are the app's, not the user's: pasted images land
  * there and notes link into them by path, so renaming or moving one by
@@ -303,9 +347,25 @@ function sortLabel(mode: TreeSortMode): string {
 
 async function loadDir(path: string): Promise<{ children: Node[]; truncated: boolean }> {
   try {
-    // #148 — SAF vault: list children via ContentResolver, not std::fs.
-    if (isSafPath(path) && workspace.safTreeUri) {
+    // #148 / #611 — SAF vault: list children via ContentResolver, never std::fs.
+    if (isSafPath(path)) {
+      if (!workspace.safTreeUri) {
+        const recovered = await safRecoverVaultForPath(path);
+        if (recovered) {
+          workspace.setSafVault(recovered.treeUri, path, recovered.name);
+          if (root.value && root.value.path === path) {
+            root.value.name = recovered.name;
+          }
+        }
+      }
+      if (!workspace.safTreeUri) {
+        throw new Error('SAF permission not granted for this folder — please re-select it');
+      }
       const safChildren = await safList(workspace.safTreeUri, fromSafPath(path));
+      if (path === workspace.currentFolder) {
+        rootMissing.value = false;
+        rootError.value = '';
+      }
       // A delete still inside its undo window is presented as done — the file
       // is on disk for a few more seconds but the user has been told it is gone.
       // The hidden-file filter is applied here rather than in the Kotlin
@@ -2059,11 +2119,22 @@ function onWindowKey(e: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener('click', onWindowClick);
   window.addEventListener('keydown', onWindowKey);
+  window.addEventListener('solomd:android-storage-resume', onAndroidStorageResume);
+  document.addEventListener('visibilitychange', onAndroidStorageResume);
+  void checkAndroidAllFilesAccess(false);
 });
+watch(
+  () => workspace.currentFolder,
+  () => {
+    void checkAndroidAllFilesAccess(false);
+  },
+);
 onBeforeUnmount(() => {
   cancelLongPress();
   window.removeEventListener('click', onWindowClick);
   window.removeEventListener('keydown', onWindowKey);
+  window.removeEventListener('solomd:android-storage-resume', onAndroidStorageResume);
+  document.removeEventListener('visibilitychange', onAndroidStorageResume);
   // A tree unmounted mid-drag (workspace switch, sidebar hidden) must not
   // leave the ghost, the cursor override or the window listeners behind.
   if (pointerStart || dragActive) teardownDrag();
@@ -2160,6 +2231,23 @@ onBeforeUnmount(() => {
             <Icon name="refresh" :size="16" />
           </button>
         </div>
+      </div>
+
+      <div v-if="needsAllFilesAccess" class="ftree__storage-perm">
+        <div class="ftree__storage-perm-text">
+          {{
+            settings.language === 'zh'
+              ? '部分安卓系统（如 ColorOS）会隐藏同步工具写入的 .md 文件，请开启所有文件访问权限以完整显示笔记。'
+              : 'Android Scoped Storage may hide synced .md files in this folder. Grant All Files Access to view all notes.'
+          }}
+        </div>
+        <button
+          type="button"
+          class="ftree__storage-perm-btn"
+          @click.stop="grantAndroidAllFilesAccess"
+        >
+          {{ settings.language === 'zh' ? '开启所有文件访问权限' : 'Grant All Files Access' }}
+        </button>
       </div>
 
       <!-- Popovers: one menu style (spec §6), fixed-positioned under the
@@ -3720,5 +3808,31 @@ html.solomd-tree-drag-invalid * {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text);
+}
+.ftree__storage-perm {
+  margin: 6px 10px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ftree__storage-perm-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.ftree__storage-perm-btn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>

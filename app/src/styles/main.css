@@ -467,6 +467,20 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Shared search-match mark styling across Preview, Live Edit rendered blocks, and TableWidget */
+mark.ps-mark {
+  background: var(--search-match-bg, rgba(255, 208, 0, 0.48));
+  color: inherit;
+  padding: 1px 0;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px var(--search-match-border, rgba(208, 140, 0, 0.5));
+}
+mark.ps-mark.ps-mark--current {
+  background: var(--search-match-current-bg, #ff8c00);
+  color: var(--search-match-current-fg, #ffffff);
+  box-shadow: 0 0 0 1px var(--search-match-current-bg, #ff8c00);
+}
+
 /* Scrollbars: styles/scrollbars.css (5.0). */
 
 /* ============================================================
@@ -939,11 +953,13 @@ div.mermaidTooltip {
     line-height: 1.35;
     word-break: break-word;
   }
-  /* #347 / #566 — a TOC at the top of the document (Settings → PDF "table of
-   * contents", a leading [TOC], or H1 + [TOC] in merged book export) is a page
-   * of its own. */
+  /* #347 / #566 / #614 — a TOC at the top of the document (Settings → PDF "table of
+   * contents", a leading [TOC], H1 + [TOC], or .pdf-book-cover + [TOC] in merged
+   * / batch folder PDF export) is always a page of its own, never sharing its
+   * final page with body text. */
   body.solomd-printing .solomd-print-content > .md-toc:first-child,
   body.solomd-printing .solomd-print-content > h1:first-child + .md-toc,
+  body.solomd-printing .solomd-print-content .pdf-book-cover + .md-toc,
   body.solomd-printing .solomd-print-content .md-toc.md-toc--lead {
     break-after: page;
     page-break-after: always;
