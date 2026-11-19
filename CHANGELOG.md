@@ -19,6 +19,54 @@
 
 ---
 
+## [5.2.6] — 2026-11-19
+
+同步上游至 v5.2.4（7 个提交）。
+
+### 同步上游（a33fd4b2 → c55f3e24，7 个提交）
+
+- **#611–#616 六个 issue**（`cc863772`）：
+  - #611 Android sideload APK 注入 `MANAGE_EXTERNAL_STORAGE`，MainActivity 补 `primary:`
+    文件回退，Android 11+ / ColorOS 16 弹出 All Files Access 权限提示；配合 `f517040f`
+    用 app ClassLoader 解析 MainActivity、恢复最近 SAF vault。
+  - #612 行距（1.2–2.6）与段距（0–2.0em）设置，覆盖 CodeMirror / Live Edit /
+    预览 / 阅读视图 / Windows 纯编辑器与 15 种语言。
+  - #613 Markdown / HTML 表格在实时编辑里铺满编辑区宽度。
+  - #614 TOC 前有封面/前言时打 `md-toc--lead` 并强制打印分页，TOC 末页不与正文同页。
+  - #615 丢掉消费过的 `<!-- solomd-page-break -->` token，`withTocPage=false` 时
+    不再产出空的首个 section。
+  - #616 活动表格单元格加 `tabindex="-1"`（macOS WKWebView），Cmd/Ctrl+A 限定在单元格内。
+- **搜索与表格编辑**（`cbb6f192`）：全模式搜索高亮可见（全局搜索跳转传递 query、
+  Ctrl+F 增量高亮 1/N、Live Edit / 折叠表格 / Windows 纯编辑器统一 `<mark>`），
+  实时表格单元格恢复原生光标定位与拖拽选择。
+- **官网 / App Store / 社区**（`998c20d2` / `c55f3e24` / `45e2c281`）：v5.2.3 / v5.2.4
+  更新说明、下载链接、6 位社区推广者与问题报告者。
+
+### 冲突处理
+
+13 个文件冲突：
+
+| 文件 | 处理 |
+| --- | --- |
+| `package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock` / `mcp-server/*` / `scripts/solomd` | 取 fork 的 5.2.5，再由 `bump-version.js` 统一抬到 5.2.6；`Cargo.toml` 确认保留上游新增依赖（lopdf / image / gtk / webkit2gtk），未重蹈 5.2.5 首版丢依赖的覆辙 |
+| `README.md` / `README.zh.md` | 取上游（赞助者徽章段落，纯文档新增） |
+| `AboutDialog.vue` | 取 fork——本分支有意不显示 promoter 列表与赞助徽章，sponsors/testers 保持空 seed（在线 fetch 覆盖） |
+| `Editor.vue` | 取 fork（仅 import 顺序差异，符号一致） |
+| `Preview.vue` | 融合：保留阅读视图的 serif 字体与 padding（#384），行距改用 `var(--editor-line-height, 1.8)`，让 #612 的行距设置在阅读视图生效 |
+
+### 本地修复全部保留
+
+PDF `%%EOF` 护栏、滚动条 `#c1c1c1`、Mermaid「复制」按钮移出渲染区、App Store 残留请求清理、
+标题等比字号 + 灰阶色阶 + h2–h6 逐级上色。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 错误；`node:test` **788 / 788**（基线 777 + 上游 11 条）。
+- `cargo check --lib` / `cargo test --lib --no-run` 通过。
+- `vite build` 成功，入口 chunk **1,738.17 kB / gzip 530.02 kB**（与 5.2.5 持平）。
+
+---
+
 ## [5.2.5] — 2026-11-18
 
 同步上游 v5.2.3（3 个提交），一次大范围冲突合并。
