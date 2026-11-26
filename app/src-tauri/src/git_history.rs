@@ -141,42 +141,10 @@ fn rel_path(repo: &Repository, abs: &str) -> Option<String> {
     Some(stripped.to_string_lossy().replace('\\', "/"))
 }
 
-/// Default auto-commit message: `auto: 2026-04-24 09:30:01`.
+/// #682 — Default auto-commit message in the user's local timezone:
+/// `auto: 2026-04-24 09:30:01`.
 fn default_auto_message() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    // Tiny, dep-free local-time formatter. We display in UTC to avoid pulling
-    // chrono just for one timestamp; users see this only in commit messages.
-    format!("auto: {}", format_unix_utc(secs))
-}
-
-/// Format `YYYY-MM-DD HH:MM:SS` in UTC from a unix timestamp.
-fn format_unix_utc(secs: i64) -> String {
-    // Days since epoch + seconds-of-day.
-    let days = secs.div_euclid(86_400);
-    let mut sod = secs.rem_euclid(86_400);
-    let h = sod / 3600;
-    sod %= 3600;
-    let m = sod / 60;
-    let s = sod % 60;
-    // Civil-from-days (Howard Hinnant). Handles leap years correctly.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if mo <= 2 { y + 1 } else { y };
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-        y, mo, d, h, m, s
-    )
+    format!("auto: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))
 }
 
 /// Whether the file under `path` is tracked by the repo.
@@ -257,6 +225,11 @@ fn stage(repo: &Repository, pathspec: Option<&str>) -> Result<(), String> {
                 .map_err(|e| format!("index add: {}", e))?;
         }
     } else {
+        // #641 — Stage deletions of previously tracked files before add_all
+        // (libgit2's add_all alone does not record deleted tracked files).
+        index
+            .update_all(["*"].iter(), None)
+            .map_err(|e| format!("index update_all: {}", e))?;
         index
             .add_all(["*"].iter(), IndexAddOption::DEFAULT, None)
             .map_err(|e| format!("index add_all: {}", e))?;
@@ -448,6 +421,95 @@ pub async fn git_auto_commit(
         });
     }
     Ok(result)
+}
+
+/// #620 — Stage changes (`git add`) without committing.
+/// When `file_path` is `None`, stages all workspace changes (`git add -A`).
+/// Returns the number of staged index entries with diffs against HEAD (or index count on unborn HEAD).
+pub fn git_stage_inner(folder: String, file_path: Option<String>) -> Result<usize, String> {
+    let repo = open_repo(&folder)?;
+    let pathspec = match file_path.as_ref() {
+        Some(abs) => match rel_path(&repo, abs) {
+            Some(r) => Some(r),
+            None => return Err(format!("file is outside workspace: {}", abs)),
+        },
+        None => None,
+    };
+    stage(&repo, pathspec.as_deref())?;
+
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(false)
+        .recurse_untracked_dirs(false)
+        .include_ignored(false);
+    let statuses = repo
+        .statuses(Some(&mut opts))
+        .map_err(|e| format!("status: {}", e))?;
+    let staged_count = statuses
+        .iter()
+        .filter(|e| {
+            let s = e.status();
+            s.is_index_new()
+                || s.is_index_modified()
+                || s.is_index_deleted()
+                || s.is_index_renamed()
+                || s.is_index_typechange()
+        })
+        .count();
+    Ok(staged_count)
+}
+
+#[tauri::command]
+pub async fn git_stage(folder: String, file_path: Option<String>) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || git_stage_inner(folder, file_path))
+        .await
+        .map_err(|e| format!("join: {e}"))?
+}
+
+#[cfg(not(target_os = "ios"))]
+fn run_git_cli(folder: &str, args: &[&str]) -> Result<String, String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.arg("-C").arg(folder).args(args);
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = cmd.output().map_err(|e| format!("failed to run git: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() {
+        Ok(if !stdout.is_empty() { stdout } else { stderr })
+    } else {
+        let detail = if !stderr.is_empty() { stderr } else { stdout };
+        Err(if detail.is_empty() {
+            format!("git {} failed with status {}", args.join(" "), output.status)
+        } else {
+            detail
+        })
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn run_git_cli(_folder: &str, _args: &[&str]) -> Result<String, String> {
+    Err("system git CLI is not available on iOS; please link GitHub/Gitee/Gitea Sync in Settings".into())
+}
+
+/// #620 — Run `git pull` via system git CLI (supports SSH & local credential helpers).
+#[tauri::command]
+pub async fn git_cli_pull(folder: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || run_git_cli(&folder, &["pull"]))
+        .await
+        .map_err(|e| format!("join: {e}"))?
+}
+
+/// #620 — Run `git push` via system git CLI (supports SSH & local credential helpers).
+#[tauri::command]
+pub async fn git_cli_push(folder: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || run_git_cli(&folder, &["push"]))
+        .await
+        .map_err(|e| format!("join: {e}"))?
 }
 
 pub fn git_file_history_inner(
@@ -700,7 +762,9 @@ pub fn git_rollback_file_inner(
     sha: String,
 ) -> Result<(), String> {
     let content = git_file_at_version_inner(folder.clone(), file_path.clone(), sha)?;
-    fs::write(Path::new(&file_path), content).map_err(|e| format!("write: {}", e))?;
+    let abs = Path::new(&file_path);
+    super::watcher::mark_self_write(&abs.to_string_lossy());
+    fs::write(abs, content).map_err(|e| format!("write: {}", e))?;
     Ok(())
 }
 

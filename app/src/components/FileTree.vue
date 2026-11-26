@@ -278,10 +278,34 @@ function orderPath(): string | null {
   if (!rootPath || isSafPath(rootPath)) return null;
   return joinPath(joinPath(rootPath, '.solomd'), 'order.json');
 }
+function sortMetaPath(): string | null {
+  const rootPath = workspace.currentFolder;
+  if (!rootPath || isSafPath(rootPath)) return null;
+  return joinPath(joinPath(rootPath, '.solomd'), 'sort.json');
+}
 async function loadManualOrder() {
   manualOrder.value = {};
   const path = orderPath();
   if (!path) return;
+  // #675 — Restore vault-synced sort mode if present in `.solomd/sort.json`.
+  const sPath = sortMetaPath();
+  if (sPath && workspace.currentFolder) {
+    try {
+      const sfr = await invoke<{ content: string }>('read_file', { path: sPath });
+      const sp = JSON.parse(sfr.content);
+      if (
+        sp &&
+        typeof sp.mode === 'string' &&
+        ['name-asc', 'name-desc', 'created-asc', 'created-desc', 'modified-desc', 'manual'].includes(sp.mode)
+      ) {
+        if (settings.explorerSortByFolder[workspace.currentFolder] !== sp.mode) {
+          settings.setExplorerSort(workspace.currentFolder, sp.mode as TreeSortMode);
+        }
+      }
+    } catch {
+      /* no sort.json yet */
+    }
+  }
   try {
     const fr = await invoke<{ content: string }>('read_file', { path });
     const parsed = JSON.parse(fr.content);
@@ -328,6 +352,21 @@ function setSortMode(mode: TreeSortMode) {
   if (!folder) return;
   const hadTimes = sortNeedsTimes(sortMode.value);
   settings.setExplorerSort(folder, mode);
+  // #675 — Persist sort mode to `<vault>/.solomd/sort.json` so cloud sync
+  // keeps file-tree order identical across PCs.
+  const sPath = sortMetaPath();
+  if (sPath) {
+    void invoke('fs_create_dir', { path: sPath.replace(/[\\/][^\\/]+$/, '') })
+      .catch(() => {})
+      .then(() =>
+        invoke('write_file', {
+          path: sPath,
+          content: JSON.stringify({ mode }, null, 2) + '\n',
+          encoding: 'UTF-8',
+        }),
+      )
+      .catch(() => {});
+  }
   // Date and manual modes need timestamps the plain listing doesn't carry,
   // so switching into one re-lists; otherwise re-sorting in place is enough.
   if (sortNeedsTimes(mode) && !hadTimes) void refreshTreePreservingExpansion();
@@ -704,21 +743,37 @@ function scheduleRefresh() {
   }, 250);
 }
 
-async function refreshTreePreservingExpansion() {
+let refreshGen = 0;
+
+function remapPathPrefix(p: string, from: string, to: string): string {
+  if (p === from) return to;
+  if (p.startsWith(from + '/') || p.startsWith(from + '\\')) {
+    return to + p.slice(from.length);
+  }
+  return p;
+}
+
+async function refreshTreePreservingExpansion(renameMap?: { from: string; to: string }) {
   if (!workspace.currentFolder) return;
+  const gen = ++refreshGen;
   const expanded = new Set<string>();
   function walk(n: Node | null | undefined) {
     if (!n) return;
-    if (n.is_dir && n.expanded) expanded.add(n.path);
+    if (n.is_dir && n.expanded) {
+      expanded.add(renameMap ? remapPathPrefix(n.path, renameMap.from, renameMap.to) : n.path);
+    }
     n.children?.forEach(walk);
   }
   walk(root.value);
   const path = workspace.currentFolder;
   const { children, truncated } = await loadDir(path);
+  if (gen !== refreshGen) return;
   async function rehydrate(nodes: Node[]) {
     for (const n of nodes) {
+      if (gen !== refreshGen) return;
       if (n.is_dir && expanded.has(n.path)) {
         const sub = await loadDir(n.path);
+        if (gen !== refreshGen) return;
         n.children = sub.children;
         n.truncated = sub.truncated;
         n.expanded = true;
@@ -727,6 +782,7 @@ async function refreshTreePreservingExpansion() {
     }
   }
   await rehydrate(children);
+  if (gen !== refreshGen) return;
   if (root.value) {
     root.value.children = children;
     root.value.truncated = truncated;
@@ -751,9 +807,14 @@ function onBeforeUnload() {
   void pendingDeletes.flushAll();
 }
 
+function onRefreshTreeEvent() {
+  scheduleRefresh();
+}
+
 onMounted(async () => {
   window.addEventListener('solomd:saved', onSaved as EventListener);
   window.addEventListener('solomd:remote-pulled', onRemotePulled as EventListener);
+  window.addEventListener('solomd:refresh-tree', onRefreshTreeEvent);
   window.addEventListener('beforeunload', onBeforeUnload);
   try {
     unlistenIndex = await listen('solomd://index-updated', () => scheduleRefresh());
@@ -767,6 +828,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('solomd:saved', onSaved as EventListener);
   window.removeEventListener('solomd:remote-pulled', onRemotePulled as EventListener);
+  window.removeEventListener('solomd:refresh-tree', onRefreshTreeEvent);
   window.removeEventListener('beforeunload', onBeforeUnload);
   // Hiding the tree unmounts it; a selection left behind would keep aiming
   // "new file" at a folder the user can no longer see.
@@ -1056,15 +1118,18 @@ async function repointTab(
 /** Every tab under the moved path follows it — a folder move has to repoint
  *  each open note inside it, not just an exact match. */
 function repointTabs(from: string, to: string, isDir: boolean) {
-  const prefixes = isDir ? [from + '/', from + '\\'] : [];
   for (const tab of [...tabs.tabs] as { id: string; filePath?: string }[]) {
     const fp = tab.filePath;
     if (!fp) continue;
     let next: string | null = null;
-    if (fp === from) {
+    if (samePath(fp, from)) {
       next = to;
-    } else if (prefixes.some((pre) => fp.startsWith(pre))) {
-      next = to + fp.slice(from.length);
+    } else if (isDir) {
+      const rel = segmentsBelow(from, fp);
+      if (rel !== null) {
+        const sep = sepOf(to);
+        next = rel.length > 0 ? `${to}${sep}${rel.join(sep)}` : to;
+      }
     }
     if (next) void repointTab(tab, next);
   }
@@ -1091,22 +1156,23 @@ function rootLabel(): string {
   return t('explorer.vaultRoot') || 'Vault root';
 }
 
-/** #571 — Reload clean open tabs whose inbound links were updated on disk. */
+/** #571 / #639 — Reload clean open tabs whose inbound links were updated on disk,
+ *  and always trigger a workspace index rescan so renamed paths stay fresh. */
 async function refreshRewrittenTabs(updatedPaths: string[], skipTarget: string) {
-  if (!updatedPaths?.length) return;
-  const skipPrefixes = [skipTarget + '/', skipTarget + '\\'];
-  for (const p of updatedPaths) {
-    if (p === skipTarget || skipPrefixes.some((pre) => p.startsWith(pre))) continue;
-    const tab = (tabs.tabs as { id: string; filePath?: string; content?: string; savedContent?: string }[]).find(
-      (t) => t.filePath === p,
-    );
-    if (!tab || tab.savedContent !== tab.content) continue;
-    try {
-      const fr = await invoke<{ content: string }>('read_file', { path: p });
-      tabs.setContent(tab.id, fr.content);
-      tabs.markSaved(tab.id, p);
-    } catch (err) {
-      console.warn('[FileTree] rewritten tab reload failed', err);
+  if (updatedPaths?.length) {
+    for (const p of updatedPaths) {
+      if (samePath(p, skipTarget) || segmentsBelow(skipTarget, p) !== null) continue;
+      const tab = (tabs.tabs as { id: string; filePath?: string; content?: string; savedContent?: string }[]).find(
+        (t) => t.filePath && samePath(t.filePath, p),
+      );
+      if (!tab || tab.savedContent !== tab.content) continue;
+      try {
+        const fr = await invoke<{ content: string }>('read_file', { path: p });
+        tabs.setContent(tab.id, fr.content);
+        tabs.markSaved(tab.id, p);
+      } catch (err) {
+        console.warn('[FileTree] rewritten tab reload failed', err);
+      }
     }
   }
   void workspaceIndex.rescan();
@@ -1708,25 +1774,147 @@ async function commitEdit() {
         workspaceRoot: workspace.currentFolder ?? undefined,
         updateLinks: settings.autoUpdateLinksOnRename,
       });
-      // #342 — a renamed child keeps its hand-placed position.
+      // #342 + #628 — a renamed child keeps its hand-placed position and any
+      // descendant folder order keys move with it.
       const key = orderKey(e.parent);
-      if (manualOrder.value[key]?.includes(baseName(e.original))) {
-        manualOrder.value = {
-          ...manualOrder.value,
-          [key]: renameInOrder(manualOrder.value[key], baseName(e.original), name),
-        };
+      const oldFolderKey = orderKey(e.original);
+      const newFolderKey = orderKey(target);
+      let orderChanged = false;
+      const nextOrder: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(manualOrder.value)) {
+        let nextKey = k;
+        if (oldFolderKey && (k === oldFolderKey || k.startsWith(oldFolderKey + '/'))) {
+          nextKey = newFolderKey + k.slice(oldFolderKey.length);
+          orderChanged = true;
+        }
+        if (nextKey === key && v.includes(baseName(e.original))) {
+          nextOrder[nextKey] = renameInOrder(v, baseName(e.original), name);
+          orderChanged = true;
+        } else {
+          nextOrder[nextKey] = v;
+        }
+      }
+      if (orderChanged) {
+        manualOrder.value = nextOrder;
         void saveManualOrder();
       }
-      scheduleRefresh();
-      // v4.3.5 + #571 — repoint open tabs (including notes inside a renamed
-      // folder) and reload clean workspace tabs whose inbound links changed.
+      if (selected.value) {
+        selected.value = {
+          ...selected.value,
+          path: remapPathPrefix(selected.value.path, e.original, target),
+        };
+      }
+      // v4.3.5 + #571 + #628 — repoint open tabs (including notes inside a
+      // renamed folder), refresh the tree immediately preserving expansion,
+      // and reload clean workspace tabs whose inbound links changed.
       repointTabs(e.original, target, true);
+      await refreshTreePreservingExpansion({ from: e.original, to: target });
       void refreshRewrittenTabs(updated, target);
     }
   } catch (err) {
     toasts.error(String(err));
+    // #628 — always reconcile tree with disk truth even if a post-rename step failed.
+    scheduleRefresh();
   } finally {
     committingEdit = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// #629 — Batch create markdown notes in a folder (one filename per line).
+// ---------------------------------------------------------------------------
+interface BatchCreateState {
+  parent: string;
+  text: string;
+  busy: boolean;
+  error: string;
+}
+const batchCreate = ref<BatchCreateState | null>(null);
+const batchInputRef = ref<HTMLTextAreaElement | null>(null);
+
+function openBatchCreate(parent: string) {
+  closeCtx();
+  batchCreate.value = { parent, text: '', busy: false, error: '' };
+  void nextTick(() => {
+    batchInputRef.value?.focus();
+  });
+}
+
+function closeBatchCreate() {
+  if (batchCreate.value?.busy) return;
+  batchCreate.value = null;
+}
+
+const ILLEGAL_FILENAME_RE = /[<>:"/\\|?*\x00-\x1f]/;
+
+async function confirmBatchCreate() {
+  const state = batchCreate.value;
+  if (!state || state.busy) return;
+  const rawLines = state.text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (rawLines.length === 0) {
+    state.error = t('explorer.batchNewFilesEmpty');
+    toasts.warning(state.error);
+    return;
+  }
+
+  const invalid = rawLines.find(
+    (line) => line === '.' || line === '..' || ILLEGAL_FILENAME_RE.test(line),
+  );
+  if (invalid) {
+    state.error = t('explorer.batchNewFilesInvalid', { name: invalid });
+    toasts.warning(state.error);
+    return;
+  }
+
+  const seen = new Set<string>();
+  const filenames: string[] = [];
+  for (const line of rawLines) {
+    // Per #629: append `.md` whenever a line does not end with `.md`
+    // (preserving numbered titles like `1.1 概述` → `1.1 概述.md`).
+    const finalName = /\.md$/i.test(line) ? line : `${line}.md`;
+    const dedupKey = finalName.toLowerCase();
+    if (!seen.has(dedupKey)) {
+      seen.add(dedupKey);
+      filenames.push(finalName);
+    }
+  }
+
+  state.busy = true;
+  state.error = '';
+  let created = 0;
+  let skipped = 0;
+  try {
+    for (const finalName of filenames) {
+      try {
+        if (isSafPath(state.parent) && workspace.safTreeUri) {
+          await safCreate(workspace.safTreeUri, fromSafPath(state.parent), finalName);
+          created++;
+        } else {
+          const target = joinPath(state.parent, finalName);
+          await pendingDeletes.flushUnder(target);
+          await invoke('fs_create_file', { path: target, content: '' });
+          created++;
+        }
+      } catch {
+        skipped++;
+      }
+    }
+    await expandForCreate(state.parent);
+    await refreshTreePreservingExpansion();
+    batchCreate.value = null;
+    if (skipped === 0) {
+      toasts.success(t('explorer.batchNewFilesDone', { count: created }));
+    } else if (created > 0) {
+      toasts.info(t('explorer.batchNewFilesPartial', { created, skipped }));
+    } else {
+      toasts.warning(t('explorer.batchNewFilesSkippedAll', { skipped }));
+    }
+  } finally {
+    if (batchCreate.value) batchCreate.value.busy = false;
   }
 }
 
@@ -1999,14 +2187,32 @@ async function confirmDelete() {
   // file is untouched until then; the tree hides it in the meantime.
   const path = node.path;
   const name = node.name;
+  const isDir = !!node.is_dir;
+  if (editing.value && (samePath(editing.value.parent, path) || (isDir && segmentsBelow(path, editing.value.parent) !== null))) {
+    editing.value = null;
+  }
   await pendingDeletes.schedule({
     path,
     name,
-    isDir: !!node.is_dir,
+    isDir,
     delayMs: UNDO_WINDOW_MS,
     commit: async () => {
       try {
-        await invoke('fs_delete', { path });
+        if (isSafPath(path) && workspace.safTreeUri) {
+          const { safDelete } = await import('../lib/saf-fs');
+          await safDelete(workspace.safTreeUri, fromSafPath(path));
+        } else {
+          await invoke('fs_delete', { path });
+        }
+        // Close open tabs whose backing file was deleted so auto-save / blur
+        // can never silently recreate a deleted daily note or blank document.
+        const toClose = tabs.tabs.filter((tb) =>
+          tb.filePath &&
+          (samePath(tb.filePath, path) || (isDir && segmentsBelow(path, tb.filePath) !== null)),
+        );
+        for (const tb of toClose) {
+          tabs.closeTab(tb.id);
+        }
       } catch (e) {
         toasts.error(t('toast.deleteFailed', { error: String(e) }));
       }
@@ -2495,6 +2701,9 @@ onBeforeUnmount(() => {
         <button class="ftree__ctx-item" @click="startNewFile(ctx.node ? ctx.node.path : newEntryParent())">
           {{ t('explorer.newFile') || 'New File' }}
         </button>
+        <button class="ftree__ctx-item" @click="openBatchCreate(ctx.node ? ctx.node.path : newEntryParent())">
+          {{ t('explorer.batchNewFiles') || 'Batch New Files...' }}
+        </button>
         <button class="ftree__ctx-item" @click="startNewFolder(ctx.node ? ctx.node.path : newEntryParent())">
           {{ t('explorer.newFolder') || 'New Folder' }}
         </button>
@@ -2616,6 +2825,38 @@ onBeforeUnmount(() => {
       <template #footer>
         <DsButton variant="ghost" @click="deleteTarget = null">{{ t('explorer.cancel') }}</DsButton>
         <DsButton variant="danger" @click="confirmDelete">{{ t('explorer.delete') }}</DsButton>
+      </template>
+    </DsModal>
+
+    <!-- #629 — Batch create notes modal (one filename per line). -->
+    <DsModal
+      :model-value="!!batchCreate"
+      :title="t('explorer.batchNewFilesTitle')"
+      width="460px"
+      @update:model-value="closeBatchCreate"
+    >
+      <div v-if="batchCreate" class="ftree__batch">
+        <p class="ftree__batch-hint">{{ t('explorer.batchNewFilesHint') }}</p>
+        <textarea
+          ref="batchInputRef"
+          v-model="batchCreate.text"
+          class="ftree__batch-textarea"
+          rows="7"
+          :placeholder="t('explorer.batchNewFilesPlaceholder')"
+          :disabled="batchCreate.busy"
+          @input="batchCreate.error = ''"
+          @keydown.meta.enter.prevent="confirmBatchCreate"
+          @keydown.ctrl.enter.prevent="confirmBatchCreate"
+        ></textarea>
+        <p v-if="batchCreate.error" class="ftree__batch-err">{{ batchCreate.error }}</p>
+      </div>
+      <template #footer>
+        <DsButton variant="ghost" :disabled="batchCreate?.busy" @click="closeBatchCreate">
+          {{ t('explorer.cancel') }}
+        </DsButton>
+        <DsButton variant="primary" :disabled="batchCreate?.busy" @click="confirmBatchCreate">
+          {{ t('explorer.batchNewFilesConfirm') }}
+        </DsButton>
       </template>
     </DsModal>
 
@@ -2906,6 +3147,7 @@ export const FileTreeNode = defineComponent({
         for (const c of n.children) {
           items.push(
             h(FileTreeNode, {
+              key: c.path,
               node: c,
               depth: props.depth + 1,
               selectedPath: props.selectedPath,
@@ -3834,5 +4076,40 @@ html.solomd-tree-drag-invalid * {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+.ftree__batch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ftree__batch-hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.ftree__batch-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+  min-height: 130px;
+}
+.ftree__batch-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.ftree__batch-err {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger, #dc2626);
 }
 </style>

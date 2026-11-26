@@ -48,6 +48,10 @@ mod quick_capture;
 #[path = "window_labels.rs"]
 mod window_labels;
 
+#[cfg(target_os = "macos")]
+#[path = "mac_chrome.rs"]
+mod mac_chrome;
+
 // v4.0 — public REST API mirroring the agent_tools surface for non-MCP
 // clients. Declared in both lib.rs and runner.rs so the binary's compile
 // root resolves `crate::rest_api` the same way the lib does.
@@ -218,6 +222,36 @@ fn save_language_preference(lang: String) -> Result<(), String> {
     std::fs::write(&path, lang.trim()).map_err(|e| e.to_string())
 }
 
+fn window_restore_mode_path() -> std::path::PathBuf {
+    let mut p = dirs_home().unwrap_or_else(std::env::temp_dir);
+    p.push(".solomd-window-restore");
+    p
+}
+
+/// #671 — User preference for restoring a window whose saved position falls
+/// partially outside the monitor work area:
+/// - `"clamp"` (default): recenter on monitor BEFORE showing (no visible jump)
+/// - `"keep"`: preserve exact last position (only recenter if completely off-screen)
+/// - `"center"`: always center on current monitor before showing
+fn read_window_restore_mode() -> String {
+    let path = window_restore_mode_path();
+    std::fs::read_to_string(&path)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| matches!(s.as_str(), "clamp" | "keep" | "center"))
+        .unwrap_or_else(|| "clamp".to_string())
+}
+
+#[tauri::command]
+fn save_window_restore_mode(mode: String) -> Result<(), String> {
+    let m = mode.trim();
+    if !matches!(m, "clamp" | "keep" | "center") {
+        return Err(format!("invalid window restore mode: {m}"));
+    }
+    let path = window_restore_mode_path();
+    std::fs::write(&path, m).map_err(|e| e.to_string())
+}
+
 /// Pages that belong to the app itself: the bundled frontend (served from
 /// `tauri.localhost` on Windows), the dev server, and the internal schemes.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
@@ -368,6 +402,18 @@ fn set_max_button_rect(x: f64, y: f64, w: f64, h: f64, scale: f64) {
     let _ = (x, y, w, h, scale);
 }
 
+#[tauri::command]
+async fn sync_macos_titlebar(window: tauri::WebviewWindow) -> tauri::Result<Option<f64>> {
+    #[cfg(target_os = "macos")]
+    if window_labels::is_editor_window(window.label()) {
+        let (send, receive) = tokio::sync::oneshot::channel();
+        mac_chrome::align(&window, Some(send))?;
+        return Ok(receive.await.ok());
+    }
+    let _ = window;
+    Ok(None)
+}
+
 pub struct PendingOpen(pub Mutex<Vec<String>>);
 
 /// Command: returns all paths queued by macOS Apple Events / CLI args
@@ -394,6 +440,11 @@ fn fit_main_window_once(win: &tauri::WebviewWindow) {
         return;
     }
     clamp_window_to_monitor(win);
+    // #633 — Ensure Windows 11 taskbar / Alt+Tab always receives WM_SETICON
+    // when revealing a frameless hidden-at-startup window.
+    if let Some(icon) = win.app_handle().default_window_icon().cloned() {
+        let _ = win.set_icon(icon);
+    }
     let _ = win.show();
     let _ = win.unminimize();
     let _ = win.set_focus();
@@ -466,10 +517,28 @@ fn clamp_window_to_monitor(win: &tauri::WebviewWindow) {
     // nudged inward on every single launch — the "it forgot my position"
     // half of #517. The taskbar is ~40px, so real overflow is still caught.
     const EDGE_SLACK: i32 = 8;
-    let position_invalid = cur_x < wa_x - EDGE_SLACK
-        || cur_x + new_w > wa_x + wa_w + EDGE_SLACK
-        || cur_y < wa_y - EDGE_SLACK
-        || cur_y + new_h > wa_y + wa_h + EDGE_SLACK;
+
+    // Position check depends on user preference (#671):
+    // - "center": always center on current monitor before showing.
+    // - "keep": preserve exact last position even if partially off-screen / over
+    //   taskbar; only recenter if virtually invisible (< 24px inside monitor).
+    // - "clamp" (default): recenter if any edge falls outside the work area.
+    let restore_mode = read_window_restore_mode();
+    let position_invalid = match restore_mode.as_str() {
+        "center" => true,
+        "keep" => {
+            cur_x + new_w <= wa_x + 24
+                || cur_x >= wa_x + wa_w - 24
+                || cur_y + new_h <= wa_y + 24
+                || cur_y >= wa_y + wa_h - 24
+        }
+        _ => {
+            cur_x < wa_x - EDGE_SLACK
+                || cur_x + new_w > wa_x + wa_w + EDGE_SLACK
+                || cur_y < wa_y - EDGE_SLACK
+                || cur_y + new_h > wa_y + wa_h + EDGE_SLACK
+        }
+    };
 
     if size_clamped {
         let _ = win.set_size(tauri::LogicalSize::new(new_w as u32, new_h as u32));
@@ -610,10 +679,13 @@ pub fn run_with(initial_file: Option<String>) {
             // NOT ::all(): DECORATIONS must never be restored from disk — the
             // frameless Windows build (decorations:false, unified title bar)
             // would get the native title bar resurrected by state saved from
-            // a pre-4.12 decorated install. Decorations are config-owned.
+            // a pre-4.12 decorated install. Also exclude VISIBLE (#671) so the
+            // plugin restores size/position while hidden and `fit_main_window_once`
+            // clamps/centers BEFORE calling `win.show()` (no visible jump!).
             .with_state_flags(
                 tauri_plugin_window_state::StateFlags::all()
-                    - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                    - tauri_plugin_window_state::StateFlags::DECORATIONS
+                    - tauri_plugin_window_state::StateFlags::VISIBLE,
             )
             // The quick-capture box is undecorated, fixed-size and always on
             // top by design; restoring a remembered geometry would hand it a
@@ -667,6 +739,7 @@ pub fn run_with(initial_file: Option<String>) {
             force_close_window,
             set_menu_spec,
             set_max_button_rect,
+            sync_macos_titlebar,
             save_language_preference,
             set_default::set_as_default_markdown_editor,
             convert::convert_file_to_markdown,
@@ -712,6 +785,9 @@ pub fn run_with(initial_file: Option<String>) {
             git_history::git_workspace_status,
             git_history::git_init_workspace,
             git_history::git_auto_commit,
+            git_history::git_stage,
+            git_history::git_cli_pull,
+            git_history::git_cli_push,
             git_history::git_file_history,
             git_history::git_file_diff,
             git_history::git_file_at_version,
@@ -791,6 +867,16 @@ pub fn run_with(initial_file: Option<String>) {
             webdav_sync::sync_get_file_version_diff,
             webdav_sync::sync_restore_file_version,
             webdav_sync::sync_prune_file_versions,
+            webdav_sync::sync_get_log_dir,
+            webdav_sync::sync_export_logs_to_desktop,
+            webdav_sync::sync_list_conflicts,
+            webdav_sync::sync_diff_conflict,
+            webdav_sync::sync_resolve_conflict,
+            webdav_sync::sync_check_journal_conflict,
+            webdav_sync::sync_append_journal,
+            webdav_sync::sync_extract_remote_removals,
+            save_window_restore_mode,
+            webdav_sync::sync_ensure_snapshot_dir,
             crypto::crypto_status,
             crypto::crypto_set_passphrase,
             crypto::crypto_clear_passphrase,
@@ -869,6 +955,10 @@ pub fn run_with(initial_file: Option<String>) {
             let _ = app_handle.emit("solomd://menu", id);
         })
         .setup(|app| {
+            webdav_sync::init_sync_app_handle(
+                app.handle(),
+                portable::app_data_dir(app.path()).ok(),
+            );
             // #428 — Reopen the last bookmarked workspace folder on macOS ahead
             // of the frontend's initial `list_dir` call so `~/Documents` and
             // other user-selected folders keep their security-scoped access.
@@ -895,6 +985,9 @@ pub fn run_with(initial_file: Option<String>) {
             // run-loop event match (`RunEvent::Ready` + 400ms timer) acts
             // as a fallback when there's no saved state to restore.
             if let Some(win) = app.get_webview_window("main") {
+                if let Some(icon) = app.default_window_icon().cloned() {
+                    let _ = win.set_icon(icon);
+                }
                 let win_clone = win.clone();
                 win.on_window_event(move |event| {
                     if matches!(
@@ -1016,6 +1109,18 @@ pub fn run_with(initial_file: Option<String>) {
                     } else if window_labels::is_editor_window(&other) {
                         let _ = app_handle.emit("solomd://close-requested", other.clone());
                     }
+                }
+            }
+
+            // AppKit can relayout the title bar during resize and fullscreen transitions.
+            #[cfg(target_os = "macos")]
+            RunEvent::WindowEvent {
+                event: tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(true),
+                label,
+                ..
+            } if window_labels::is_editor_window(label) => {
+                if let Some(window) = app_handle.get_webview_window(label) {
+                    let _ = mac_chrome::align(&window, None);
                 }
             }
 

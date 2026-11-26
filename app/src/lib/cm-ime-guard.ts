@@ -34,7 +34,8 @@ let imeComposing = false;
 let imeFreezeActive = false;
 let imeIdleTimer: ReturnType<typeof setTimeout> | null = null;
 const isWindowsImeHost =
-  typeof navigator !== 'undefined' && /Win/i.test(navigator.platform);
+  typeof navigator !== 'undefined' &&
+  (/Win/i.test(navigator.platform || '') || /Windows/i.test(navigator.userAgent || ''));
 
 export const imeSafeFlushEffect = StateEffect.define<void>();
 
@@ -72,6 +73,30 @@ function holdImeFreeze(view: EditorView, composing: boolean) {
 }
 
 /**
+ * #693 / #705 — On Windows 11 WebView2 (Chromium), committing CJK or ASCII
+ * punctuation/symbols (`、` `，` `。` `：` `；` `？` `！` `“”` `（）` `,` `.`
+ * `:` `;` `(` `)` etc.) via non-composing `beforeinput` (`insertText` /
+ * `insertReplacementText`) in the middle of existing text (e.g. `（|）` or
+ * `登记|开闸`) causes Windows TSF to misreport the post-insert selection offset
+ * by +1 extra character, jumping the caret outside `）` or past the next CJK
+ * character. Intercepting and dispatching directly through CM6 keeps the caret
+ * at the exact `from + data.length` offset.
+ */
+const WINDOWS_PUNCT_RE = /[\u3000-\u303f\uff00-\uffef“”‘’—…·!-/:-@\[-`{-~]/;
+
+export function shouldInterceptWindowsCjkPunctuation(
+  isWindows: boolean,
+  isComposing: boolean,
+  inputType: string,
+  data: string | null | undefined,
+): boolean {
+  if (!isWindows || isComposing) return false;
+  if (inputType !== 'insertText' && inputType !== 'insertReplacementText') return false;
+  if (!data || data.length === 0 || data.length > 4) return false;
+  return WINDOWS_PUNCT_RE.test(data);
+}
+
+/**
  * Tracks native composition events in editor state so StateField-based
  * decoration producers can also freeze during IME input. CodeMirror exposes
  * `view.composing` to ViewPlugins, but block widgets must be provided from a
@@ -86,15 +111,34 @@ export function imeCompositionGuard(): Extension {
       },
       beforeinput(event: InputEvent, view) {
         if (
+          shouldInterceptWindowsCjkPunctuation(
+            isWindowsImeHost,
+            event.isComposing,
+            event.inputType,
+            event.data,
+          )
+        ) {
+          const data = event.data!;
+          event.preventDefault();
+          const sel = view.state.selection.main;
+          view.dispatch({
+            changes: { from: sel.from, to: sel.to, insert: data },
+            selection: { anchor: sel.from + data.length },
+            userEvent: 'input.type',
+          });
+          return true;
+        }
+        if (
           event.isComposing ||
           event.inputType === 'insertCompositionText' ||
           event.inputType === 'deleteCompositionText'
         ) {
           holdImeFreeze(view, true);
         } else if (
-          event.inputType === 'insertText' ||
-          event.inputType === 'deleteContentBackward' ||
-          event.inputType === 'deleteContentForward'
+          (imeComposing || imeFreezeActive) &&
+          (event.inputType === 'insertText' ||
+            event.inputType === 'deleteContentBackward' ||
+            event.inputType === 'deleteContentForward')
         ) {
           holdImeFreeze(view, false);
         }

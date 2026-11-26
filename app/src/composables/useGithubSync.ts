@@ -248,13 +248,184 @@ export function useGithubSync() {
     }, minutes * 60_000);
   }
 
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let startupPullTimer: ReturnType<typeof setTimeout> | null = null;
+  let wakeHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let lastHeartbeatAt = Date.now();
+  let lastHiddenAt: number | null = null;
+  let startupPullDone = false;
+
+  /**
+   * #673 / #701 — Pull all enabled sync backends (Git, WebDAV, Cloud Vault, Cloud API)
+   * on app startup and whenever the machine reconnects to the network so multi-device
+   * edits stay in sync automatically.
+   */
+  async function pullAllEnabledSyncs(): Promise<void> {
+    const folder = workspace.currentFolder;
+    if (!folder) return;
+    let pulledAny = false;
+
+    if (hasGitBackend() && sync.status?.linked) {
+      await pullIfWanted();
+    }
+
+    if (settings.webdavEnabled && settings.webdavAutoSync && settings.webdavUrl.trim()) {
+      try {
+        const res = await invoke<{ downloaded?: number }>('webdav_pull_workspace', {
+          workspace: folder,
+          url: settings.webdavUrl,
+          username: settings.webdavUsername,
+          password: settings.webdavPassword,
+          remotePath: settings.webdavRemotePath || '/SoloMD',
+          encrypted: settings.webdavEncrypted,
+          passphrase: settings.webdavPassphrase,
+          autoWorkspaceSubdir: settings.webdavAutoSubdir,
+          categorizeFiles: settings.webdavCategorizeFiles,
+          maxVersions: settings.syncMaxVersions,
+        });
+        if ((res?.downloaded ?? 0) > 0) pulledAny = true;
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    if (
+      settings.cloudVaultAutoSync &&
+      settings.cloudVaultDir.trim() &&
+      (!settings.cloudVaultEncrypted || settings.cloudVaultPassphrase.trim())
+    ) {
+      try {
+        const res = await invoke<{ downloaded?: number }>('cloud_vault_pull_workspace', {
+          workspace: folder,
+          vaultDir: settings.cloudVaultDir,
+          passphrase: settings.cloudVaultPassphrase,
+          encrypted: settings.cloudVaultEncrypted,
+          autoWorkspaceSubdir: settings.cloudVaultAutoSubdir,
+          categorizeFiles: settings.cloudVaultCategorizeFiles,
+          maxVersions: settings.syncMaxVersions,
+        });
+        if ((res?.downloaded ?? 0) > 0) pulledAny = true;
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    const effectiveApiToken =
+      settings.cloudApiProvider === 'r2'
+        ? settings.cloudR2Endpoint.trim() &&
+          settings.cloudR2Bucket.trim() &&
+          settings.cloudR2AccessKeyId.trim() &&
+          settings.cloudR2SecretAccessKey.trim()
+          ? JSON.stringify({
+              endpoint: settings.cloudR2Endpoint.trim(),
+              bucket: settings.cloudR2Bucket.trim(),
+              access_key_id: settings.cloudR2AccessKeyId.trim(),
+              secret_access_key: settings.cloudR2SecretAccessKey.trim(),
+            })
+          : ''
+        : settings.cloudApiToken.trim();
+    if (
+      settings.cloudApiAutoSync &&
+      effectiveApiToken &&
+      ((settings.cloudApiSyncMode === 'folder' && !settings.cloudApiEncrypted) ||
+        settings.cloudApiPassphrase.trim())
+    ) {
+      try {
+        const res = await invoke<{ downloaded?: number }>('cloud_api_pull_workspace', {
+          workspace: folder,
+          provider: settings.cloudApiProvider,
+          accessToken: effectiveApiToken,
+          remotePath: settings.cloudApiRemotePath || '/SoloMD',
+          passphrase: settings.cloudApiPassphrase,
+          syncMode: settings.cloudApiSyncMode,
+          encrypted: settings.cloudApiEncrypted,
+          autoWorkspaceSubdir: settings.cloudApiAutoSubdir,
+          categorizeFiles: settings.cloudApiCategorizeFiles,
+          maxVersions: settings.syncMaxVersions,
+        });
+        if ((res?.downloaded ?? 0) > 0) pulledAny = true;
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    if (pulledAny) {
+      window.dispatchEvent(new CustomEvent('solomd:remote-pulled'));
+    }
+  }
+
+  function scheduleStartupPull(): void {
+    if (startupPullDone || !workspace.currentFolder) return;
+    if (startupPullTimer) clearTimeout(startupPullTimer);
+    startupPullTimer = setTimeout(() => {
+      startupPullTimer = null;
+      if (startupPullDone || !workspace.currentFolder) return;
+      startupPullDone = true;
+      void pullAllEnabledSyncs();
+    }, 2000);
+  }
+
+  function onNetworkOnline(): void {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void pullAllEnabledSyncs();
+    }, 2500);
+  }
+
+  /**
+   * #711 — Windows laptops waking from lid-close sleep/hibernate often do NOT
+   * fire the browser `online` event. Detect wake via both a 30s clock-jump
+   * heartbeat (>60s wall-clock jump) and `visibilitychange` after >=60s hidden,
+   * mapping wake directly onto the same debounced `onNetworkOnline()` pull.
+   */
+  function onVisibilityChange(): void {
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState === 'hidden') {
+      lastHiddenAt = Date.now();
+    } else if (document.visibilityState === 'visible') {
+      const now = Date.now();
+      const sleptMs = lastHiddenAt ? now - lastHiddenAt : 0;
+      lastHiddenAt = null;
+      if (sleptMs >= 60_000 || now - lastHeartbeatAt >= 60_000) {
+        lastHeartbeatAt = now;
+        onNetworkOnline();
+      }
+    }
+  }
+
   function start(): void {
     if (listening) return;
     listening = true;
+    lastHeartbeatAt = Date.now();
     window.addEventListener('solomd:saved', onSaved as EventListener);
+    window.addEventListener('online', onNetworkOnline);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (wakeHeartbeatTimer) clearInterval(wakeHeartbeatTimer);
+    wakeHeartbeatTimer = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastHeartbeatAt;
+      lastHeartbeatAt = now;
+      if (gap >= 60_000) {
+        onNetworkOnline();
+      }
+    }, 30_000);
+
+    // #701 — Run one routine pull on app startup once the workspace folder is
+    // loaded, covering Git, WebDAV, Local Cloud Folder, and Cloud Drive API.
+    watch(
+      () => workspace.currentFolder,
+      (f) => {
+        if (f && !startupPullDone) scheduleStartupPull();
+      },
+      { immediate: true },
+    );
 
     // #230 — no libgit2 in the Android binary, so git push/pull is desktop/iOS
-    // only; WebDAV & Cloud Vault auto-sync above still run on all platforms.
+    // only; WebDAV, Local Cloud Folder & Cloud Drive API auto-sync above still
+    // run on all platforms.
     if (!hasGitBackend()) return;
 
     // Whenever workspace changes, refresh the linked status. Whenever
@@ -271,18 +442,20 @@ export function useGithubSync() {
       () => rescheduleTimer(),
       { immediate: true },
     );
-
-    // Best-effort: on boot, do one immediate pull if linked. Catches the
-    // common "edited on iPad last night" case the moment the app opens.
-    setTimeout(() => {
-      void pullIfWanted();
-    }, 2000);
   }
 
   function stop(): void {
     if (!listening) return;
     listening = false;
     window.removeEventListener('solomd:saved', onSaved as EventListener);
+    window.removeEventListener('online', onNetworkOnline);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (wakeHeartbeatTimer) {
+      clearInterval(wakeHeartbeatTimer);
+      wakeHeartbeatTimer = null;
+    }
     if (pulltimer) {
       clearInterval(pulltimer);
       pulltimer = null;
@@ -290,6 +463,14 @@ export function useGithubSync() {
     if (pushTimer) {
       clearTimeout(pushTimer);
       pushTimer = null;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (startupPullTimer) {
+      clearTimeout(startupPullTimer);
+      startupPullTimer = null;
     }
   }
 

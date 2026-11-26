@@ -107,6 +107,9 @@ function htmlImageSrcs(html: string): string[] {
 
 /** Set per export run; buildBody's fence branch reads it. */
 let plantumlServerForRun: string | null = null;
+let mediaAlignmentForRun: (typeof AlignmentType)[keyof typeof AlignmentType] = AlignmentType.CENTER;
+let firstLineIndentTwipsForRun = 0;
+let numberedHeadingLevelsForRun = new Set<number>();
 
 function plantumlUrlFor(tok: Token): string | null {
   if (!plantumlServerForRun || tok.type !== 'fence') return null;
@@ -378,7 +381,7 @@ function mathBlockParagraph(latex: string): Paragraph {
       ...(idx > 0 ? [new TextRun({ break: 1 })] : []),
       new TextRun({ text: line, font: MATH_FONT }),
     ]),
-    alignment: AlignmentType.CENTER,
+    alignment: mediaAlignmentForRun,
     spacing: { before: 160, after: 160 },
   });
 }
@@ -502,6 +505,9 @@ async function buildBody(
             }
           }
         }
+        if (numberedHeadingLevelsForRun.has(rawLevelNum)) {
+          stripHeadingNumberPrefixFromInline(inline);
+        }
         const headingRuns = buildRuns(inline);
         const anchorId = `_TocSolomd_${++nextHeadingAnchorId}`;
         const plainTitle = extractInlinePlainText(inline);
@@ -547,7 +553,7 @@ async function buildBody(
             out.push(
               new Paragraph({
                 children: [imageRun(img, alt, MAX_IMG_WIDTH, imgTok)],
-                alignment: AlignmentType.CENTER,
+                alignment: mediaAlignmentForRun,
                 spacing: { before: 160, after: 160 },
               })
             );
@@ -564,7 +570,7 @@ async function buildBody(
                   color: '888888',
                 }),
               ],
-              alignment: AlignmentType.CENTER,
+              alignment: mediaAlignmentForRun,
               spacing: { before: 160, after: 160 },
             })
           );
@@ -589,6 +595,9 @@ async function buildBody(
             ...(isInList && !isFirstListParagraph && {
               indent: { left: 720 * (listLevel + 1) },
             }),
+            ...(!isInList && firstLineIndentTwipsForRun > 0 && {
+              indent: { firstLine: firstLineIndentTwipsForRun },
+            }),
           })
         );
         break;
@@ -605,7 +614,7 @@ async function buildBody(
           out.push(
             new Paragraph({
               children: [imageRun(pumlImg, 'PlantUML diagram')],
-              alignment: AlignmentType.CENTER,
+              alignment: mediaAlignmentForRun,
               spacing: { before: 160, after: 160 },
             })
           );
@@ -626,7 +635,7 @@ async function buildBody(
                     altText: { name: 'Mermaid diagram', description: 'Mermaid diagram' },
                   }),
                 ],
-                alignment: AlignmentType.CENTER,
+                alignment: mediaAlignmentForRun,
                 spacing: { before: 160, after: 160 },
               })
             );
@@ -677,7 +686,7 @@ async function buildBody(
           out.push(
             new Paragraph({
               children: imgs.map((img) => imageRun(img, '')),
-              alignment: AlignmentType.CENTER,
+              alignment: mediaAlignmentForRun,
               spacing: { before: 160, after: 160 },
             })
           );
@@ -1281,6 +1290,64 @@ async function postProcessDocxPackage(
   });
 }
 
+const DOCX_HEADING_NUM_PREFIX = /^(?:[1-9]\d{0,2}\.[ \t]+|[1-9]\d{0,2}(?:\.[1-9]\d{0,2})+\.?[ \t]+)/;
+
+/**
+ * #690 — Detect which heading levels (1..6) in a custom `.docx` reference
+ * template already carry Word automatic numbering (`<w:numPr>` on the style
+ * or `<w:pStyle w:val="..."/>` in `word/numbering.xml`) so we strip literal
+ * `autoNumberHeadings` prefixes and never emit duplicate heading numbers.
+ */
+function detectTemplateNumberedHeadingLevels(referenceBytes: Uint8Array): Set<number> {
+  const numbered = new Set<number>();
+  try {
+    const tplFiles = unzipSync(referenceBytes);
+    const stylesBytes = tplFiles['word/styles.xml'];
+    if (!stylesBytes) return numbered;
+    const stylesXml = strFromU8(stylesBytes);
+    const { headingIds } = parseTemplateHeadingStyles(stylesXml);
+    const numberingXml = tplFiles['word/numbering.xml'] ? strFromU8(tplFiles['word/numbering.xml']) : '';
+
+    for (let level = 1; level <= 6; level++) {
+      const sid = headingIds[level];
+      if (!sid) continue;
+      const escapedSid = sid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const styleRe = new RegExp(`<w:style\\b[^>]*\\bw:styleId="${escapedSid}"[^>]*>([\\s\\S]*?)<\\/w:style>`);
+      const sm = styleRe.exec(stylesXml);
+      const explicitDisabled = sm ? /<w:numId\b[^>]*\bw:val="0"/.test(sm[1]) : false;
+      const hasStyleNumPr = sm ? /<w:numPr\b/.test(sm[1]) && !explicitDisabled : false;
+      const linkedInNumbering =
+        !explicitDisabled && numberingXml
+          ? new RegExp(`<w:pStyle\\b[^>]*\\bw:val="${escapedSid}"`).test(numberingXml)
+          : false;
+      if (hasStyleNumPr || linkedInNumbering) {
+        numbered.add(level);
+      }
+    }
+  } catch {
+    /* ignore malformed template zip; applyDocxReference handles errors */
+  }
+  return numbered;
+}
+
+function stripHeadingNumberPrefixFromInline(inline: Token | undefined): void {
+  if (!inline) return;
+  if (inline.content) {
+    inline.content = inline.content.replace(DOCX_HEADING_NUM_PREFIX, '');
+  }
+  if (inline.children) {
+    for (const ch of inline.children) {
+      if (ch.type === 'text' && ch.content) {
+        const next = ch.content.replace(DOCX_HEADING_NUM_PREFIX, '');
+        if (next !== ch.content) {
+          ch.content = next;
+        }
+        break;
+      }
+    }
+  }
+}
+
 export async function markdownToDocxBlob(
   source: string,
   _title = 'Document',
@@ -1297,11 +1364,29 @@ export async function markdownToDocxBlob(
   includeTocPage?: boolean,
   /** #597 — merged folder book export: keep folder name as Page 1 cover title without adding a root Heading 1 bookmark. */
   isMergedBook?: boolean,
+  /** #624 — alignment for images, diagrams, and display math blocks (`left` | `center` | `right`). */
+  mediaAlign: 'left' | 'center' | 'right' = 'center',
+  /** #691 — apply 2-CJK-char first-line indent to body paragraphs. */
+  firstLineIndent = false,
 ): Promise<Blob> {
   srcImages.clear();
   nextOrderedListInstance = 0;
   nextHeadingAnchorId = 0;
   plantumlServerForRun = plantumlServer;
+  mediaAlignmentForRun =
+    mediaAlign === 'left'
+      ? AlignmentType.LEFT
+      : mediaAlign === 'right'
+        ? AlignmentType.RIGHT
+        : AlignmentType.CENTER;
+  const tpl = resolveDocxTemplate(preset, source ?? '', _title, {
+    preferFallbackTitle: Boolean(isMergedBook),
+  });
+  firstLineIndentTwipsForRun = firstLineIndent ? Math.round((tpl.fontSizePt || 11) * 20 * 2) : 0;
+  const hasReference = Boolean(referenceDocx && referenceDocx.length > 0);
+  numberedHeadingLevelsForRun = hasReference && referenceDocx
+    ? detectTemplateNumberedHeadingLevels(referenceDocx)
+    : new Set<number>();
   // Apply the same leniency preprocessors the HTML render path uses (malformed
   // table delimiters, list re-indent, inline-HTML blocks) so DOCX export
   // doesn't silently drop tables/lists the preview shows correctly.
@@ -1309,14 +1394,10 @@ export async function markdownToDocxBlob(
   const tokens = md.parse(preprocessMarkdown(cleanedSource), {});
   const imageRoot = extractImageRoot(source || '');
   await prefetchImages(tokens, imageRoot, filePath);
-  const hasReference = Boolean(referenceDocx && referenceDocx.length > 0);
   const tocHeadings: CollectedDocxHeading[] = [];
   const blocks = await buildBody(tokens, imageRoot, filePath, tocHeadings, hasReference);
   if (blocks.length === 0) blocks.push(new Paragraph({ alignment: AlignmentType.LEFT, text: '' }));
 
-  const tpl = resolveDocxTemplate(preset, source ?? '', _title, {
-    preferFallbackTitle: Boolean(isMergedBook),
-  });
   const headerText = renderHeaderText(tpl);
   const showCover = tpl.cover || Boolean(isMergedBook);
 

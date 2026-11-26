@@ -1169,6 +1169,83 @@ md.core.ruler.after('inline', 'task_lists', (state) => {
   return false;
 });
 
+// #653 — Fenced alert / callout container syntax (`:::alert-info [Title]`,
+// `:::alert-warning`, `:::alert-danger`, `:::alert-success`, `:::note`,
+// `:::tip`, `:::info`, `:::warning`, `:::danger`, `:::caution`, `:::important`).
+// Renders using the same `.md-callout` classes as GitHub callouts so preview,
+// live edit, and HTML/PDF export all style them consistently.
+md.block.ruler.before('fence', 'alert_container', (state, startLine, endLine, silent) => {
+  const startPos = state.bMarks[startLine] + state.tShift[startLine];
+  const maxPos = state.eMarks[startLine];
+  if (startPos + 3 > maxPos) return false;
+  const firstLine = state.src.slice(startPos, maxPos).trim();
+  const openMatch = /^:{3,}\s*(?:alert-)?(info|note|tip|success|important|warning|danger|caution)\b(.*)$/i.exec(
+    firstLine,
+  );
+  if (!openMatch) return false;
+  const fenceLen = /^(:{3,})/.exec(firstLine)![1].length;
+  const rawKind = openMatch[1].toLowerCase();
+  const customTitle = openMatch[2].trim();
+  const kindMap: Record<string, string> = {
+    info: 'note',
+    note: 'note',
+    tip: 'tip',
+    success: 'tip',
+    important: 'important',
+    warning: 'warning',
+    danger: 'caution',
+    caution: 'caution',
+  };
+  const kind = kindMap[rawKind] || 'note';
+
+  let nextLine = startLine + 1;
+  let foundClose = false;
+  const closeRe = new RegExp(`^:{${fenceLen},}\\s*$`);
+  while (nextLine < endLine) {
+    const pos = state.bMarks[nextLine] + state.tShift[nextLine];
+    const max = state.eMarks[nextLine];
+    if (closeRe.test(state.src.slice(pos, max).trim())) {
+      foundClose = true;
+      break;
+    }
+    nextLine += 1;
+  }
+  if (!foundClose) return false;
+  if (silent) return true;
+
+  const oldParent = state.parentType;
+  const oldLineMax = state.lineMax;
+  state.parentType = 'blockquote';
+  state.lineMax = nextLine;
+
+  const openToken = state.push('blockquote_open', 'blockquote', 1);
+  openToken.markup = ':'.repeat(fenceLen);
+  openToken.block = true;
+  openToken.map = [startLine, nextLine + 1];
+  openToken.attrJoin('class', `md-callout md-callout--${kind}`);
+  openToken.attrSet('data-alert-kind', rawKind);
+
+  if (customTitle) {
+    const titleOpen = state.push('paragraph_open', 'p', 1);
+    titleOpen.attrJoin('class', 'md-callout__custom-title');
+    const titleInline = state.push('inline', '', 0);
+    titleInline.content = customTitle;
+    titleInline.children = [];
+    state.push('paragraph_close', 'p', -1);
+  }
+
+  state.md.block.tokenize(state, startLine + 1, nextLine);
+
+  const closeToken = state.push('blockquote_close', 'blockquote', -1);
+  closeToken.markup = ':'.repeat(fenceLen);
+  closeToken.block = true;
+
+  state.parentType = oldParent;
+  state.lineMax = oldLineMax;
+  state.line = nextLine + 1;
+  return true;
+});
+
 // GitHub-style callouts: a blockquote whose first line is `[!NOTE]` (or TIP /
 // IMPORTANT / WARNING / CAUTION) renders as a tinted callout card with a
 // label row — the syntax GitHub and Obsidian users expect to just work. The
@@ -1209,7 +1286,7 @@ md.core.ruler.after('inline', 'github_callouts', (state) => {
   }
 });
 
-function slugify(s: string): string {
+export function slugify(s: string): string {
   return s
     .toLowerCase()
     .trim()
@@ -1224,6 +1301,49 @@ function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatFrontMatterDate(d: Date): string {
+  if (Number.isNaN(d.getTime())) return String(d);
+  const iso = d.toISOString();
+  return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.replace('T', ' ').slice(0, 19);
+}
+
+function renderFrontMatterValueHtml(v: unknown): string {
+  if (v === null || v === undefined) return '<span class="md-frontmatter-empty">—</span>';
+  if (v instanceof Date) {
+    return `<span class="md-frontmatter-date">${escapeHtml(formatFrontMatterDate(v))}</span>`;
+  }
+  if (typeof v === 'boolean') {
+    return `<span class="md-frontmatter-bool md-frontmatter-bool--${v ? 'true' : 'false'}">${v ? '✓ true' : '✕ false'}</span>`;
+  }
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '<span class="md-frontmatter-empty">[]</span>';
+    const chips = v
+      .map((item) => {
+        const text =
+          item instanceof Date
+            ? formatFrontMatterDate(item)
+            : typeof item === 'object' && item !== null
+              ? JSON.stringify(item)
+              : String(item ?? '');
+        return `<span class="md-frontmatter-chip">${escapeHtml(text)}</span>`;
+      })
+      .join('');
+    return `<span class="md-frontmatter-chips">${chips}</span>`;
+  }
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (/^https?:\/\/\S+$/i.test(trimmed)) {
+      const safe = escapeHtml(trimmed);
+      return `<a class="md-frontmatter-link" href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>`;
+    }
+    return escapeHtml(v);
+  }
+  if (typeof v === 'object') {
+    return `<code>${escapeHtml(JSON.stringify(v))}</code>`;
+  }
+  return escapeHtml(String(v));
 }
 
 function renderFrontMatterHtml(raw: string): string {
@@ -1253,17 +1373,9 @@ function renderFrontMatterHtml(raw: string): string {
     )}</pre>`;
   }
   const rows = entries
-    .map(([k, v]) => {
-      const valueText =
-        v === null || v === undefined
-          ? ''
-          : typeof v === 'object'
-            ? JSON.stringify(v)
-            : String(v);
-      return `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(valueText)}</dd>`;
-    })
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${renderFrontMatterValueHtml(v)}</dd>`)
     .join('');
-  return `<div class="md-frontmatter"><dl>${rows}</dl></div>`;
+  return `<details class="md-frontmatter" open><summary class="md-frontmatter__summary">YAML <span class="md-frontmatter__count">${entries.length}</span></summary><dl>${rows}</dl></details>`;
 }
 
 // Tags that markdown-it will treat as HTML blocks when they start at column 0
@@ -2065,14 +2177,27 @@ export interface OutlineItem {
 export function extractOutline(source: string): OutlineItem[] {
   const lines = (source || '').replace(/\r\n?/g, '\n').split('\n');
   const items: OutlineItem[] = [];
-  let inFence = false;
+  let fenceChar = '';
+  let fenceLen = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^```/.test(line)) {
-      inFence = !inFence;
-      continue;
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fenceMatch) {
+      const run = fenceMatch[1];
+      const rest = fenceMatch[2];
+      if (!fenceChar) {
+        if (run[0] !== '`' || !rest.includes('`')) {
+          fenceChar = run[0];
+          fenceLen = run.length;
+          continue;
+        }
+      } else if (run[0] === fenceChar && run.length >= fenceLen && /^\s*$/.test(rest)) {
+        fenceChar = '';
+        fenceLen = 0;
+        continue;
+      }
     }
-    if (inFence) continue;
+    if (fenceChar) continue;
     const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
     if (m) {
       const level = m[1].length;

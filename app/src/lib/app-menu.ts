@@ -83,6 +83,9 @@ export interface MenuState {
   autoGit: boolean;
   /** #604 — Keep window floating above other windows. */
   alwaysOnTop: boolean;
+  /** Top toolbar hidden / Markdown formatting bar visible. */
+  toolbarHidden?: boolean;
+  formatBar?: boolean;
   /** Right-sidebar / left-sidebar pane visibility, for the 面板 check marks. */
   panes: {
     outline: boolean;
@@ -92,6 +95,7 @@ export interface MenuState {
     neighborhood: boolean;
     tags: boolean;
     tasks: boolean;
+    snippets?: boolean;
     types: boolean;
     history: boolean;
     savedViews: boolean;
@@ -424,6 +428,7 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
         item('view.toggleNeighborhood', t('menubar.paneNeighborhood'), { checked: state.panes.neighborhood }),
         item('view.toggleTagsPanel', t('menubar.paneTags'), { checked: state.panes.tags }),
         item('view.toggleTasksPanel', t('menubar.paneTasks'), { checked: state.panes.tasks }),
+        item('view.toggleSnippets', t('menubar.paneSnippets'), { checked: !!state.panes.snippets }),
         item('view.toggleTypesPanel', t('menubar.paneTypes'), { checked: state.panes.types }),
         item('view.toggleHistoryPanel', t('menubar.paneHistory'), { checked: state.panes.history }),
         item('views.toggle', t('menubar.paneSavedViews'), { checked: state.panes.savedViews }),
@@ -476,7 +481,8 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
       ],
     },
     // The toolbar is chrome, not a pane: it sits with the appearance items.
-    item('view.toggleToolbar', t('menubar.toggleToolbar')),
+    item('view.toggleToolbar', t('menubar.toggleToolbar'), { checked: !state.toolbarHidden }),
+    item('view.toggleFormatBar', t('settings.formatBar'), { checked: !!state.formatBar }),
     item('view.toggleAlwaysOnTop', t('menubar.alwaysOnTop'), { checked: state.alwaysOnTop }),
     sep,
     {
@@ -506,6 +512,9 @@ export function buildAppMenu(ctx: MenuContext): TopMenu[] {
     item('help.shortcuts', t('menubar.helpShortcuts')),
     item('help.cli', t('menubar.helpCli')),
     item('help.welcomeTour', t('menubar.welcomeTour')),
+    sep,
+    item('help.openLogDir', t('menubar.openLogDir')),
+    item('help.exportLogs', t('menubar.exportLogs')),
     ...(ctx.updateCheckAvailable ? [sep, item('help.checkUpdate', t('menubar.checkUpdate'))] : []),
     sep,
     // Inside Help the context is clear, so Windows / Linux say just "About"

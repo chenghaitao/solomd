@@ -178,6 +178,12 @@ pub fn run() {
             {
                 use tauri::Manager;
                 if let Some(win) = app.get_webview_window("main") {
+                    // #633 — Explicitly re-apply the window icon before showing
+                    // so Windows 11 taskbar / Alt+Tab always receives WM_SETICON
+                    // for frameless hidden-at-startup windows (`decorations: false`).
+                    if let Some(icon) = app.default_window_icon().cloned() {
+                        let _ = win.set_icon(icon);
+                    }
                     let _ = win.show();
                     let _ = win.set_focus();
                 }
@@ -186,6 +192,7 @@ pub fn run() {
             {
                 let _ = app;
             }
+            webdav_sync::init_sync_app_handle(app.handle(), None);
             // v4.0 Pillar 2 — start the cron-trigger loop. Sleeps until
             // a `schedule` recipe is due; harmless when no recipes are
             // loaded yet (the loop polls workspace state every minute).
@@ -249,6 +256,7 @@ pub fn run() {
             commands::fs_create_dir,
             commands::fs_delete,
             commands::fs_dir_exists,
+            commands::fs_files_exist,
             commands::fs_file_exists,
             commands::webview_runtime_version,
             commands::clipboard_read_text_fallback,
@@ -300,6 +308,12 @@ pub fn run() {
             git_history::git_init_workspace,
             #[cfg(not(target_os = "android"))]
             git_history::git_auto_commit,
+            #[cfg(not(target_os = "android"))]
+            git_history::git_stage,
+            #[cfg(not(target_os = "android"))]
+            git_history::git_cli_pull,
+            #[cfg(not(target_os = "android"))]
+            git_history::git_cli_push,
             #[cfg(not(target_os = "android"))]
             git_history::git_file_history,
             #[cfg(not(target_os = "android"))]
@@ -429,6 +443,15 @@ pub fn run() {
             webdav_sync::sync_get_file_version_diff,
             webdav_sync::sync_restore_file_version,
             webdav_sync::sync_prune_file_versions,
+            webdav_sync::sync_get_log_dir,
+            webdav_sync::sync_export_logs_to_desktop,
+            webdav_sync::sync_list_conflicts,
+            webdav_sync::sync_diff_conflict,
+            webdav_sync::sync_resolve_conflict,
+            webdav_sync::sync_check_journal_conflict,
+            webdav_sync::sync_append_journal,
+            webdav_sync::sync_extract_remote_removals,
+            webdav_sync::sync_ensure_snapshot_dir,
             crypto::crypto_status,
             crypto::crypto_set_passphrase,
             crypto::crypto_clear_passphrase,

@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settings';
 import { useTilesStore } from '../stores/tiles';
 import { useWorkspaceStore } from '../stores/workspace';
 import { isSafPath, fromSafPath, safRead, safWrite } from '../lib/saf-fs';
+import { samePath } from '../lib/path-key';
 import type { FileReadResult } from '../types';
 import {
   decideDiskChange,
@@ -132,7 +133,7 @@ export function useFileWatcher(showDialog: ShowDialog) {
   }
 
   async function handleFileChanged(filePath: string) {
-    const matching = tabs.tabs.filter((t) => t.filePath === filePath);
+    const matching = tabs.tabs.filter((t) => samePath(t.filePath, filePath));
     if (matching.length === 0) return;
 
     // If a dialog is already pending for this path, skip
@@ -235,7 +236,7 @@ export function useFileWatcher(showDialog: ShowDialog) {
       ];
       for (const filePath of paths) {
         if (pendingPaths.has(filePath)) continue;
-        const matching = tabs.tabs.filter((t) => t.filePath === filePath);
+        const matching = tabs.tabs.filter((t) => samePath(t.filePath, filePath));
         if (!matching.length) continue;
         const anyDirty = matching.some((t) => t.content !== t.savedContent);
         if (mode === 'startup' && anyDirty) continue;

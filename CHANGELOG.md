@@ -19,7 +19,55 @@
 
 ---
 
-## [5.2.6] — 2026-11-19
+## [5.4.3] — 2026-11-26
+
+同步上游至 **v5.4.2**（`c55f3e24` → `fa1dec3a`，40 个提交 / 323 个文件 / +16630 −1330），
+并把上游 main 上**尚未发版**的 v5.4.3 修复一起带进来，因此本版本号领先上游一个号。
+
+### 同步上游内容
+
+| 版本 | 主要内容 |
+| --- | --- |
+| v5.3.0 | 沙箱插件脚本 API（`capabilities` 权限声明）、WikiLink 悬停预览、跨平台 WebView CSP、Atlas Cloud 网关、信创 Linux（glibc 2.28）+ AUR 打包 |
+| v5.3.1 / 5.3.2 | 有序列表软换行与代码块续写、PDF 书签坐标、导出图表对齐、标签删除即时同步、当前标签高亮、Windows 菜单栏修复 |
+| v5.3.3 | YAML Frontmatter 原生解析 + 属性卡片、可自定义工具栏 + Windows 标题栏停靠、Git 快捷操作、批量新建文件、AI 改写历史、更多脚本语言高亮 |
+| v5.3.4 | 右侧栏竖向多标签、同步每日日志、同步冲突与快照管理 |
+| v5.3.5 | 实时编辑语法高亮、标题自动编号不再误剥年份、文内 `#anchor` 跳转、HTML 块空白修复 |
+| v5.3.6 | CPU 占用优化（LRU 缓存、watcher 防抖、去掉逐键 `doc.toString()`）、表格多单元格拖选、Mermaid 全屏、代码文件高亮、DOCX 首行缩进 |
+| v5.4.0 | Snippets 片段面板 + `:::alert-*` 容器、浏览器式标签分组、工具栏自定义扩展、设置分 6 个子页、VS Code 快捷键预设、多端同步打磨 |
+| v5.4.1 | 表格单元格英文输入被截断、Windows 全角标点光标 +1 跳跃修复 |
+| v5.4.2 | 推送不再污染本地 base 清单（#700）、启动自动拉取 + 状态球进度（#701）、Windows 纯 WYSIWYG（#698/#699） |
+| main 未发版（5.4.3） | `.textpack` 持久化 #710、云推送冲突保护 #706、UUID 同步日志 #707、Windows 符号光标 #705、列表间距 #709、导出图片对齐 #704、内置工具栏图标 #708、Snippets 菜单 #703、HTML 粘贴列表软换行对齐、嵌套 UL↔OL 缩进同步、唤醒自动拉取 #711、引用块混合列表 #712、自定义 CSS 位置 #713、EPUB 任务列表 #714 |
+
+### 冲突处理（38 个文件）
+
+| 文件 | 处理 |
+| --- | --- |
+| `package.json` / `tauri.conf.json` / `Cargo.toml`+`lock` / `mcp-server/*` / `scripts/solomd` | 取上游 5.4.2，再由 `scripts/bump-version.js` 抬到 5.4.3 |
+| `i18n/*.ts`（16 个） | 上游新增键全量并入；本分支的 `slideshowHelp` 段（Slideshow.vue 引用 22 处）保留；清理合并产生的 5 处重复键 |
+| `README.md` / `README.zh.md` | 取上游赞助者段落，其余 fork 化内容保持 |
+| `AboutDialog.vue` | 取 fork——本分支不显示 promoter 列表与赞助徽章，sponsors/testers 保持空 seed（在线 fetch 覆盖） |
+| `SettingsPanel.vue`（32 处冲突） | 采用上游 Basics 六子页架构，移除 fork 的 `editing` 大类；同时保持本分支不显示 supporter 卡片与 telemetry 开关 |
+| `PaneTabBar.vue` | 保留 fork 的激活标签设计（实底填充 + 顶边强调线，`--tab-active-*` tokens） |
+| `FormatBar.vue` | 融合：表格面板用上游的 `justInserted` / `leaveGrid`，保留 fork 的说明注释 |
+| `App.vue` / `Toolbar.vue` / `settings.ts` / `useUpdateCheck.ts` | 上游新特性 + 保留 fork 的更新中心、平板浮层修复；`toggleFormatBar` 作为上游命令 id 的别名转发 |
+| `commands.rs` / `runner.rs` / `set_default.rs` / `iap.rs` | 融合：`restore_mode`（#671）接入 fork 的 `wa_*` 命名与 `EDGE_SLACK`；`set_default` 保留 count 返回类型并加入 UserChoice 复位与 Default Apps 提示；`iap.rs` 保留精确的 `cfg_attr` 死代码豁免 |
+| `scripts/asc-apply-metadata.py` | 保持删除（本分支走自己的发布脚本） |
+
+### 本地改动全部保留
+
+#521 懒延续行回车修复、平板浮层「更多」菜单关闭修复、`markdown.ts` #T09-4 同步锚点修复、
+独立更新中心（`useUpdateCenter`）、Slideshow、自定义主题 tokens、PDF `%%EOF` 护栏等。
+
+### 验证
+
+- 单元测试 **774/774** 通过；回归检查 **72/72** 通过。
+- 上游两条回归断言按本分支 UI 调整：`PaneTabBar` 允许 `::before` + `--tab-active-indicator` 的取巧实现；
+  设置子页顺序断言不再要求 supporter 卡片存在（本分支已移除）。
+- 另修掉一个历史遗留问题：`app/pnpm-workspace.yaml` 首行含一个控制字符（0x07），pnpm 12 直接报
+  `ERR_PNPM_INVALID_SETTING`，现已修正。
+
+---
 
 同步上游至 v5.2.4（7 个提交）。
 

@@ -258,7 +258,7 @@ export function useFiles() {
 
   async function openPath(
     path: string,
-    opts: { bypassNewWindow?: boolean; fromTree?: boolean } = {},
+    opts: { bypassNewWindow?: boolean; fromTree?: boolean; skipAutoOpenSiblings?: boolean } = {},
   ) {
     // #148 — see importContentUri; must run before any path parsing below.
     if (isAndroid() && path.startsWith('content://')) {
@@ -332,8 +332,13 @@ export function useFiles() {
     }
 
     const ext = (path.split('.').pop() || '').toLowerCase();
+    let textpackSourcePath: string | undefined;
+    let textpackDisplayName: string | undefined;
 
-    // #505 — Open `.textpack` (ZIP bundle) or `.textbundle` (directory bundle).
+    // #505 / #710 — Open `.textpack` (ZIP bundle) or `.textbundle` (directory bundle).
+    // Extract `.textpack` into an isolated working folder (`<parent>/.solomd-textpack/<stem>/`)
+    // so it NEVER overwrites an existing sibling `<stem>.md`, and remember `textpackSourcePath`
+    // so saving repacks both Markdown and newly pasted images directly back into the `.textpack`.
     if (ext === 'textpack') {
       try {
         const { extractTextPackArchive } = await import('../lib/textbundle');
@@ -343,11 +348,13 @@ export function useFiles() {
         const parentDir = lastSep > 0 ? path.slice(0, lastSep) : '';
         const fileName = lastSep >= 0 ? path.slice(lastSep + 1) : path;
         const stem = fileName.replace(/\.textpack$/i, '') || 'Bundle';
-        const assetsFolder = `${stem}.assets`;
+        const assetsFolder = 'assets';
         const unpacked = extractTextPackArchive(new Uint8Array(rawBytes), assetsFolder);
         if (parentDir) {
+          const workDir = `${parentDir}${sep}.solomd-textpack${sep}${stem}`;
+          await invoke('fs_create_dir', { path: workDir }).catch(() => {});
           if (unpacked.assets.length > 0) {
-            const absAssetsDir = `${parentDir}${sep}${assetsFolder}`;
+            const absAssetsDir = `${workDir}${sep}${assetsFolder}`;
             await invoke('fs_create_dir', { path: absAssetsDir }).catch(() => {});
             for (const asset of unpacked.assets) {
               await invoke('write_binary_file', {
@@ -356,8 +363,10 @@ export function useFiles() {
               });
             }
           }
-          const mdPath = `${parentDir}${sep}${stem}.md`;
+          const mdPath = `${workDir}${sep}${stem}.md`;
           await invoke('write_file', { path: mdPath, content: unpacked.markdown, encoding: 'UTF-8' });
+          textpackSourcePath = path;
+          textpackDisplayName = fileName;
           path = mdPath;
         }
       } catch (e) {
@@ -422,13 +431,95 @@ export function useFiles() {
         requestRevealInTree(path);
       }
 
-      tabs.openFromDisk({
+      const openedTab = tabs.openFromDisk({
         filePath: path,
         content: result.content,
         encoding: result.encoding,
         language: result.language,
         hadBom: result.had_bom,
       });
+      if (textpackSourcePath) {
+        openedTab.textpackPath = textpackSourcePath;
+        if (textpackDisplayName) openedTab.fileName = textpackDisplayName;
+      }
+
+      // #672 — Auto-group by parent folder and/or auto-open sibling files in the same folder.
+      const parentDir = path.replace(/[\\/][^\\/]+$/, '');
+      if (parentDir && parentDir !== path) {
+        if (settings.autoGroupTabsByFolder) {
+          const grp = tabs.ensureFolderGroup(parentDir);
+          tabs.assignTabToGroup(openedTab.id, grp.id);
+        }
+        if (
+          !opts.skipAutoOpenSiblings &&
+          !isSaf &&
+          settings.autoOpenSiblingFiles !== 'off'
+        ) {
+          const normParent = parentDir.replace(/\\/g, '/').replace(/\/+$/, '');
+          const allowedFolders = (settings.autoOpenSiblingFolders || '')
+            .split(/[\r\n,]+/)
+            .map((s) => s.trim().replace(/\\/g, '/').replace(/\/+$/, ''))
+            .filter(Boolean);
+          const folderAllowed =
+            settings.autoOpenSiblingFiles === 'all' ||
+            allowedFolders.some(
+              (f) => normParent === f || normParent.startsWith(f + '/'),
+            );
+          if (folderAllowed) {
+            const allowedExts = (settings.autoOpenSiblingExtensions || '.md,.markdown,.txt')
+              .split(/[\s,;]+/)
+              .map((e) => e.trim().toLowerCase())
+              .filter(Boolean)
+              .map((e) => (e.startsWith('.') ? e : '.' + e));
+            void (async () => {
+              try {
+                const entries = await invoke<Array<{ path: string; name: string; is_dir: boolean }>>('list_dir', {
+                  path: parentDir,
+                  showHidden: false,
+                  withTimes: false,
+                });
+                const siblings = entries
+                  .filter(
+                    (e) =>
+                      !e.is_dir &&
+                      e.path !== path &&
+                      allowedExts.some((ext) => e.name.toLowerCase().endsWith(ext)),
+                  )
+                  .slice(0, 20);
+                if (siblings.length > 0) {
+                  const grp = tabs.ensureFolderGroup(parentDir);
+                  tabs.assignTabToGroup(openedTab.id, grp.id);
+                  for (const sib of siblings) {
+                    const existing = tabs.tabs.find(
+                      (t) => t.filePath && t.filePath.replace(/\\/g, '/') === sib.path.replace(/\\/g, '/'),
+                    );
+                    if (existing) {
+                      tabs.assignTabToGroup(existing.id, grp.id);
+                      continue;
+                    }
+                    try {
+                      const fr = await invoke<FileReadResult>('read_file', { path: sib.path });
+                      const sibTab = tabs.openFromDisk({
+                        filePath: sib.path,
+                        content: fr.content,
+                        encoding: fr.encoding,
+                        language: fr.language,
+                        hadBom: fr.had_bom,
+                      });
+                      tabs.assignTabToGroup(sibTab.id, grp.id);
+                    } catch {
+                      /* skip unreadable sibling */
+                    }
+                  }
+                  tabs.activate(openedTab.id);
+                }
+              } catch {
+                /* ignore list_dir errors */
+              }
+            })();
+          }
+        }
+      }
       workspace.pushRecent(path);
       // 5.0 phone shell: opening a note shows the editor — also when it is the
       // tab that is already active (tapping the note you just backed out of),
@@ -1020,6 +1111,42 @@ export function useFiles() {
           content: payload,
           encoding: tab.encoding || 'UTF-8',
         });
+        // #710 — When editing an opened `.textpack` archive, repack the updated
+        // Markdown and all referenced local images/assets directly back into the
+        // original `.textpack` ZIP file so edits & pasted screenshots persist.
+        if (tab.textpackPath) {
+          const { rewriteMarkdownForTextBundle, createTextPackArchive } = await import(
+            '../lib/textbundle'
+          );
+          const { rewrittenMarkdown, assets } = rewriteMarkdownForTextBundle(payload);
+          const assetBytes: Record<string, Uint8Array> = {};
+          const noteDir = path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')));
+          const sep = path.includes('\\') ? '\\' : '/';
+          for (const ref of assets) {
+            let absPath = ref.rawPath;
+            try {
+              absPath = decodeURIComponent(absPath);
+            } catch {
+              // keep raw
+            }
+            if (!absPath.startsWith('/') && !/^[a-zA-Z]:[\\/]/.test(absPath) && noteDir) {
+              absPath = `${noteDir}${sep}${absPath.replace(/^\.[\\/]/, '').replace(/[\\/]/g, sep)}`;
+            }
+            try {
+              const bytes = await invoke<number[]>('read_binary_file', { path: absPath });
+              if (bytes && bytes.length > 0) {
+                assetBytes[ref.bundleFileName] = new Uint8Array(bytes);
+              }
+            } catch {
+              // Keep going if an optional external/missing asset cannot be read
+            }
+          }
+          const zipBuf = createTextPackArchive(rewrittenMarkdown, assetBytes);
+          await invoke('write_binary_file', {
+            path: tab.textpackPath,
+            data: Array.from(zipBuf),
+          });
+        }
       }
       tabs.markSaved(tab.id, path);
       delete (tab as any).saveFailed;
@@ -1180,6 +1307,14 @@ export function useFiles() {
     window.dispatchEvent(new Event('solomd:flush-content-sync'));
     for (const tab of tabs.tabs) {
       if (tab.filePath && tabs.isDirty(tab.id)) {
+        if (!isSafPath(tab.filePath)) {
+          try {
+            const exists = await invoke<boolean>('fs_exists', { path: tab.filePath });
+            if (!exists) continue;
+          } catch {
+            // If fs_exists is unavailable, proceed with normal saveTab check.
+          }
+        }
         await saveTab(tab, { silent: true });
       }
     }

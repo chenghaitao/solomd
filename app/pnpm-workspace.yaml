@@ -1,4 +1,4 @@
-# pnpm settings live here (pnpm 10.6+). llowBuilds is the key pnpm 11/12
+# pnpm settings live here (pnpm 10.6+). `allowBuilds` is the key pnpm 11/12
 # reads to let a dependency run its install scripts. The older
 # pnpm.onlyBuiltDependencies field in package.json is no longer read at all
 # (pnpm 12 says so explicitly on every install), and the same-named key here is

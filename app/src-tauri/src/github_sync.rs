@@ -1337,6 +1337,7 @@ pub fn github_push_inner(
     commit_message: Option<String>,
 ) -> Result<(), String> {
     let path = PathBuf::from(&folder);
+    super::webdav_sync::append_sync_log("github", "push", &format!("开始 Git 推送: {folder}"));
     let cfg = load_config(&path)?.unwrap_or_default();
     let repo_dir = git_dir(&path)?;
     if cfg.encrypted {
@@ -1345,8 +1346,10 @@ pub fn github_push_inner(
             .clone()
             .unwrap_or_else(|| "encrypted: workspace state at push".to_string());
         commit_shadow_if_dirty(&repo_dir, &msg)?;
-    } else if let Some(msg) = commit_message {
-        super::git_history::git_auto_commit_inner(folder.clone(), None, Some(msg))?;
+    } else {
+        // #641 — Always auto-commit pending staged/working-tree edits before
+        // pushing (commit_staged is a clean no-op when the tree matches HEAD).
+        super::git_history::git_auto_commit_inner(folder.clone(), None, commit_message)?;
     }
     let repo = Repository::open(&repo_dir).map_err(|e| e.to_string())?;
 
@@ -1648,6 +1651,7 @@ fn finalize_decrypt(cfg: &SyncConfig, workspace: &Path) -> Result<(), String> {
 #[tauri::command]
 pub async fn github_pull(folder: String) -> Result<PullResult, String> {
     let path = PathBuf::from(&folder);
+    super::webdav_sync::append_sync_log("github", "pull", &format!("开始 Git 拉取: {folder}"));
     let cfg = load_config(&path)?.unwrap_or_default();
     let token = match cfg.provider.as_str() {
         "gitea" => gitea_read_token()?.ok_or("no Gitea token set")?,
@@ -1673,6 +1677,10 @@ fn signature(repo: &Repository) -> Result<Signature<'static>, String> {
     Signature::now("SoloMD", "solomd@local").map_err(|e| e.to_string())
 }
 
+fn read_config_opt(workspace: &Path) -> Option<SyncConfig> {
+    load_config(workspace).ok().flatten()
+}
+
 #[tauri::command]
 pub async fn github_resolve_conflict(
     folder: String,
@@ -1681,12 +1689,20 @@ pub async fn github_resolve_conflict(
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         let path = PathBuf::from(&folder);
-        let repo = Repository::open(&path).map_err(|e| e.to_string())?;
+        let cfg = read_config_opt(&path);
+        let is_enc = cfg.as_ref().map(|c| c.encrypted).unwrap_or(false);
+        let repo_dir = if is_enc { git_dir(&path)? } else { path.clone() };
+        let repo = Repository::open(&repo_dir).map_err(|e| e.to_string())?;
         let mut index = repo.index().map_err(|e| e.to_string())?;
         if !index.has_conflicts() {
             return Ok(());
         }
-        let abs = path.join(&file);
+        let plain_file = if is_enc {
+            file.strip_suffix(".enc").unwrap_or(&file).to_string()
+        } else {
+            file.clone()
+        };
+        let abs = path.join(&plain_file);
 
         // Find the conflict entry for this path.
         let conflicts = index.conflicts().map_err(|e| e.to_string())?;
@@ -1708,23 +1724,82 @@ pub async fn github_resolve_conflict(
             }
         }
 
+        let decrypt_if_needed = |raw: &[u8]| -> Result<Vec<u8>, String> {
+            if is_enc && file.ends_with(".enc") {
+                let key = super::crypto::load_key(&path)?;
+                super::crypto::decrypt_bytes(&key, &plain_file, raw)
+                    .or_else(|_| super::crypto::decrypt_bytes(&key, &file, raw))
+            } else {
+                Ok(raw.to_vec())
+            }
+        };
+
         match choice.as_str() {
-            "local" => {
-                if let Some(ours) = found_ours {
+            "local" | "ours" => {
+                if is_enc {
+                    if abs.exists() {
+                        let plain = fs::read(&abs).map_err(|e| e.to_string())?;
+                        if file.ends_with(".enc") {
+                            let key = super::crypto::load_key(&path)?;
+                            let enc = super::crypto::encrypt_bytes(&key, &plain_file, &plain)?;
+                            let shadow_file = repo_dir.join(&file);
+                            if let Some(parent) = shadow_file.parent() {
+                                let _ = fs::create_dir_all(parent);
+                            }
+                            fs::write(&shadow_file, enc).map_err(|e| e.to_string())?;
+                        } else {
+                            let shadow_file = repo_dir.join(&file);
+                            if let Some(parent) = shadow_file.parent() {
+                                let _ = fs::create_dir_all(parent);
+                            }
+                            fs::write(&shadow_file, &plain).map_err(|e| e.to_string())?;
+                        }
+                    } else if let Some(ours) = found_ours {
+                        let blob = repo.find_blob(ours.id).map_err(|e| e.to_string())?;
+                        let plain = decrypt_if_needed(blob.content())?;
+                        if let Some(parent) = abs.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        super::watcher::mark_self_write(&abs.to_string_lossy());
+                        fs::write(&abs, &plain).map_err(|e| e.to_string())?;
+                        let shadow_file = repo_dir.join(&file);
+                        if let Some(parent) = shadow_file.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        fs::write(&shadow_file, blob.content()).map_err(|e| e.to_string())?;
+                    }
+                } else if let Some(ours) = found_ours {
                     let blob = repo.find_blob(ours.id).map_err(|e| e.to_string())?;
+                    if let Some(parent) = abs.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    super::watcher::mark_self_write(&abs.to_string_lossy());
                     fs::write(&abs, blob.content()).map_err(|e| e.to_string())?;
                 }
             }
-            "remote" => {
+            "remote" | "theirs" => {
                 if let Some(theirs) = found_theirs {
                     let blob = repo.find_blob(theirs.id).map_err(|e| e.to_string())?;
-                    fs::write(&abs, blob.content()).map_err(|e| e.to_string())?;
+                    let plain = decrypt_if_needed(blob.content())?;
+                    if let Some(parent) = abs.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    super::watcher::mark_self_write(&abs.to_string_lossy());
+                    fs::write(&abs, &plain).map_err(|e| e.to_string())?;
+                    if is_enc {
+                        let shadow_file = repo_dir.join(&file);
+                        if let Some(parent) = shadow_file.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        fs::write(&shadow_file, blob.content()).map_err(|e| e.to_string())?;
+                    }
                 }
             }
             "both" => {
                 // Keep local AS-IS, write remote alongside as `<name>.remote-<date>.md`.
                 if let Some(theirs) = found_theirs {
                     let blob = repo.find_blob(theirs.id).map_err(|e| e.to_string())?;
+                    let plain = decrypt_if_needed(blob.content())?;
                     let stem = abs.file_stem().and_then(|s| s.to_str()).unwrap_or("note");
                     let ext = abs
                         .extension()
@@ -1733,7 +1808,22 @@ pub async fn github_resolve_conflict(
                         .unwrap_or_default();
                     let now = chrono_like_date();
                     let neighbor = abs.with_file_name(format!("{}.remote-{}{}", stem, now, ext));
-                    fs::write(&neighbor, blob.content()).map_err(|e| e.to_string())?;
+                    super::watcher::mark_self_write(&neighbor.to_string_lossy());
+                    fs::write(&neighbor, &plain).map_err(|e| e.to_string())?;
+                    if is_enc && abs.exists() {
+                        let local_plain = fs::read(&abs).map_err(|e| e.to_string())?;
+                        let shadow_file = repo_dir.join(&file);
+                        if let Some(parent) = shadow_file.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        if file.ends_with(".enc") {
+                            let key = super::crypto::load_key(&path)?;
+                            let enc = super::crypto::encrypt_bytes(&key, &plain_file, &local_plain)?;
+                            fs::write(&shadow_file, enc).map_err(|e| e.to_string())?;
+                        } else {
+                            fs::write(&shadow_file, &local_plain).map_err(|e| e.to_string())?;
+                        }
+                    }
                 }
             }
             _ => return Err(format!("unknown choice: {}", choice)),

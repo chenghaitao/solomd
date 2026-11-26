@@ -19,11 +19,13 @@
  */
 
 import { RangeSetBuilder, StateField, StateEffect, Prec, EditorSelection, Transaction, EditorState } from '@codemirror/state';
+import yaml from 'js-yaml';
 import { keymap } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import { SearchQuery, getSearchQuery, searchPanelOpen, setSearchQuery } from '@codemirror/search';
 import { syntaxTree } from '@codemirror/language';
 import { isDragging, isDragEndTransaction } from './cm-drag-aware';
+import { openImageOverlay } from './image-overlay';
 import { frozenFieldDuringComposition, isImeSafeFlushTransaction } from './cm-ime-guard';
 import { applySearchMarksIn, clearSearchMarksIn, findPreviewHitsInText } from './preview-search-hits';
 import {
@@ -34,6 +36,202 @@ import {
 } from '@codemirror/view';
 
 export const setExternalSearchQueryEffect = StateEffect.define<string>();
+
+// ---------------------------------------------------------------------------
+// #626 — Collapsible YAML Frontmatter Properties Widget for Live Edit.
+// ---------------------------------------------------------------------------
+let frontmatterCollapsedSession = false;
+
+function formatFmDate(d: Date): string {
+  if (Number.isNaN(d.getTime())) return String(d);
+  const iso = d.toISOString();
+  return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.replace('T', ' ').slice(0, 19);
+}
+
+function renderFmValueDom(val: unknown): HTMLElement {
+  const wrap = document.createElement('span');
+  wrap.className = 'cm-frontmatter-card__val';
+  if (val === null || val === undefined) {
+    wrap.classList.add('md-frontmatter-empty');
+    wrap.textContent = '—';
+    return wrap;
+  }
+  if (val instanceof Date) {
+    wrap.classList.add('md-frontmatter-date');
+    wrap.textContent = formatFmDate(val);
+    return wrap;
+  }
+  if (typeof val === 'boolean') {
+    const badge = document.createElement('span');
+    badge.className = `md-frontmatter-bool md-frontmatter-bool--${val ? 'true' : 'false'}`;
+    badge.textContent = val ? '✓ true' : '✕ false';
+    wrap.appendChild(badge);
+    return wrap;
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) {
+      wrap.classList.add('md-frontmatter-empty');
+      wrap.textContent = '[]';
+      return wrap;
+    }
+    const chips = document.createElement('span');
+    chips.className = 'md-frontmatter-chips';
+    for (const item of val) {
+      const chip = document.createElement('span');
+      chip.className = 'md-frontmatter-chip';
+      chip.textContent =
+        item instanceof Date
+          ? formatFmDate(item)
+          : typeof item === 'object' && item !== null
+            ? JSON.stringify(item)
+            : String(item ?? '');
+      chips.appendChild(chip);
+    }
+    wrap.appendChild(chips);
+    return wrap;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^https?:\/\/\S+$/i.test(trimmed)) {
+      const a = document.createElement('a');
+      a.className = 'md-frontmatter-link';
+      a.href = trimmed;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = trimmed;
+      a.addEventListener('mousedown', (e) => e.stopPropagation());
+      wrap.appendChild(a);
+      return wrap;
+    }
+    wrap.textContent = val;
+    return wrap;
+  }
+  if (typeof val === 'object') {
+    const code = document.createElement('code');
+    code.textContent = JSON.stringify(val);
+    wrap.appendChild(code);
+    return wrap;
+  }
+  wrap.textContent = String(val);
+  return wrap;
+}
+
+class FrontmatterWidget extends WidgetType {
+  readonly yamlBody: string;
+  readonly editPos: number;
+
+  constructor(yamlBody: string, editPos: number) {
+    super();
+    this.yamlBody = yamlBody;
+    this.editPos = editPos;
+  }
+
+  eq(other: FrontmatterWidget): boolean {
+    return this.yamlBody === other.yamlBody && this.editPos === other.editPos;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'cm-frontmatter-card';
+
+    let entries: [string, unknown][] | null = null;
+    let parseErr: string | null = null;
+    try {
+      const parsed = yaml.load(this.yamlBody);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        entries = Object.entries(parsed as Record<string, unknown>);
+      } else if (this.yamlBody.trim() === '') {
+        entries = [];
+      } else {
+        parseErr = 'Frontmatter must be a YAML mapping (key: value).';
+      }
+    } catch (e) {
+      parseErr = e instanceof Error ? e.message : String(e);
+    }
+
+    const head = document.createElement('div');
+    head.className = 'cm-frontmatter-card__head';
+
+    const titleWrap = document.createElement('span');
+    titleWrap.className = 'cm-frontmatter-card__title';
+    const chevron = document.createElement('span');
+    chevron.textContent = frontmatterCollapsedSession ? '▸' : '▾';
+    const label = document.createElement('span');
+    label.textContent = 'YAML Frontmatter';
+    titleWrap.appendChild(chevron);
+    titleWrap.appendChild(label);
+    if (entries) {
+      const badge = document.createElement('span');
+      badge.className = 'cm-frontmatter-card__badge';
+      badge.textContent = String(entries.length);
+      titleWrap.appendChild(badge);
+    }
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'cm-frontmatter-card__edit';
+    editBtn.textContent = 'YAML';
+    editBtn.title = 'Edit YAML frontmatter';
+    editBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const targetPos = Math.min(this.editPos, view.state.doc.length);
+      view.dispatch({
+        selection: { anchor: targetPos },
+        scrollIntoView: true,
+      });
+      view.focus();
+    });
+
+    head.appendChild(titleWrap);
+    head.appendChild(editBtn);
+    card.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'cm-frontmatter-card__body';
+    if (frontmatterCollapsedSession && !parseErr) {
+      body.style.display = 'none';
+    }
+
+    if (parseErr) {
+      const errEl = document.createElement('div');
+      errEl.className = 'cm-frontmatter-card__err';
+      errEl.textContent = parseErr;
+      body.appendChild(errEl);
+    } else if (entries && entries.length > 0) {
+      const grid = document.createElement('div');
+      grid.className = 'cm-frontmatter-card__grid';
+      for (const [k, v] of entries) {
+        const keyEl = document.createElement('span');
+        keyEl.className = 'cm-frontmatter-card__key';
+        keyEl.textContent = k;
+        grid.appendChild(keyEl);
+        grid.appendChild(renderFmValueDom(v));
+      }
+      body.appendChild(grid);
+    } else {
+      const emptyEl = document.createElement('span');
+      emptyEl.className = 'md-frontmatter-empty';
+      emptyEl.textContent = 'Empty frontmatter';
+      body.appendChild(emptyEl);
+    }
+
+    head.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      frontmatterCollapsedSession = !frontmatterCollapsedSession;
+      chevron.textContent = frontmatterCollapsedSession ? '▸' : '▾';
+      body.style.display = frontmatterCollapsedSession ? 'none' : '';
+    });
+
+    card.appendChild(body);
+    return card;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
 
 export const externalSearchQueryField = StateField.define<string>({
   create: () => '',
@@ -578,6 +776,18 @@ function dedentTableSource(source: string): string {
   return lines.map((line) => (line.length >= minIndent ? line.slice(minIndent) : line)).join('\n');
 }
 
+function tableIndentCols(source: string): number {
+  let minCols = Infinity;
+  for (const line of source.split('\n')) {
+    if (!line.trim()) continue;
+    const lead = /^[ \t]*/.exec(line)?.[0] ?? '';
+    let cols = 0;
+    for (const ch of lead) cols += ch === '\t' ? 4 - (cols % 4) : 1;
+    if (cols < minCols) minCols = cols;
+  }
+  return Number.isFinite(minCols) && minCols > 0 ? minCols : 0;
+}
+
 /**
  * The cell a rebuilt table widget should re-open after a write-back.
  *
@@ -823,6 +1033,7 @@ export function bindDomTableCellEditor(
     if (col < 0 || col >= m.header.length) return false;
     if (row !== HEADER_ROW && (row < 0 || row >= m.rows.length)) return false;
     clearSearchMarksIn(cell);
+    lastAnchor = { row, col };
     active = { cell, row, col, html: cell.innerHTML };
     cell.textContent = cellText(m, row, col);
     cell.classList.add('cm-live-table__cell--editing');
@@ -840,7 +1051,7 @@ export function bindDomTableCellEditor(
     } catch {
       // Fallback for non-standard scrollIntoView implementations.
     }
-    const scroller = wrap.closest?.('.plain-live-host, .cm-scroller') as HTMLElement | null;
+    const scroller = wrap.closest?.('.plain-block-editor, .plain-live-host, .cm-scroller') as HTMLElement | null;
     if (!scroller || typeof cell.getBoundingClientRect !== 'function' || typeof scroller.getBoundingClientRect !== 'function') {
       return;
     }
@@ -866,11 +1077,60 @@ export function bindDomTableCellEditor(
   };
 
   let cleanupFirstPressDrag: (() => void) | null = null;
+  let cellRange: { r1: number; c1: number; r2: number; c2: number } | null = null;
+  let lastAnchor: { row: number; col: number } | null = null;
+
+  const clearCellRange = () => {
+    if (!cellRange) return;
+    cellRange = null;
+    for (const el of Array.from(wrap.querySelectorAll('.cm-live-table__cell--selected'))) {
+      el.classList.remove('cm-live-table__cell--selected');
+    }
+  };
+
+  const applyCellRangeHighlight = () => {
+    for (const el of Array.from(wrap.querySelectorAll<HTMLTableCellElement>('th[data-row], td[data-row]'))) {
+      if (!cellRange) {
+        el.classList.remove('cm-live-table__cell--selected');
+        continue;
+      }
+      const r = Number(el.dataset.row ?? HEADER_ROW);
+      const c = Number(el.dataset.col ?? el.cellIndex);
+      const rMin = Math.min(cellRange.r1, cellRange.r2);
+      const rMax = Math.max(cellRange.r1, cellRange.r2);
+      const cMin = Math.min(cellRange.c1, cellRange.c2);
+      const cMax = Math.max(cellRange.c1, cellRange.c2);
+      const inRange = r >= rMin && r <= rMax && c >= cMin && c <= cMax;
+      el.classList.toggle('cm-live-table__cell--selected', inRange);
+    }
+  };
+
+  const focusWrapForRange = () => {
+    if (!wrap.hasAttribute('tabindex')) wrap.setAttribute('tabindex', '-1');
+    wrap.focus({ preventScroll: true });
+  };
 
   const begin = (ev: MouseEvent, cell: HTMLTableCellElement): DomTableBeginState => {
     if (adapter.isReadOnly()) return false;
     const row = Number(cell.dataset.row ?? HEADER_ROW);
     const col = Number(cell.dataset.col ?? cell.cellIndex);
+
+    // Shift+Click extends a rectangular multi-cell / multi-row selection from the anchor cell.
+    if (ev.shiftKey && lastAnchor && (lastAnchor.row !== row || lastAnchor.col !== col)) {
+      cleanupFirstPressDrag?.();
+      cleanupFirstPressDrag = null;
+      if (active) commit(null);
+      if (written) return 'started';
+      window.getSelection?.()?.removeAllRanges();
+      cellRange = { r1: lastAnchor.row, c1: lastAnchor.col, r2: row, c2: col };
+      applyCellRangeHighlight();
+      focusWrapForRange();
+      return 'started';
+    }
+
+    clearCellRange();
+    lastAnchor = { row, col };
+
     if (active && active.cell === cell) {
       // Already editing this cell: do NOT preventDefault on mousedown so the
       // browser natively repositions the caret at the clicked glyph, selects
@@ -892,18 +1152,15 @@ export function bindDomTableCellEditor(
       caretToEdge(cell, 'end');
     }
 
-    // Also support click-and-drag text selection right on the very first press
-    // that enters the cell (where mousedown had to replace rendered HTML with
-    // plain text and preventDefault).
+    // Support BOTH intra-cell text drag selection AND cross-cell / row rectangular
+    // drag selection right on the first press.
     if (
-      sel &&
-      sel.rangeCount > 0 &&
       typeof window !== 'undefined' &&
       typeof window.addEventListener === 'function'
     ) {
-      const initRange = sel.getRangeAt(0);
-      const anchorNode = initRange.startContainer;
-      const anchorOffset = initRange.startOffset;
+      const initRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+      const anchorNode = initRange?.startContainer ?? null;
+      const anchorOffset = initRange?.startOffset ?? 0;
       const startX = ev.clientX;
       const startY = ev.clientY;
       let dragging = false;
@@ -914,7 +1171,7 @@ export function bindDomTableCellEditor(
         if (cleanupFirstPressDrag === stopDrag) cleanupFirstPressDrag = null;
       };
       const onMove = (moveEv: MouseEvent) => {
-        if (!active || active.cell !== cell || !cell.isConnected) {
+        if (!wrap.isConnected) {
           stopDrag();
           return;
         }
@@ -926,9 +1183,35 @@ export function bindDomTableCellEditor(
           return;
         }
         dragging = true;
-        const headRange = caretRangeAt(moveEv.clientX, moveEv.clientY);
-        if (headRange && cell.contains(headRange.startContainer) && typeof sel.setBaseAndExtent === 'function') {
-          sel.setBaseAndExtent(anchorNode, anchorOffset, headRange.startContainer, headRange.startOffset);
+        const hitEl =
+          typeof document.elementFromPoint === 'function'
+            ? (document.elementFromPoint(moveEv.clientX, moveEv.clientY)?.closest?.('th, td') as HTMLTableCellElement | null)
+            : null;
+        if (hitEl && wrap.contains(hitEl)) {
+          const hitRow = Number(hitEl.dataset.row ?? HEADER_ROW);
+          const hitCol = Number(hitEl.dataset.col ?? hitEl.cellIndex);
+          if (hitRow !== row || hitCol !== col || cellRange !== null) {
+            if (active) {
+              leave();
+              sel?.removeAllRanges();
+              focusWrapForRange();
+            }
+            cellRange = { r1: row, c1: col, r2: hitRow, c2: hitCol };
+            applyCellRangeHighlight();
+            return;
+          }
+        }
+        if (
+          active &&
+          active.cell === cell &&
+          cell.isConnected &&
+          sel &&
+          anchorNode
+        ) {
+          const headRange = caretRangeAt(moveEv.clientX, moveEv.clientY);
+          if (headRange && cell.contains(headRange.startContainer) && typeof sel.setBaseAndExtent === 'function') {
+            sel.setBaseAndExtent(anchorNode, anchorOffset, headRange.startContainer, headRange.startOffset);
+          }
         }
       };
       cleanupFirstPressDrag = stopDrag;
@@ -943,6 +1226,76 @@ export function bindDomTableCellEditor(
   wrap.addEventListener(
     'keydown',
     (ev: KeyboardEvent) => {
+      // Multi-cell / row selection keyboard shortcuts (Copy / Clear / Select All / Escape)
+      if (!active && cellRange) {
+        const isMod = ev.metaKey || ev.ctrlKey;
+        const rMin = Math.min(cellRange.r1, cellRange.r2);
+        const rMax = Math.max(cellRange.r1, cellRange.r2);
+        const cMin = Math.min(cellRange.c1, cellRange.c2);
+        const cMax = Math.max(cellRange.c1, cellRange.c2);
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          clearCellRange();
+          return;
+        }
+        if (isMod && !ev.altKey && ev.key.toLowerCase() === 'a') {
+          const m = model();
+          if (m) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            cellRange = {
+              r1: HEADER_ROW,
+              c1: 0,
+              r2: m.rows.length > 0 ? m.rows.length - 1 : HEADER_ROW,
+              c2: Math.max(0, m.header.length - 1),
+            };
+            applyCellRangeHighlight();
+          }
+          return;
+        }
+        if (isMod && !ev.altKey && ev.key.toLowerCase() === 'c') {
+          const m = model();
+          if (m) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const lines: string[] = [];
+            for (let r = rMin; r <= rMax; r++) {
+              const vals: string[] = [];
+              for (let c = cMin; c <= cMax; c++) {
+                vals.push(cellText(m, r, c));
+              }
+              lines.push(vals.join('\t'));
+            }
+            const tsv = lines.join('\n');
+            void navigator.clipboard?.writeText?.(tsv).catch(() => {});
+          }
+          return;
+        }
+        if (ev.key === 'Backspace' || ev.key === 'Delete') {
+          const m = model();
+          if (m && !adapter.isReadOnly()) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            let nextMd: string | null = adapter.source;
+            for (let r = rMin; r <= rMax; r++) {
+              for (let c = cMin; c <= cMax; c++) {
+                if (!nextMd) break;
+                nextMd = applyCellEdit(nextMd, r, c, '') ?? nextMd;
+              }
+            }
+            clearCellRange();
+            if (nextMd && nextMd !== adapter.source) {
+              written = true;
+              adapter.commitMarkdown(nextMd, null);
+            }
+          }
+          return;
+        }
+        // Keep unhandled keys from leaking to CodeMirror while a table range is selected.
+        ev.stopPropagation();
+        return;
+      }
       if (!active) return;
       const here = { row: active.row, col: active.col };
       const isMod = ev.metaKey || ev.ctrlKey;
@@ -1078,17 +1431,36 @@ export function bindDomTableCellEditor(
   );
 
   // #616 — Prevent regular caret/selection/typing keys (ArrowLeft, ArrowRight,
-  // Shift+Arrow*, Home/End, Backspace, Vim keys) from bubbling out of the
-  // active contenteditable cell into CodeMirror / Vim / window handlers.
+  // Shift+Arrow*, Home/End, Backspace, Vim keys) and input/IME events from
+  // bubbling out of the active contenteditable cell into CodeMirror / Vim /
+  // window handlers (without this, typing English characters in a table cell
+  // bubbles `beforeinput`/`input` to `.cm-content` and replaces the cell on
+  // every keystroke so only 1 character appears).
   wrap.addEventListener('keydown', (ev: KeyboardEvent) => {
     if (active) ev.stopPropagation();
   });
+  for (const evName of [
+    'beforeinput',
+    'input',
+    'keypress',
+    'keyup',
+    'compositionstart',
+    'compositionupdate',
+    'compositionend',
+    'paste',
+    'cut',
+  ] as const) {
+    wrap.addEventListener(evName, (ev: Event) => {
+      if (active) ev.stopPropagation();
+    });
+  }
 
   wrap.addEventListener('focusout', (ev: FocusEvent) => {
-    if (!active) return;
-    if (ev.target !== active.cell) return;
     const next = ev.relatedTarget as Node | null;
     if (next && wrap.contains(next)) return;
+    if (cellRange) clearCellRange();
+    if (!active) return;
+    if (ev.target !== active.cell) return;
     commit(null);
   });
 
@@ -1222,6 +1594,25 @@ class TableWidget extends WidgetType {
   toDOM(view?: EditorView): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'cm-live-block cm-live-block--table';
+    // Isolate the table widget from CodeMirror's `.cm-content[contenteditable="true"]`
+    // editing host so an active `td[contenteditable="true"]` cell becomes its own
+    // independent editing host (otherwise Chromium/WebKit routes `beforeinput`/`input`
+    // for ASCII typing to `.cm-content`, overwriting the cell to 1 character!).
+    wrap.contentEditable = 'false';
+    // Visually align list-indented tables (e.g. pasted after Shift+Enter soft
+    // break) under the enclosing list item's body column, matching cm-live-render.
+    const indentCols = tableIndentCols(this.source);
+    if (indentCols > 0) {
+      const marginEm =
+        indentCols === 2
+          ? 0.95
+          : indentCols === 3
+            ? 1.15
+            : indentCols === 4
+              ? 1.65
+              : Math.min(8, indentCols * 0.55);
+      wrap.style.marginLeft = `${marginEm.toFixed(2)}em`;
+    }
     // Render the table source through the same markdown pipeline used by the
     // preview pane so we get GFM alignment, inline formatting, etc. for free.
     // Dedent common leading spaces/tabs so a 4-space indented table nested
@@ -1407,6 +1798,29 @@ class TableWidget extends WidgetType {
     if (event.type === 'selectionchange') return true;
     const target = event.target as Element | null;
     if (target?.closest?.('a')) return false;
+    // When any table cell is actively being edited, ignore all typing/input/IME
+    // events so CodeMirror never intercepts keystrokes intended for the cell.
+    if (
+      activeTableCellSession &&
+      (event.type === 'beforeinput' ||
+        event.type === 'input' ||
+        event.type === 'keydown' ||
+        event.type === 'keypress' ||
+        event.type === 'keyup' ||
+        event.type === 'compositionstart' ||
+        event.type === 'compositionupdate' ||
+        event.type === 'compositionend' ||
+        event.type === 'paste' ||
+        event.type === 'cut')
+    ) {
+      return true;
+    }
+    if (
+      target?.classList?.contains?.('cm-live-block--table') &&
+      target.querySelector('.cm-live-table__cell--selected')
+    ) {
+      return true;
+    }
     return !!target?.closest?.('th, td, tr');
   }
 
@@ -1535,6 +1949,10 @@ class MathWidget extends WidgetType {
   toDOM(): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'cm-live-block cm-live-block--math';
+    // Isolate KaTeX DOM from CodeMirror's contentEditable surface so IME
+    // composition on the line right below a collapsed `$$...$$` block never
+    // bleeds into the MathML / aria-hidden spans.
+    wrap.contentEditable = 'false';
     try {
       wrap.innerHTML = renderMarkdown(this.source);
     } catch (e) {
@@ -1823,6 +2241,23 @@ class TableFoldToggleWidget extends WidgetType {
   }
 }
 
+function openMermaidZoomOverlay(wrap: HTMLElement): void {
+  const svg = wrap.querySelector('svg');
+  if (!svg) return;
+  const zh = typeof document !== 'undefined' && document.documentElement.lang?.startsWith('zh');
+  openImageOverlay({
+    source: svg,
+    strings: {
+      close: zh ? '关闭' : 'Close',
+      zoomIn: zh ? '放大' : 'Zoom in',
+      zoomOut: zh ? '缩小' : 'Zoom out',
+      resetZoom: zh ? '重置缩放' : 'Reset zoom',
+      image: zh ? '图片' : 'Image',
+      diagram: zh ? '图表' : 'Diagram',
+    },
+  });
+}
+
 class MermaidWidget extends WidgetType {
   /** Whether the cache held a finished result when this widget was built. */
   private readonly settled: boolean;
@@ -1858,11 +2293,41 @@ class MermaidWidget extends WidgetType {
     if (cached?.svg) {
       wrap.innerHTML = cached.svg;
       bindMermaidInteractions(wrap, cached.bindFunctions);
+      const zoomBtn = document.createElement('button');
+      zoomBtn.type = 'button';
+      zoomBtn.className = 'cm-mermaid-zoom-btn';
+      zoomBtn.title = '放大查看 / Zoom';
+      zoomBtn.setAttribute('aria-label', 'Zoom diagram');
+      zoomBtn.textContent = '⤢';
+      zoomBtn.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+      });
+      zoomBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openMermaidZoomOverlay(wrap);
+      });
+      wrap.appendChild(zoomBtn);
+      wrap.addEventListener('mousedown', (ev) => {
+        if ((ev.target as Element | null)?.closest?.('a, button')) return;
+        // Prevent CodeMirror from moving the caret into the fenced body on click
+        // (unfolding is handled by the `+` / `−` button on the opening fence line).
+        if (ev.button === 0) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+      });
       wrap.addEventListener('click', (ev) => {
         const anchor = (ev.target as Element | null)?.closest?.('a');
         if (anchor) {
           openRenderedLink(anchor, ev, this.filePath);
+          return;
         }
+        if ((ev.target as Element | null)?.closest?.('button')) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        openMermaidZoomOverlay(wrap);
       });
     } else if (cached?.error) {
       wrap.classList.add('cm-live-block--broken');
@@ -1884,7 +2349,12 @@ class MermaidWidget extends WidgetType {
     return wrap;
   }
 
-  ignoreEvent(): boolean {
+  ignoreEvent(ev: Event): boolean {
+    const target = ev.target as Element | null;
+    if (target?.closest?.('.cm-mermaid-zoom-btn')) return true;
+    if (this.settled && (ev.type === 'mousedown' || ev.type === 'click' || ev.type === 'dblclick')) {
+      return !target?.closest?.('a');
+    }
     return false;
   }
 }
@@ -2288,6 +2758,44 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
         }
         const imageRefs = extractImageReferenceDefinitions(sourceLines, fenceBody);
         let i = 1;
+
+        // #626 — Leading YAML frontmatter block (`---\n...\n---` on line 1).
+        // Replace with a collapsible properties card when the caret is outside;
+        // moving the caret into lines 1..fmEnd reveals syntax-highlighted YAML.
+        if (lastLine >= 2 && sourceLines[0].trim() === '---') {
+          let fmEndLine = 0;
+          const scanLimit = Math.min(lastLine, 200);
+          for (let ln = 2; ln <= scanLimit; ln += 1) {
+            const trimmed = sourceLines[ln - 1].trim();
+            if (trimmed === '---' || trimmed === '...') {
+              fmEndLine = ln;
+              break;
+            }
+          }
+          if (fmEndLine >= 2) {
+            const cursorInside =
+              keepSource ||
+              (!pureWysiwyg &&
+                ((cursorLine >= 1 && cursorLine <= fmEndLine) ||
+                  (cursorLineEnd >= 1 && cursorLineEnd <= fmEndLine)));
+            if (!cursorInside) {
+              const blockFrom = doc.line(1).from;
+              const blockTo = doc.line(fmEndLine).to;
+              const yamlBody = sourceLines.slice(1, fmEndLine - 1).join('\n');
+              const editPos = fmEndLine >= 2 ? doc.line(2).from : blockFrom;
+              builder.add(
+                blockFrom,
+                blockTo,
+                Decoration.replace({
+                  widget: new FrontmatterWidget(yamlBody, editPos),
+                  block: true,
+                }),
+              );
+            }
+            i = fmEndLine + 1;
+          }
+        }
+
         while (i <= lastLine) {
           const line = doc.line(i);
 
@@ -2414,8 +2922,11 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             const closeDelim = isBracket ? '\\]' : '$$';
             // Single-line `$$ ... $$` or `\[ ... \]`?
             if (trimmedLine.endsWith(closeDelim) && trimmedLine.length > 4) {
+              // Always keep math source editable while the cursor is inside it
+              // (even in Pure WYSIWYG mode) so typing or pressing Enter never
+              // traps IME composition against an atomic `block: true` widget.
               const cursorInside =
-                keepSource || (!pureWysiwyg && (cursorLine === i || cursorLineEnd === i));
+                keepSource || cursorLine === i || cursorLineEnd === i;
               if (!cursorInside) {
                 builder.add(
                   line.from,
@@ -2445,9 +2956,8 @@ function buildBlockDecorations(state: EditorState, opts: BlockOptions): Decorati
             if (endI <= lastLine) {
               const cursorInside =
                 keepSource ||
-                (!pureWysiwyg &&
-                  ((cursorLine >= i && cursorLine <= endI) ||
-                    (cursorLineEnd >= i && cursorLineEnd <= endI)));
+                (cursorLine >= i && cursorLine <= endI) ||
+                (cursorLineEnd >= i && cursorLineEnd <= endI);
               if (!cursorInside) {
                 const blockFrom = doc.line(i).from;
                 const blockTo = doc.line(endI).to;
@@ -3178,6 +3688,7 @@ export function liveBlocksExtension(opts: BlockOptions = {}) {
 
   const tableSearchHighlighter = ViewPlugin.fromClass(
     class {
+      private hadActiveQuery = false;
       constructor(view: EditorView) {
         this.sync(view, false);
       }
@@ -3191,6 +3702,11 @@ export function liveBlocksExtension(opts: BlockOptions = {}) {
         }
       }
       sync(view: EditorView, scrollCurrent: boolean) {
+        const panelActive = searchPanelOpen(view.state) && !!getSearchQuery(view.state).search;
+        const extActive = !!(view.state.field(externalSearchQueryField, false) ?? '');
+        const active = panelActive || extActive;
+        if (!active && !this.hadActiveQuery) return;
+        this.hadActiveQuery = active;
         const tables = view.dom.querySelectorAll<HTMLElement>('.cm-live-block--table');
         if (tables.length === 0) return;
         let currentMark: HTMLElement | null = null;
@@ -3240,6 +3756,8 @@ export const liveBlocksTheme = EditorView.theme({
     height: 'auto',
     borderRadius: '6px',
     display: 'block',
+    marginLeft: 'var(--media-margin-left, 0)',
+    marginRight: 'var(--media-margin-right, auto)',
   },
   '.cm-live-block--image-inline': {
     display: 'inline-block',
@@ -3250,6 +3768,17 @@ export const liveBlocksTheme = EditorView.theme({
   '.cm-live-block--html': {
     maxWidth: '100%',
     overflowX: 'auto',
+    whiteSpace: 'normal',
+    padding: '0.25em 0',
+  },
+  '.cm-live-block--html > :first-child': {
+    marginTop: '0',
+  },
+  '.cm-live-block--html > :last-child': {
+    marginBottom: '0',
+  },
+  '.cm-live-block--html pre': {
+    whiteSpace: 'pre-wrap',
   },
   '.cm-live-block--html img': {
     maxWidth: '100%',
@@ -3270,6 +3799,39 @@ export const liveBlocksTheme = EditorView.theme({
   },
   '.cm-live-block--table': {
     position: 'relative',
+  },
+  '.cm-mermaid-zoom-btn': {
+    position: 'absolute',
+    bottom: '8px',
+    right: '8px',
+    width: '28px',
+    height: '28px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid var(--border)',
+    borderRadius: '6px',
+    background: 'color-mix(in srgb, var(--bg-elev) 90%, transparent)',
+    color: 'var(--text-muted)',
+    fontSize: '14px',
+    lineHeight: '1',
+    cursor: 'pointer',
+    opacity: '0',
+    transition: 'opacity 0.15s, color 0.15s, border-color 0.15s',
+    zIndex: '2',
+  },
+  '.cm-live-block--mermaid:hover .cm-mermaid-zoom-btn, .cm-mermaid-zoom-btn:focus-visible': {
+    opacity: '1',
+  },
+  '.cm-mermaid-zoom-btn:hover': {
+    color: 'var(--accent)',
+    borderColor: 'var(--accent)',
+  },
+  '.cm-live-block--table .cm-live-table__cell--selected': {
+    background: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+    boxShadow: 'inset 0 0 0 1px var(--accent)',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
   },
   '.cm-table-source-btn': {
     position: 'absolute',
@@ -3340,7 +3902,9 @@ export const liveBlocksTheme = EditorView.theme({
   '.cm-live-block--math': {
     padding: '1em 0',
     overflowX: 'auto',
-    textAlign: 'center',
+    textAlign: 'var(--media-align, left)',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
   },
   // #573 — Inline \dfrac / \frac inside consecutive list items or lines
   // overflows a `display: inline` (line-height: 1.2) span and collides
@@ -3353,14 +3917,19 @@ export const liveBlocksTheme = EditorView.theme({
   // #530 — Left-align Mermaid diagrams like images (instead of centered), and
   // style the `+` / `−` fold toggle button on the opening ` ```mermaid ` line.
   '.cm-live-block--mermaid': {
+    position: 'relative',
     padding: '0.8em 0 1.2em 0',
-    textAlign: 'left',
+    textAlign: 'var(--media-align, left)',
+    cursor: 'zoom-in',
   },
   '.cm-live-block--mermaid svg': {
     maxWidth: '100%',
     height: 'auto',
     display: 'block',
-    margin: '0',
+    marginTop: '0',
+    marginBottom: '0',
+    marginLeft: 'var(--media-margin-left, 0)',
+    marginRight: 'var(--media-margin-right, auto)',
   },
   '.cm-mermaid-fold-btn': {
     display: 'inline-flex',

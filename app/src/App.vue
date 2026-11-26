@@ -23,12 +23,15 @@ const NeighborhoodPanel = defineAsyncComponent(() => import('./components/Neighb
 const RelationshipsPanel = defineAsyncComponent(() => import('./components/RelationshipsPanel.vue'));
 const TagsPanel = defineAsyncComponent(() => import('./components/TagsPanel.vue'));
 const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'));
+const SnippetsPanel = defineAsyncComponent(() => import('./components/SnippetsPanel.vue'));
 const FormulaEditor = defineAsyncComponent(() => import('./components/FormulaEditor.vue'));
 const TypesPanel = defineAsyncComponent(() => import('./components/TypesPanel.vue'));
 const HistoryPanel = defineAsyncComponent(() => import('./components/HistoryPanel.vue'));
 const PropertiesInspector = defineAsyncComponent(() => import('./components/PropertiesInspector.vue'));
 const AgentPanel = defineAsyncComponent(() => import('./components/AgentPanel.vue'));
 import RsSplitter from './components/RsSplitter.vue';
+import RsIcon from './components/Icons.vue';
+const SyncConflictModal = defineAsyncComponent(() => import('./components/SyncConflictModal.vue'));
 import { useAutoCommit } from './composables/useAutoCommit';
 import { useGithubSync } from './composables/useGithubSync';
 import { useSessionRestore } from './composables/useSessionRestore';
@@ -55,6 +58,7 @@ import ReadingView from './components/ReadingView.vue';
 import UnsavedDialog from './components/UnsavedDialog.vue';
 import FileChangedDialog from './components/FileChangedDialog.vue';
 import Toast from './components/Toast.vue';
+import WikiLinkHoverPreview from './components/WikiLinkHoverPreview.vue';
 import KeyboardBar from './components/KeyboardBar.vue';
 import FormatBar from './components/FormatBar.vue';
 import { forceKeyboardBarPreview } from './lib/platform';
@@ -279,7 +283,10 @@ function rsPaneSnapshot() {
     showNeighborhood: settings.showNeighborhood,
     showTypesPanel: settings.showTypesPanel,
     showHistoryPanel: settings.showHistoryPanel,
+    showInspector: settings.showInspector,
     showAgentPanel: settings.showAgentPanel,
+    tasks: settings.showTasksPanel,
+    inspector: settings.showInspector,
   };
 }
 /** Run a pane toggle and reconcile sidebar visibility: hide it if the
@@ -296,7 +303,8 @@ function ctxToggle(toggleFn: () => void) {
     !settings.showTasksPanel &&
     !showNeighborhoodPane.value &&
     !settings.showTypesPanel &&
-    !settings.showHistoryPanel &&
+    !showHistoryPane.value &&
+    !settings.showInspector &&
     (IS_APP_STORE_BUILD || !settings.showAgentPanel);
   if (noPanesVisible) {
     settings.hideRightSidebarFromPane(before);
@@ -318,9 +326,32 @@ function ctxToggle(toggleFn: () => void) {
  * this because they were already routed through `ctxToggle`, which un-hides the
  * strip when a toggle turns a pane on.
  */
+function closeGlobalSearch() {
+  searchPrefill.value = undefined;
+  ctxToggle(() => {
+    searchOpen.value = false;
+  });
+}
+
 function toggleGlobalSearch() {
+  // #656 — Opening search directly from the toolbar/shortcut should start fresh,
+  // never resurrecting a stale tag filter from an earlier click.
+  searchPrefill.value = undefined;
+  if (
+    searchOpen.value &&
+    settings.rightSidebarLayout === 'tabs' &&
+    effectiveRightTab.value !== 'search'
+  ) {
+    settings.setActiveRightTab('search');
+    settings.ensureRightSidebarVisible();
+    closeSidebarCtx();
+    return;
+  }
   ctxToggle(() => {
     searchOpen.value = !searchOpen.value;
+    if (searchOpen.value) {
+      settings.setActiveRightTab('search');
+    }
   });
 }
 
@@ -328,6 +359,7 @@ function toggleGlobalSearch() {
 function openGlobalSearchPane() {
   ctxToggle(() => {
     searchOpen.value = true;
+    settings.setActiveRightTab('search');
   });
 }
 
@@ -698,12 +730,24 @@ watchEffect(() => {
 // stays as the browser-mode fallback where getCurrentWebview() throws.
 watchEffect(() => {
   const z = settings.globalZoom || 1;
+  if (macTitleBar) {
+    document.documentElement.style.setProperty('--mac-titlebar-zoom', String(z));
+  }
   try {
     const webview = getCurrentWebview();
     void webview
       .setZoom(z)
       .then(() => {
         (document.documentElement.style as any).zoom = '';
+        if (macTitleBar) {
+          void invoke<number | null>('sync_macos_titlebar')
+            .then((rightEdge) => {
+              if (rightEdge != null) {
+                document.documentElement.style.setProperty('--mac-window-controls-right', `${rightEdge}px`);
+              }
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => {
         (document.documentElement.style as any).zoom = String(z);
@@ -744,6 +788,22 @@ watchEffect(() => {
   document.documentElement.style.setProperty(
     '--paragraph-spacing',
     `${settings.paragraphSpacing ?? 0.9}em`,
+  );
+  // #684 — Unified alignment CSS variables for images, diagrams, and display math
+  // across Live Edit, Preview, and Reading modes.
+  const ma = settings.editorMediaAlign || 'left';
+  document.documentElement.style.setProperty('--media-align', ma);
+  document.documentElement.style.setProperty(
+    '--media-justify',
+    ma === 'center' ? 'center' : ma === 'right' ? 'flex-end' : 'flex-start',
+  );
+  document.documentElement.style.setProperty(
+    '--media-margin-left',
+    ma === 'left' ? '0' : 'auto',
+  );
+  document.documentElement.style.setProperty(
+    '--media-margin-right',
+    ma === 'right' ? '0' : 'auto',
   );
 });
 
@@ -1063,6 +1123,8 @@ function onFilterTag(tag: string) {
 let unlistenOpened: UnlistenFn | null = null;
 let unlistenMenu: UnlistenFn | null = null;
 let unlistenWindowDestroyed: UnlistenFn | null = null;
+let unlistenCloseRequested: UnlistenFn | null = null;
+let unlistenDragDrop: UnlistenFn | null = null;
 
 async function openExternalFile() {
   const filePath = tabs.activeTab?.filePath;
@@ -1208,6 +1270,28 @@ function dispatchMenuAction(id: string) {
       return;
     case 'help.cli':
       openHelpAt('cli');
+      return;
+    case 'help.openLogDir':
+      void invoke<string>('sync_get_log_dir')
+        .then((dir) => openPath(dir))
+        .catch((e) =>
+          void import('./stores/toasts').then(({ useToastsStore }) => useToastsStore().error(String(e))),
+        );
+      return;
+    case 'help.exportLogs':
+      void invoke<string>('sync_export_logs_to_desktop')
+        .then((zipPath) =>
+          void import('./stores/toasts').then(({ useToastsStore }) =>
+            useToastsStore().success(
+              settings.language?.startsWith('zh')
+                ? `日志已打包至：${zipPath}`
+                : `Logs exported to: ${zipPath}`,
+            ),
+          ),
+        )
+        .catch((e) =>
+          void import('./stores/toasts').then(({ useToastsStore }) => useToastsStore().error(String(e))),
+        );
       return;
     case 'help.checkUpdate':
       void updateCheck.manualCheckUpdate();
@@ -1695,7 +1779,7 @@ onMounted(async () => {
   // the one being closed in the payload — the event reaches every window, and
   // each must only act on its own close.
   try {
-    await listen<string>('solomd://close-requested', async (e) => {
+    unlistenCloseRequested = await listen<string>('solomd://close-requested', async (e) => {
       const me = getCurrentWindow().label;
       if (e.payload && e.payload !== me) return;
       // Editors sync their document into the store on a debounce; text typed
@@ -1757,7 +1841,7 @@ onMounted(async () => {
   try {
     const webview = getCurrentWebview();
     const IMAGE_DROP_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'tiff']);
-    await webview.onDragDropEvent(async (event) => {
+    unlistenDragDrop = await webview.onDragDropEvent(async (event) => {
       if (event.payload.type === 'drop') {
         for (const path of event.payload.paths) {
           const ext = (path.split('.').pop() || '').toLowerCase();
@@ -1937,6 +2021,7 @@ window.addEventListener(VIEW_OPEN_EVENT, onOpenView as EventListener);
 window.addEventListener(VIEW_CLOSE_EVENT, onCloseView as EventListener);
 window.addEventListener('solomd:leave-center-overlay', onLeaveCenterOverlay);
 window.addEventListener('solomd:open-settings', onOpenSettingsEvent as EventListener);
+window.addEventListener('solomd:open-sync-conflicts', onOpenSyncConflictsEvent);
 
 function onPageHide() {
   flushPendingEdits();
@@ -1970,6 +2055,7 @@ onBeforeUnmount(() => {
   window.removeEventListener(VIEW_OPEN_EVENT, onOpenView as EventListener);
   window.removeEventListener(VIEW_CLOSE_EVENT, onCloseView as EventListener);
   window.removeEventListener('solomd:open-settings', onOpenSettingsEvent as EventListener);
+  window.removeEventListener('solomd:open-sync-conflicts', onOpenSyncConflictsEvent);
   window.removeEventListener('solomd:open-agent-wizard', onOpenAgentWizard);
   window.removeEventListener('solomd:open-image-url-dialog', onOpenImageUrlDialog);
   window.removeEventListener('solomd:open-insert-table-dialog', onOpenInsertTableDialog);
@@ -1986,6 +2072,14 @@ onBeforeUnmount(() => {
   if (unlistenWindowDestroyed) {
     unlistenWindowDestroyed();
     unlistenWindowDestroyed = null;
+  }
+  if (unlistenCloseRequested) {
+    unlistenCloseRequested();
+    unlistenCloseRequested = null;
+  }
+  if (unlistenDragDrop) {
+    unlistenDragDrop();
+    unlistenDragDrop = null;
   }
 });
 
@@ -2011,6 +2105,7 @@ const showTagsPane = computed(
 const showTasksPane = computed(
   () => settings.showTasksPanel && !!workspace.currentFolder,
 );
+const showSnippetsPane = computed(() => settings.showSnippetsPanel);
 // v4.6 F4 — Neighborhood relationship explorer. Markdown-only, needs a folder
 // (frontmatter wikilink groups are resolved against the workspace index).
 const showNeighborhoodPane = computed(
@@ -2226,6 +2321,7 @@ const rightSidebarHasRenderablePane = computed(
     showRelationshipsPane.value ||
     showTagsPane.value ||
     showTasksPane.value ||
+    showSnippetsPane.value ||
     showNeighborhoodPane.value ||
     showTypesPane.value ||
     showHistoryPane.value ||
@@ -2302,20 +2398,21 @@ const visibleRsPanes = computed(() => {
   // v4.3.0 issue #57b — order driven by settings.rsPaneOrder so users can
   // drag-reorder. Unknown ids (newly-shipped future panes) get appended at
   // the end so a SoloMD update doesn't blow away an existing user layout.
-  const all: Record<'search' | 'outline' | 'backlinks' | 'relationships' | 'tags' | 'tasks' | 'neighborhood' | 'types' | 'history' | 'inspector' | 'agent', boolean> = {
+  const all: Record<'search' | 'outline' | 'backlinks' | 'relationships' | 'tags' | 'tasks' | 'snippets' | 'neighborhood' | 'types' | 'history' | 'inspector' | 'agent', boolean> = {
     search: showSearchPane.value,
     outline: showOutlinePane.value,
     backlinks: showBacklinksPane.value,
     relationships: showRelationshipsPane.value,
     tags: showTagsPane.value,
     tasks: showTasksPane.value,
+    snippets: showSnippetsPane.value,
     neighborhood: showNeighborhoodPane.value,
     types: showTypesPane.value,
     history: showHistoryPane.value,
     inspector: showInspectorPane.value,
     agent: showAgentPane.value,
   };
-  const known = ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'neighborhood', 'types', 'history', 'inspector', 'agent'] as const;
+  const known = ['search', 'outline', 'backlinks', 'relationships', 'tags', 'tasks', 'snippets', 'neighborhood', 'types', 'history', 'inspector', 'agent'] as const;
   const ordered: string[] = [];
   for (const id of settings.rsPaneOrder || []) {
     if (id in all && !ordered.includes(id)) ordered.push(id);
@@ -2325,8 +2422,59 @@ const visibleRsPanes = computed(() => {
   }
   return ordered
     .filter((id) => all[id as keyof typeof all])
-    .map((id) => ({ id: id as 'search' | 'outline' | 'backlinks' | 'relationships' | 'tags' | 'tasks' | 'neighborhood' | 'types' | 'history' | 'inspector' | 'agent' }));
+    .map((id) => ({ id: id as 'search' | 'outline' | 'backlinks' | 'relationships' | 'tags' | 'tasks' | 'snippets' | 'neighborhood' | 'types' | 'history' | 'inspector' | 'agent' }));
 });
+
+// #637 — Sync Conflict & Snapshot Manager modal state.
+const syncConflictOpen = ref(false);
+function onOpenSyncConflictsEvent() {
+  settingsOpen.value = false;
+  syncConflictOpen.value = true;
+}
+
+// #647 — Right sidebar vertical multi-tab layout support.
+const RS_PANE_ICONS: Record<string, string> = {
+  search: 'search',
+  outline: 'outline',
+  backlinks: 'external',
+  relationships: 'type-project',
+  tags: 'type-generic',
+  tasks: 'list-bullet',
+  snippets: 'code',
+  neighborhood: 'type-idea',
+  types: 'type-book',
+  history: 'recent',
+  inspector: 'settings',
+  agent: 'live',
+};
+const effectiveRightTab = computed(() => {
+  const panes = visibleRsPanes.value;
+  if (panes.length === 0) return null;
+  if (panes.some((p) => p.id === settings.activeRightTab)) return settings.activeRightTab;
+  return panes[0].id;
+});
+const renderedRsPanes = computed(() => {
+  const panes = visibleRsPanes.value;
+  if (settings.rightSidebarLayout !== 'tabs') return panes;
+  const active = effectiveRightTab.value;
+  return active ? panes.filter((p) => p.id === active) : panes.slice(0, 1);
+});
+watch(
+  () => visibleRsPanes.value.map((p) => p.id),
+  (nextIds, prevIds) => {
+    if (prevIds && prevIds.length > 0 && nextIds.length === prevIds.length + 1) {
+      const prevSet = new Set<string>(prevIds);
+      const added = nextIds.find((id) => !prevSet.has(id));
+      if (added) {
+        settings.setActiveRightTab(added);
+        return;
+      }
+    }
+    if (nextIds.length > 0 && !(nextIds as string[]).includes(settings.activeRightTab)) {
+      settings.setActiveRightTab(nextIds[0]);
+    }
+  },
+);
 
 // #131 — sidebar pane reordering via the ⋮⋮ grip.
 //
@@ -2421,10 +2569,17 @@ function paneStyle(id: string) {
 // bumps to 440 when the agent panel is on (chat needs real estate).
 // User resizes above the auto-bump are honored.
 const sideSidebarStyle = computed(() => {
-  const w =
-    showAgentPane.value && settings.sideSidebarWidth <= 260
+  const isTabs = settings.rightSidebarLayout === 'tabs';
+  const agentFocused = isTabs
+    ? effectiveRightTab.value === 'agent'
+    : showAgentPane.value;
+  const baseW =
+    agentFocused && settings.sideSidebarWidth <= 260
       ? 440
       : settings.sideSidebarWidth;
+  // #647 — Account for the 36px vertical tab rail so the active pane keeps
+  // its full configured width without squishing panel headers.
+  const w = isTabs ? baseW + 36 : baseW;
   return { width: `${w}px`, flexBasis: `${w}px` };
 });
 
@@ -2584,12 +2739,37 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
         <aside
           v-if="showRightSidebar && settings.outlineSide === 'left'"
           class="side-sidebar side-sidebar--left"
+          :class="{ 'side-sidebar--tabbed': settings.rightSidebarLayout === 'tabs' }"
           :style="sideSidebarStyle"
           @contextmenu.prevent="openSidebarCtx"
         >
           <div class="side-sidebar__resize side-sidebar__resize--right" @mousedown="onSidebarResize('left', $event)" />
-          <template v-for="(p, idx) in visibleRsPanes" :key="p.id">
-            <RsSplitter v-if="idx > 0" :above="visibleRsPanes[idx-1].id" :below="p.id" />
+          <div v-if="settings.rightSidebarLayout === 'tabs'" class="side-sidebar__rail side-sidebar__rail--left">
+            <button
+              v-for="p in visibleRsPanes"
+              :key="p.id"
+              type="button"
+              class="side-sidebar__tab"
+              :class="{ 'is-active': effectiveRightTab === p.id }"
+              :title="t(`rsPane.${p.id}`)"
+              :aria-label="t(`rsPane.${p.id}`)"
+              @click="settings.setActiveRightTab(p.id)"
+            >
+              <RsIcon :name="RS_PANE_ICONS[p.id] || 'outline'" :size="16" />
+            </button>
+            <div class="side-sidebar__rail-spacer" />
+            <button
+              type="button"
+              class="side-sidebar__tab side-sidebar__tab--layout"
+              :title="settings.language?.startsWith('zh') ? '切换为纵向堆叠模式' : 'Switch to stacked layout'"
+              @click="settings.toggleRightSidebarLayout()"
+            >
+              <RsIcon name="sidebar-right" :size="15" />
+            </button>
+          </div>
+          <div class="side-sidebar__body">
+          <template v-for="(p, idx) in renderedRsPanes" :key="p.id">
+            <RsSplitter v-if="settings.rightSidebarLayout !== 'tabs' && idx > 0" :above="renderedRsPanes[idx-1].id" :below="p.id" />
             <div
               :data-rs-pane="p.id"
               :class="[
@@ -2598,9 +2778,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
                 draggingPaneId === p.id ? 'rs-pane-host--dragging' : '',
                 dragOverPaneId === p.id ? 'rs-pane-host--drop-target' : '',
               ]"
-              :style="paneStyle(p.id)"
+              :style="settings.rightSidebarLayout === 'tabs' ? {} : paneStyle(p.id)"
             >
               <div
+                v-if="settings.rightSidebarLayout !== 'tabs'"
                 class="rs-pane-grip"
                 :title="t('rsPane.dragToReorder')"
                 @pointerdown="startPaneReorder($event, p.id)"
@@ -2608,7 +2789,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
               <GlobalSearch
                 v-if="p.id === 'search'"
                 :prefill="searchPrefill"
-                @close="searchOpen = false"
+                @close="closeGlobalSearch"
               />
               <Outline v-if="p.id === 'outline'" :cursor-line="outlineLine" @goto="onOutlineGoto" />
               <BacklinksPanel v-if="p.id === 'backlinks'" @close="ctxToggle(() => settings.toggleBacklinks())" />
@@ -2621,6 +2802,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
               <TasksPanel
                 v-if="p.id === 'tasks'"
                 @close="ctxToggle(() => settings.toggleTasksPanel())"
+              />
+              <SnippetsPanel
+                v-if="p.id === 'snippets'"
+                :selection-text="selectionText"
               />
               <NeighborhoodPanel
                 v-if="p.id === 'neighborhood'"
@@ -2639,6 +2824,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
               />
             </div>
           </template>
+          </div>
         </aside>
         <div class="content">
           <BasesView v-if="basesOpen" />
@@ -2651,12 +2837,14 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
         <aside
           v-if="showRightSidebar && settings.outlineSide !== 'left'"
           class="side-sidebar side-sidebar--right"
+          :class="{ 'side-sidebar--tabbed': settings.rightSidebarLayout === 'tabs' }"
           :style="sideSidebarStyle"
           @contextmenu.prevent="openSidebarCtx"
         >
           <div class="side-sidebar__resize side-sidebar__resize--left" @mousedown="onSidebarResize('right', $event)" />
-          <template v-for="(p, idx) in visibleRsPanes" :key="p.id">
-            <RsSplitter v-if="idx > 0" :above="visibleRsPanes[idx-1].id" :below="p.id" />
+          <div class="side-sidebar__body">
+          <template v-for="(p, idx) in renderedRsPanes" :key="p.id">
+            <RsSplitter v-if="settings.rightSidebarLayout !== 'tabs' && idx > 0" :above="renderedRsPanes[idx-1].id" :below="p.id" />
             <div
               :data-rs-pane="p.id"
               :class="[
@@ -2665,9 +2853,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
                 draggingPaneId === p.id ? 'rs-pane-host--dragging' : '',
                 dragOverPaneId === p.id ? 'rs-pane-host--drop-target' : '',
               ]"
-              :style="paneStyle(p.id)"
+              :style="settings.rightSidebarLayout === 'tabs' ? {} : paneStyle(p.id)"
             >
               <div
+                v-if="settings.rightSidebarLayout !== 'tabs'"
                 class="rs-pane-grip"
                 :title="t('rsPane.dragToReorder')"
                 @pointerdown="startPaneReorder($event, p.id)"
@@ -2675,7 +2864,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
               <GlobalSearch
                 v-if="p.id === 'search'"
                 :prefill="searchPrefill"
-                @close="searchOpen = false"
+                @close="closeGlobalSearch"
               />
               <Outline v-if="p.id === 'outline'" :cursor-line="outlineLine" @goto="onOutlineGoto" />
               <BacklinksPanel v-if="p.id === 'backlinks'" @close="ctxToggle(() => settings.toggleBacklinks())" />
@@ -2688,6 +2877,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
               <TasksPanel
                 v-if="p.id === 'tasks'"
                 @close="ctxToggle(() => settings.toggleTasksPanel())"
+              />
+              <SnippetsPanel
+                v-if="p.id === 'snippets'"
+                :selection-text="selectionText"
               />
               <NeighborhoodPanel
                 v-if="p.id === 'neighborhood'"
@@ -2706,6 +2899,30 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
               />
             </div>
           </template>
+          </div>
+          <div v-if="settings.rightSidebarLayout === 'tabs'" class="side-sidebar__rail side-sidebar__rail--right">
+            <button
+              v-for="p in visibleRsPanes"
+              :key="p.id"
+              type="button"
+              class="side-sidebar__tab"
+              :class="{ 'is-active': effectiveRightTab === p.id }"
+              :title="t(`rsPane.${p.id}`)"
+              :aria-label="t(`rsPane.${p.id}`)"
+              @click="settings.setActiveRightTab(p.id)"
+            >
+              <RsIcon :name="RS_PANE_ICONS[p.id] || 'outline'" :size="16" />
+            </button>
+            <div class="side-sidebar__rail-spacer" />
+            <button
+              type="button"
+              class="side-sidebar__tab side-sidebar__tab--layout"
+              :title="settings.language?.startsWith('zh') ? '切换为纵向堆叠模式' : 'Switch to stacked layout'"
+              @click="settings.toggleRightSidebarLayout()"
+            >
+              <RsIcon name="sidebar-right" :size="15" />
+            </button>
+          </div>
         </aside>
       </div>
         </div>
@@ -2731,7 +2948,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
             <span class="sidebar-ctx__check">{{ searchOpen ? '✓' : '' }}</span>
             {{ t('rsPane.search') }}
           </label>
-          <label class="sidebar-ctx__item" @click="ctxToggle(() => { if (tabs.activeTab) tabs.toggleOutline(tabs.activeTab.id) })">
+          <label class="sidebar-ctx__item" @click="ctxToggle(() => { if (tabs.activeTab) { tabs.toggleOutline(tabs.activeTab.id); if (tabs.activeTab.showOutline) settings.setActiveRightTab('outline'); } })">
             <span class="sidebar-ctx__check">{{ showOutlinePane ? '✓' : '' }}</span>
             {{ t('rsPane.outline') }}
           </label>
@@ -2751,6 +2968,10 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
             <span class="sidebar-ctx__check">{{ settings.showTasksPanel ? '✓' : '' }}</span>
             {{ t('rsPane.tasks') }}
           </label>
+          <label class="sidebar-ctx__item" @click="ctxToggle(() => { settings.toggleSnippetsPanel() })">
+            <span class="sidebar-ctx__check">{{ settings.showSnippetsPanel ? '✓' : '' }}</span>
+            {{ t('menubar.paneSnippets') }}
+          </label>
           <label class="sidebar-ctx__item" @click="ctxToggle(() => { settings.toggleNeighborhood() })">
             <span class="sidebar-ctx__check">{{ settings.showNeighborhood ? '✓' : '' }}</span>
             {{ t('rsPane.neighborhood') }}
@@ -2766,6 +2987,11 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
           <label v-if="!IS_APP_STORE_BUILD" class="sidebar-ctx__item" @click="ctxToggle(() => { settings.toggleAgentPanel() })">
             <span class="sidebar-ctx__check">{{ settings.showAgentPanel ? '✓' : '' }}</span>
             {{ t('rsPane.agent') }}
+          </label>
+          <div style="height: 1px; background: var(--hairline); margin: 4px 0;" />
+          <label class="sidebar-ctx__item" @click="settings.toggleRightSidebarLayout(); closeSidebarCtx()">
+            <span class="sidebar-ctx__check">{{ settings.rightSidebarLayout === 'tabs' ? '✓' : '' }}</span>
+            {{ settings.language?.startsWith('zh') ? '竖向多标签模式' : 'Vertical tab mode' }}
           </label>
         </div>
         <div v-if="sidebarCtx" class="sidebar-ctx__backdrop" @click="closeSidebarCtx" />
@@ -2806,6 +3032,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @update:model-value="updateCenterOpen = $event"
     />
     <component :is="AgentSetupWizardC" v-if="!IS_APP_STORE_BUILD && AgentSetupWizardC" :open="wizardLazyOpen" @close="wizardOpen = false" />
+    <SyncConflictModal v-if="syncConflictOpen" v-model="syncConflictOpen" />
     <UnsavedDialog
       :open="unsavedOpen"
       :mode="unsavedMode"
@@ -2850,6 +3077,7 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
       @cancel="onFileChangedAction('cancel')"
     />
     <Toast />
+    <WikiLinkHoverPreview />
     <Transition name="zoom-hud-fade">
       <div v-if="zoomHudText" class="zoom-hud" role="status" aria-live="polite">
         {{ zoomHudText }}
@@ -3102,6 +3330,63 @@ watchEffect(() => { void settings.aiEnabled; void settings.aiProvider; refreshAi
   flex: 0 0 260px;
   min-width: 240px;
   background: var(--bg);
+}
+.side-sidebar--tabbed {
+  flex-direction: row;
+}
+.side-sidebar__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.side-sidebar__rail {
+  flex: 0 0 36px;
+  width: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 4px;
+  background: var(--bg-sidebar, var(--bg));
+}
+.side-sidebar__rail--right {
+  border-left: var(--bd-hair);
+}
+.side-sidebar__rail--left {
+  border-right: var(--bd-hair);
+}
+.side-sidebar__rail-spacer {
+  flex: 1 1 auto;
+}
+.side-sidebar__tab {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  position: relative;
+}
+.side-sidebar__tab:hover {
+  color: var(--text);
+  background: var(--fill-1);
+}
+.side-sidebar__tab.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.side-sidebar__tab--layout {
+  opacity: 0.7;
+}
+.side-sidebar__tab--layout:hover {
+  opacity: 1;
 }
 .side-sidebar--left {
   border-right: var(--bd-hair);

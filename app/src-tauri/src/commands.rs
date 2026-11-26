@@ -151,6 +151,11 @@ pub async fn write_file(
     .await
     .map_err(|e| format!("join: {e}"))??;
 
+    // #621 — Immediately refresh the workspace index for the saved file so
+    // removed/edited tags disappear from the Tags panel & sidebar right away.
+    #[cfg(not(target_os = "android"))]
+    super::workspace_index::reindex_path(&app, std::path::Path::new(&path_for_dispatch));
+
     // After a successful save, fire the on-save / on-tag-add triggers
     // for the active workspace. We re-extract tags from the *content*
     // we just wrote (rather than re-reading from disk) so the trigger
@@ -428,7 +433,7 @@ pub async fn print_webview_to_pdf(
     path: String,
     paper: Option<(f64, f64)>,
     margins: Option<(f64, f64, f64, f64)>,
-    outlines: Option<Vec<(u8, String, usize)>>,
+    outlines: Option<Vec<(u8, String, usize, f64)>>,
 ) -> Result<(), String> {
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send};
@@ -544,9 +549,14 @@ pub async fn print_webview_to_pdf(
                         if !doc.is_null() {
                             let page_count: usize = msg_send![doc, pageCount];
                             if page_count > 0 {
+                                let page_h = paper.map(|(_, h)| h).unwrap_or(841.89);
+                                let (top_m, bottom_m) = margins
+                                    .map(|(t, _, b, _)| (t, b))
+                                    .unwrap_or((42.52, 42.52));
+                                let printable_h = (page_h - top_m - bottom_m).max(1.0);
                                 let root: *mut AnyObject = msg_send![class!(PDFOutline), new];
                                 let mut stack: Vec<(u8, *mut AnyObject)> = Vec::new();
-                                for (level, label, page_num) in items {
+                                for (level, label, page_num, y_ratio) in items {
                                     let idx = page_num.saturating_sub(1).min(page_count - 1);
                                     let page: *mut AnyObject = msg_send![doc, pageAtIndex: idx];
                                     if page.is_null() {
@@ -557,10 +567,13 @@ pub async fn print_webview_to_pdf(
                                     let _: () = msg_send![child, setLabel: &*label_ns];
                                     let dest_alloc: *mut AnyObject =
                                         msg_send![class!(PDFDestination), alloc];
+                                    let clamped_ratio = y_ratio.clamp(0.0, 1.0);
+                                    let target_y = (page_h - top_m - clamped_ratio * printable_h + 12.0)
+                                        .clamp(0.0, page_h);
                                     let dest: *mut AnyObject = msg_send![
                                         dest_alloc,
                                         initWithPage: page,
-                                        atPoint: NSPoint::new(0.0, 792.0)
+                                        atPoint: NSPoint::new(0.0, target_y)
                                     ];
                                     if !dest.is_null() {
                                         let _: () = msg_send![child, setDestination: dest];
@@ -592,11 +605,16 @@ pub async fn print_webview_to_pdf(
     .map_err(|e| format!("join: {e}"))?
 }
 
-/// #607 / #552 — Inject hierarchical UTF-16BE BOM PDF outlines (bookmarks) into
-/// a generated vector PDF file using `lopdf` (used on Windows & Linux where
-/// macOS PDFKit is not available).
+/// #607 / #552 / #625 — Inject hierarchical UTF-16BE BOM PDF outlines (bookmarks)
+/// into a generated vector PDF file using `lopdf` (used on Windows & Linux where
+/// macOS PDFKit is not available), with explicit `/XYZ` Y-coordinates so PDF
+/// viewers scroll directly to each heading instead of leaving vertical scroll stuck.
 #[allow(dead_code)]
-fn inject_pdf_outlines_lopdf(path: &str, items: &[(u8, String, usize)]) -> Result<(), String> {
+fn inject_pdf_outlines_lopdf(
+    path: &str,
+    items: &[(u8, String, usize, f64)],
+    margins: Option<(f64, f64, f64, f64)>,
+) -> Result<(), String> {
     use lopdf::{Dictionary, Document, Object, ObjectId, StringFormat};
 
     if items.is_empty() {
@@ -610,9 +628,45 @@ fn inject_pdf_outlines_lopdf(path: &str, items: &[(u8, String, usize)]) -> Resul
     let page_ids: Vec<ObjectId> = pages.values().copied().collect();
     let page_count = page_ids.len();
 
+    fn media_box_height(doc: &Document, mut obj_id: ObjectId) -> Option<f64> {
+        for _ in 0..8 {
+            let dict = doc.get_object(obj_id).ok()?.as_dict().ok()?;
+            if let Ok(mb) = dict.get(b"MediaBox") {
+                let arr = match mb {
+                    Object::Array(a) => Some(a),
+                    Object::Reference(r) => doc.get_object(*r).ok().and_then(|o| o.as_array().ok()),
+                    _ => None,
+                };
+                if let Some(a) = arr {
+                    if a.len() >= 4 {
+                        let y1 = match &a[1] {
+                            Object::Integer(v) => *v as f64,
+                            Object::Real(v) => *v as f64,
+                            _ => 0.0,
+                        };
+                        let y2 = match &a[3] {
+                            Object::Integer(v) => *v as f64,
+                            Object::Real(v) => *v as f64,
+                            _ => 841.89,
+                        };
+                        let h = (y2 - y1).abs();
+                        if h > 1.0 {
+                            return Some(h);
+                        }
+                    }
+                }
+            }
+            obj_id = dict.get(b"Parent").ok()?.as_reference().ok()?;
+        }
+        None
+    }
+
+    let (top_m, bottom_m) = margins.map(|(t, _, b, _)| (t, b)).unwrap_or((42.52, 42.52));
+
     struct Node {
         title: String,
         page_obj: ObjectId,
+        target_y: f32,
         children: Vec<usize>,
         obj_id: ObjectId,
     }
@@ -622,14 +676,19 @@ fn inject_pdf_outlines_lopdf(path: &str, items: &[(u8, String, usize)]) -> Resul
     let mut top_indices: Vec<usize> = Vec::new();
     let mut stack: Vec<(u8, usize)> = Vec::new();
 
-    for (level, label, page_num) in items {
+    for (level, label, page_num, y_ratio) in items {
         let idx = page_num.saturating_sub(1).min(page_count - 1);
         let page_obj = page_ids[idx];
+        let page_h = media_box_height(&doc, page_obj).unwrap_or(841.89);
+        let printable_h = (page_h - top_m - bottom_m).max(1.0);
+        let clamped_ratio = y_ratio.clamp(0.0, 1.0);
+        let target_y = (page_h - top_m - clamped_ratio * printable_h + 12.0).clamp(0.0, page_h) as f32;
         let node_idx = nodes.len();
         let obj_id = doc.new_object_id();
         nodes.push(Node {
             title: label.clone(),
             page_obj,
+            target_y,
             children: Vec::new(),
             obj_id,
         });
@@ -681,8 +740,8 @@ fn inject_pdf_outlines_lopdf(path: &str, items: &[(u8, String, usize)]) -> Resul
                 Object::Array(vec![
                     node.page_obj.into(),
                     Object::Name(b"XYZ".to_vec()),
-                    Object::Null,
-                    Object::Null,
+                    Object::Real(0.0),
+                    Object::Real(node.target_y),
                     Object::Null,
                 ]),
             );
@@ -733,7 +792,7 @@ pub async fn print_webview_to_pdf(
     path: String,
     paper: Option<(f64, f64)>,
     margins: Option<(f64, f64, f64, f64)>,
-    outlines: Option<Vec<(u8, String, usize)>>,
+    outlines: Option<Vec<(u8, String, usize, f64)>>,
 ) -> Result<(), String> {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2Environment6, ICoreWebView2_2, ICoreWebView2_7,
@@ -827,8 +886,9 @@ pub async fn print_webview_to_pdf(
 
     if let Some(items) = outlines.filter(|v| !v.is_empty()) {
         let path2 = path.clone();
+        let margins2 = margins;
         let _ = tauri::async_runtime::spawn_blocking(move || {
-            if let Err(e) = inject_pdf_outlines_lopdf(&path2, &items) {
+            if let Err(e) = inject_pdf_outlines_lopdf(&path2, &items, margins2) {
                 eprintln!("[pdf] outline injection warning: {e}");
             }
         })
@@ -844,7 +904,7 @@ pub async fn print_webview_to_pdf(
     path: String,
     paper: Option<(f64, f64)>,
     margins: Option<(f64, f64, f64, f64)>,
-    outlines: Option<Vec<(u8, String, usize)>>,
+    outlines: Option<Vec<(u8, String, usize, f64)>>,
 ) -> Result<(), String> {
     use gio::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -923,8 +983,9 @@ pub async fn print_webview_to_pdf(
 
     if let Some(items) = outlines.filter(|v| !v.is_empty()) {
         let path2 = path.clone();
+        let margins2 = margins;
         let _ = tauri::async_runtime::spawn_blocking(move || {
-            if let Err(e) = inject_pdf_outlines_lopdf(&path2, &items) {
+            if let Err(e) = inject_pdf_outlines_lopdf(&path2, &items, margins2) {
                 eprintln!("[pdf] outline injection warning: {e}");
             }
         })
@@ -940,7 +1001,7 @@ pub async fn print_webview_to_pdf(
     _path: String,
     _paper: Option<(f64, f64)>,
     _margins: Option<(f64, f64, f64, f64)>,
-    _outlines: Option<Vec<(u8, String, usize)>>,
+    _outlines: Option<Vec<(u8, String, usize, f64)>>,
 ) -> Result<(), String> {
     Err("direct PDF export is desktop-only; use print_webview".into())
 }
@@ -1129,7 +1190,15 @@ pub fn fs_create_dir(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn fs_delete(path: String) -> Result<(), String> {
+pub fn fs_delete(
+    watcher: tauri::State<'_, super::watcher::WatcherState>,
+    path: String,
+) -> Result<(), String> {
+    super::watcher::unwatch_under_path(&watcher, Path::new(&path));
+    fs_delete_inner(path)
+}
+
+pub fn fs_delete_inner(path: String) -> Result<(), String> {
     let p = Path::new(&path);
     if !p.exists() {
         return Ok(()); // idempotent — already gone is fine
@@ -1287,7 +1356,73 @@ pub fn vim_switch_input_method(app: tauri::AppHandle, mode: String) -> Result<()
         });
         return Ok(());
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+        use tauri::Manager;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SendMessageW};
+
+        #[link(name = "imm32")]
+        extern "system" {
+            fn ImmGetDefaultIMEWnd(hwnd: isize) -> isize;
+        }
+
+        const WM_IME_CONTROL: u32 = 0x0283;
+        const IMC_GETCONVERSIONMODE: usize = 0x0001;
+        const IMC_SETCONVERSIONMODE: usize = 0x0002;
+        const IMC_GETOPENSTATUS: usize = 0x0005;
+        const IMC_SETOPENSTATUS: usize = 0x0006;
+        const IME_CMODE_NATIVE: isize = 0x0001;
+
+        static SAVED_IME_ACTIVE: AtomicBool = AtomicBool::new(false);
+        static SAVED_IME_CONV: AtomicIsize = AtomicIsize::new(IME_CMODE_NATIVE);
+
+        let is_insert = mode == "insert";
+        let main_hwnd = app
+            .get_webview_window("main")
+            .and_then(|w| w.hwnd().ok())
+            .map(|h| h.0 as isize)
+            .unwrap_or(0);
+
+        unsafe {
+            let fg = GetForegroundWindow() as isize;
+            let target_hwnd = if fg != 0 { fg } else { main_hwnd };
+            if target_hwnd == 0 {
+                return Ok(());
+            }
+            let ime_wnd = ImmGetDefaultIMEWnd(target_hwnd);
+            if ime_wnd == 0 {
+                return Ok(());
+            }
+            if is_insert {
+                if SAVED_IME_ACTIVE.swap(false, Ordering::SeqCst) {
+                    let conv = SAVED_IME_CONV.load(Ordering::SeqCst);
+                    SendMessageW(ime_wnd as _, WM_IME_CONTROL, IMC_SETOPENSTATUS, 1);
+                    SendMessageW(
+                        ime_wnd as _,
+                        WM_IME_CONTROL,
+                        IMC_SETCONVERSIONMODE,
+                        conv | IME_CMODE_NATIVE,
+                    );
+                }
+            } else {
+                let open = SendMessageW(ime_wnd as _, WM_IME_CONTROL, IMC_GETOPENSTATUS, 0);
+                let conv = SendMessageW(ime_wnd as _, WM_IME_CONTROL, IMC_GETCONVERSIONMODE, 0);
+                if open != 0 && (conv & IME_CMODE_NATIVE) != 0 {
+                    SAVED_IME_CONV.store(conv, Ordering::SeqCst);
+                    SAVED_IME_ACTIVE.store(true, Ordering::SeqCst);
+                    SendMessageW(
+                        ime_wnd as _,
+                        WM_IME_CONTROL,
+                        IMC_SETCONVERSIONMODE,
+                        conv & !IME_CMODE_NATIVE,
+                    );
+                }
+            }
+        }
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (&app, mode);
         Ok(())
@@ -1318,11 +1453,16 @@ pub fn fs_file_exists(path: String) -> bool {
 
 #[tauri::command]
 pub async fn fs_rename(
+    watcher: tauri::State<'_, super::watcher::WatcherState>,
     from: String,
     to: String,
     workspace_root: Option<String>,
     update_links: Option<bool>,
 ) -> Result<Vec<String>, String> {
+    // Release any OS-level directory watches covering `from` or its children
+    // before renaming. On Windows, `ReadDirectoryChangesW` holds an open
+    // directory handle that causes `fs::rename` to fail with os error 5/32.
+    super::watcher::unwatch_under_path(&watcher, Path::new(&from));
     tauri::async_runtime::spawn_blocking(move || {
         fs_rename_with_workspace(from, to, workspace_root, update_links.unwrap_or(true))
     })
@@ -1341,23 +1481,19 @@ pub fn fs_rename_with_workspace(
     if !from_p.exists() {
         return Err(format!("source missing: {from}"));
     }
-    if to_p.exists() {
+    let case_only_rename = from_p != to_p
+        && from_p
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&to_p.to_string_lossy());
+    if to_p.exists() && !case_only_rename {
         return Err(format!("target already exists: {to}"));
     }
 
-    // v4.3.5 — per-file `.assets/` follow-along. If a sibling directory
-    // named `<from-stem>.assets/` exists next to the file we're renaming,
-    // move it alongside so the per-file attachment layout survives the
-    // rename. `_assets/` (the shared mode) is deliberately untouched —
-    // it's shared across every md in that directory.
-    //
-    // We compute the assets-rename target up front, attempt the primary
-    // rename first, then the assets rename, then the link rewrite.
-    // Any step beyond the primary that fails is logged but non-fatal:
-    // the user's file rename succeeded; we don't want to revert it just
-    // because the assets folder rename hit a permission edge case.
-    let from_assets = sibling_assets_dir(from_p);
-    let to_assets = sibling_assets_dir(to_p);
+    // v4.3.5 — per-file `.assets/` follow-along. Only applies to markdown files
+    // (never directories).
+    let is_md_file = from_p.is_file() && is_markdown_path(from_p);
+    let from_assets = if is_md_file { sibling_assets_dir(from_p) } else { None };
+    let to_assets = if is_md_file { sibling_assets_dir(to_p) } else { None };
     let stems_differ = from_assets
         .as_ref()
         .zip(to_assets.as_ref())
@@ -1366,7 +1502,25 @@ pub fn fs_rename_with_workspace(
         })
         .unwrap_or(false);
 
-    fs::rename(from_p, to_p).map_err(|e| format!("rename failed: {e}"))?;
+    if case_only_rename {
+        // Two-step rename through a temporary sibling name so case-insensitive
+        // filesystems (NTFS / APFS) update the directory entry casing cleanly.
+        let parent = from_p.parent().unwrap_or_else(|| Path::new("."));
+        let tmp = parent.join(format!(
+            ".solomd-rename-tmp-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        fs::rename(from_p, &tmp).map_err(|e| format!("rename failed: {e}"))?;
+        if let Err(e) = fs::rename(&tmp, to_p) {
+            let _ = fs::rename(&tmp, from_p);
+            return Err(format!("rename failed: {e}"));
+        }
+    } else {
+        fs::rename(from_p, to_p).map_err(|e| format!("rename failed: {e}"))?;
+    }
 
     let mut extra_pairs: Vec<(Vec<String>, Vec<String>)> = Vec::new();
     if let (Some(fa), Some(ta)) = (from_assets, to_assets) {
@@ -1474,11 +1628,13 @@ fn rewrite_assets_refs(file: &Path, old_assets: &Path, new_assets: &Path) -> Res
 
 #[tauri::command]
 pub async fn fs_move(
+    watcher: tauri::State<'_, super::watcher::WatcherState>,
     from: String,
     to: String,
     workspace_root: Option<String>,
     update_links: Option<bool>,
 ) -> Result<Vec<String>, String> {
+    super::watcher::unwatch_under_path(&watcher, Path::new(&from));
     tauri::async_runtime::spawn_blocking(move || {
         fs_move_with_workspace(from, to, workspace_root, update_links.unwrap_or(true))
     })
@@ -1875,8 +2031,11 @@ fn wikilink_re() -> &'static regex_lite::Regex {
 
 fn strip_markdown_ext(s: &str) -> &str {
     for ext in [".md", ".markdown", ".mdown", ".mkd"] {
-        if s.len() > ext.len() && s[s.len() - ext.len()..].eq_ignore_ascii_case(ext) {
-            return &s[..s.len() - ext.len()];
+        if s.len() > ext.len() {
+            let start = s.len() - ext.len();
+            if s.is_char_boundary(start) && s[start..].eq_ignore_ascii_case(ext) {
+                return &s[..start];
+            }
         }
     }
     s
@@ -2552,7 +2711,11 @@ pub fn entry_times(meta: &fs::Metadata) -> (Option<u64>, Option<u64>) {
 /// "instant" and "10 seconds with the antivirus also doing on-access
 /// scanning". Reported by user 2026-04-26 as "Win 下打开一个文件比较多
 /// 的目录还是有些卡顿".
-///
+#[allow(dead_code)]
+pub fn list_dir_inner(path: String, show_hidden: bool) -> Result<Vec<DirEntry>, String> {
+    list_dir_with(path, show_hidden, false)
+}
+
 /// `with_times` stats every entry for its modified/created time. It is off
 /// for the normal listing (see above for why metadata() is avoided) and on
 /// only when the tree is sorted by date (#342).
@@ -2994,18 +3157,26 @@ pub fn delete_frontmatter_property_str(raw: &str, key: &str) -> Result<String, S
 /// the open editor without a re-read. Body bytes + key order are preserved.
 #[tauri::command]
 pub async fn update_frontmatter_property(
+    app: tauri::AppHandle,
     path: String,
     key: String,
     value: serde_json::Value,
 ) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let path_for_index = path.clone();
+    let next = tauri::async_runtime::spawn_blocking(move || {
         let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let next = set_frontmatter_property_str(&raw, &key, &value)?;
+        super::watcher::mark_self_write(&path);
         fs::write(&path, &next).map_err(|e| e.to_string())?;
-        Ok(next)
+        Ok::<String, String>(next)
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("join: {e}"))??;
+    #[cfg(not(target_os = "android"))]
+    super::workspace_index::reindex_path(&app, Path::new(&path_for_index));
+    #[cfg(target_os = "android")]
+    let _ = (&app, &path_for_index);
+    Ok(next)
 }
 
 /// Tauri command: surgically delete a frontmatter property on `path` and
@@ -3013,17 +3184,25 @@ pub async fn update_frontmatter_property(
 /// of the remaining keys are preserved.
 #[tauri::command]
 pub async fn delete_frontmatter_property(
+    app: tauri::AppHandle,
     path: String,
     key: String,
 ) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let path_for_index = path.clone();
+    let next = tauri::async_runtime::spawn_blocking(move || {
         let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let next = delete_frontmatter_property_str(&raw, &key)?;
+        super::watcher::mark_self_write(&path);
         fs::write(&path, &next).map_err(|e| e.to_string())?;
-        Ok(next)
+        Ok::<String, String>(next)
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("join: {e}"))??;
+    #[cfg(not(target_os = "android"))]
+    super::workspace_index::reindex_path(&app, Path::new(&path_for_index));
+    #[cfg(target_os = "android")]
+    let _ = (&app, &path_for_index);
+    Ok(next)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -3344,6 +3523,11 @@ pub async fn download_and_install_update(
             .arg(&dest_path)
             .spawn()
             .map_err(|e| format!("failed to launch MSI installer: {e}"))?;
+        let app_for_exit = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            app_for_exit.exit(0);
+        });
     }
 
     #[cfg(target_os = "macos")]
@@ -3614,12 +3798,12 @@ mod v523_regression_tests {
         doc.save(&pdf_path).unwrap();
 
         let items = vec![
-            (1u8, "1 第一章 概览".to_string(), 1usize),
-            (2u8, "1.1 子节 Architecture".to_string(), 2usize),
-            (1u8, "2 第二章 总结".to_string(), 2usize),
+            (1u8, "1 第一章 概览".to_string(), 1usize, 0.0f64),
+            (2u8, "1.1 子节 Architecture".to_string(), 2usize, 0.5f64),
+            (1u8, "2 第二章 总结".to_string(), 2usize, 0.8f64),
         ];
         let path_str = pdf_path.to_string_lossy().to_string();
-        inject_pdf_outlines_lopdf(&path_str, &items).unwrap();
+        inject_pdf_outlines_lopdf(&path_str, &items, Some((42.52, 42.52, 42.52, 42.52))).unwrap();
 
         let reloaded = Document::load(&pdf_path).unwrap();
         let catalog = reloaded.catalog().unwrap();
@@ -3632,5 +3816,42 @@ mod v523_regression_tests {
         assert_eq!(first_dict.get(b"Count").unwrap().as_i64().unwrap(), 1);
         assert!(first_dict.get(b"First").is_ok());
         assert!(first_dict.get(b"Next").is_ok());
+        // #625 — Dest must carry an explicit numeric Y coordinate (not Null)
+        let dest = first_dict.get(b"Dest").unwrap().as_array().unwrap();
+        let top_y = dest[3].as_float().expect("bookmark /XYZ top Y must be numeric");
+        assert!(top_y > 700.0 && top_y <= 842.0);
+        let child_id = first_dict.get(b"First").unwrap().as_reference().unwrap();
+        let child_dest = reloaded.get_dictionary(child_id).unwrap().get(b"Dest").unwrap().as_array().unwrap();
+        let child_y = child_dest[3].as_float().expect("child bookmark /XYZ top Y must be numeric");
+        assert!(child_y < top_y, "mid-page heading must have lower PDF Y than top-of-page heading");
+    }
+
+    #[test]
+    fn issue_628_rename_cjk_folder_does_not_panic_on_utf8_boundary() {
+        // Exact folder name from issue #628 where s.len() - ".md".len() landed
+        // inside the 3-byte UTF-8 character '部' (bytes 28..31).
+        assert_eq!(strip_markdown_ext("第8篇：打包、安全与部署"), "第8篇：打包、安全与部署");
+        assert_eq!(strip_markdown_ext("笔记.MD"), "笔记");
+
+        let dir = tempfile::tempdir().unwrap();
+        let old_folder = dir.path().join("第8篇：打包、安全与部署");
+        let new_folder = dir.path().join("第9篇：打包、安全与部署");
+        fs::create_dir_all(&old_folder).unwrap();
+        fs::write(old_folder.join("note.md"), "# Hello\n").unwrap();
+        fs::write(dir.path().join("index.md"), "[link](./第8篇：打包、安全与部署/note.md)\n").unwrap();
+
+        let updated = fs_rename_with_workspace(
+            old_folder.to_string_lossy().to_string(),
+            new_folder.to_string_lossy().to_string(),
+            Some(dir.path().to_string_lossy().to_string()),
+            true,
+        )
+        .expect("renaming CJK folder must succeed without panicking");
+
+        assert!(!old_folder.exists());
+        assert!(new_folder.is_dir());
+        assert_eq!(updated.len(), 1);
+        let index = fs::read_to_string(dir.path().join("index.md")).unwrap();
+        assert!(index.contains("第9篇：打包、安全与部署/note.md"));
     }
 }

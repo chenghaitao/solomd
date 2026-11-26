@@ -409,10 +409,116 @@ export function indentCodeBlockPaste(
     matchedIndent = openFence.indent;
   }
 
-  if (!matchedIndent) return rawText;
-
   const firstLineStart = selFrom > 0 ? doc.lastIndexOf('\n', selFrom - 1) + 1 : 0;
   const prefixBefore = doc.slice(firstLineStart, selFrom);
+
+  if (!matchedIndent) {
+    const normalizedPaste = rawText.replace(/\r\n?/g, '\n');
+
+    // Helper: align a Markdown table to a given continuation prefix (`   `, `>   `, etc.).
+    const alignPastedTable = (contPrefix: string): string | null => {
+      const tableLines = normalizedPaste.split('\n');
+      const nonEmpty = tableLines.filter((l) => l.trim().length > 0);
+      const isTableSep = (s: string) =>
+        /^[ \t]*\|?[ \t]*:?-{1,}:?[ \t]*(?:\|[ \t]*:?-{1,}:?[ \t]*)+\|?[ \t]*$/.test(s) ||
+        /^[ \t]*\|[ \t]*:?-{1,}:?[ \t]*\|[ \t]*$/.test(s);
+      if (
+        nonEmpty.length < 2 ||
+        !nonEmpty[0].includes('|') ||
+        isTableSep(nonEmpty[0]) ||
+        !isTableSep(nonEmpty[1])
+      ) {
+        return null;
+      }
+      // Dedent any common leading spaces/tabs from the pasted table first so
+      // copying a table from one list depth into another never double-indents.
+      let sharedLead: string | null = null;
+      for (const l of nonEmpty) {
+        const lead = /^[ \t]*/.exec(l)?.[0] ?? '';
+        if (sharedLead === null) {
+          sharedLead = lead;
+        } else {
+          let k = 0;
+          while (k < sharedLead.length && k < lead.length && sharedLead[k] === lead[k]) k++;
+          sharedLead = sharedLead.slice(0, k);
+        }
+      }
+      const stripLen = sharedLead?.length ?? 0;
+      return tableLines
+        .map((line, idx) => {
+          const stripped = stripLen > 0 && line.length >= stripLen ? line.slice(stripLen) : line;
+          if (idx === 0) return stripped;
+          if (stripped.length === 0) return '';
+          return `${contPrefix}${stripped}`;
+        })
+        .join('\n');
+    };
+
+    // 1. Pasting onto a list/quote soft-break indented line — either empty
+    //    (`1. item\n   |`, `- item\n  |`, `> - item\n>   |`) or with existing
+    //    continuation text (`1. item\n   foo|`): align Markdown tables (with
+    //    dedent) and multi-line plain text so lines 2+ stay aligned as soft
+    //    breaks inside the enclosing list item.
+    const softBreakLead = /^((?:[ \t]*(?:>[ \t]?)*)[ \t]+)/.exec(prefixBefore);
+    if (softBreakLead) {
+      const contPrefix = softBreakLead[1];
+      const isWhitespaceOnly = contPrefix.length === prefixBefore.length;
+      if (isWhitespaceOnly) {
+        const alignedTable = alignPastedTable(contPrefix);
+        if (alignedTable !== null) return alignedTable;
+      }
+
+      if (normalizedPaste.includes('\n')) {
+        // Only treat this indented line as a list soft-break when an earlier
+        // non-blank line in the same block is a list item (or continuation).
+        const curLineIdx = doc.slice(0, firstLineStart).split('\n').length - 1;
+        let underList = false;
+        for (let i = curLineIdx - 1; i >= 0; i--) {
+          const prev = lines[i];
+          if (prev.trim() === '') break;
+          if (/^(?:[ \t]*(?:>[ \t]?)*)[ \t]*(?:[-*+]|\d+[.)])[ \t]+/.test(prev)) {
+            underList = true;
+            break;
+          }
+          if (!/^(?:[ \t]*(?:>[ \t]?)*)[ \t]+/.test(prev)) break;
+        }
+        if (underList) {
+          const pasteLines = normalizedPaste.split('\n');
+          return pasteLines
+            .map((line, idx) => {
+              if (idx === 0) return line;
+              if (line.length === 0) return '';
+              return `${contPrefix}${line}`;
+            })
+            .join('\n');
+        }
+      }
+    }
+
+    // 2. Pasting multi-line content directly inside a list item line
+    //    (e.g. `- item|`, `1. |`, `- [ ] task|`, `> 1. item|`): align lines
+    //    from line 2 onward to the list item's content column as soft breaks.
+    if (normalizedPaste.includes('\n')) {
+      const listMatch = /^((?:[ \t]*(?:>[ \t]?)*))([ \t]*)((?:[-*+]|\d+[.)])[ \t]+)/.exec(prefixBefore);
+      if (listMatch) {
+        const [, quotePrefix, indent, marker] = listMatch;
+        const contPrefix = `${quotePrefix}${indent}${' '.repeat(marker.length)}`;
+        const alignedTable = alignPastedTable(contPrefix);
+        if (alignedTable !== null) return alignedTable;
+        const pasteLines = normalizedPaste.split('\n');
+        return pasteLines
+          .map((line, idx) => {
+            if (idx === 0) return line;
+            if (line.length === 0) return '';
+            return `${contPrefix}${line}`;
+          })
+          .join('\n');
+      }
+    }
+
+    return rawText;
+  }
+
   let missingFirst = '';
   if (
     /^[ \t]*$/.test(prefixBefore) &&
@@ -543,7 +649,13 @@ function contentStart(line: string): number {
   return m ? m[0].length : line.length - line.trimStart().length;
 }
 
-const HEADING_NUM_PREFIX = /^(\d+(?:\.\d+)*\.?[ \t]+)/;
+// #669 — Match only genuine heading-number prefixes (`1. `, `1.1 `, `1.1.1 `)
+// produced by autoNumberHeadings:
+//  - Single-segment prefix MUST have a trailing dot (`1. `..`999. `), never a
+//    bare number (`2026 年度总结`) or 4-digit year (`2026.`).
+//  - Multi-segment prefix rejects 4-digit years (`2026.11.23 `) and leading-zero
+//    dates (`01.05 `, `2026.05.01 `).
+const HEADING_NUM_PREFIX = /^(?:[1-9]\d{0,2}\.[ \t]+|[1-9]\d{0,2}(?:\.[1-9]\d{0,2})+\.?[ \t]+)/;
 
 /**
  * #474 — Automatically number (or renumber / unnumber) multi-level ATX

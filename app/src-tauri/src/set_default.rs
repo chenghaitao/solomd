@@ -244,6 +244,42 @@ mod windows {
             sh_change_notify();
         }
 
+        // 5. On Windows 10/11, if `.md` already has a protected `UserChoice`
+        //    locked to another ProgId (e.g. VSCode, Notepad, Obsidian), Windows
+        //    Explorer ignores `HKCU\Software\Classes\.md` until the user confirms
+        //    SoloMD in Windows Default Apps settings.
+        let mut locked_by_other = false;
+        let user_choice_rel =
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.md\UserChoice";
+        if let Ok(uc_key) = hkcu.open_subkey(user_choice_rel) {
+            if let Ok(prog_id) = uc_key.get_value::<String, _>("ProgId") {
+                let p = prog_id.trim();
+                if !p.is_empty()
+                    && !p.eq_ignore_ascii_case("SoloMD.md")
+                    && !p.eq_ignore_ascii_case(r"Applications\SoloMD.exe")
+                {
+                    let _ = hkcu.delete_subkey(user_choice_rel);
+                    if let Ok(uc_after) = hkcu.open_subkey(user_choice_rel) {
+                        if let Ok(still_prog) = uc_after.get_value::<String, _>("ProgId") {
+                            if !still_prog.eq_ignore_ascii_case("SoloMD.md") {
+                                locked_by_other = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The UserChoice key is protected, so Windows may still ignore the
+        // registry defaults — open Default Apps so the user can confirm.
+        if locked_by_other {
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "start", "", "ms-settings:defaultapps"])
+                .creation_flags(0x0800_0000)
+                .spawn();
+        }
+
         Ok(ok_count)
     }
 

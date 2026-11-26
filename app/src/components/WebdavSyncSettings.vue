@@ -35,6 +35,10 @@ const { t } = useI18n();
 
 const vaultSyncBusyId = ref('');
 
+function openSyncConflicts() {
+  window.dispatchEvent(new CustomEvent('solomd:open-sync-conflicts'));
+}
+
 interface SyncProgressPayload {
   channel: 'webdav' | 'local_vault' | 'cloud_api' | string;
   direction: 'push' | 'pull' | string;
@@ -296,6 +300,16 @@ onMounted(async () => {
     unlistenSyncProgress = await listen<SyncProgressPayload>('solomd://sync-progress', (event) => {
       const p = event.payload;
       if (!p) return;
+      if (p.channel === 'sync') {
+        // #636 / #637 — Append conflict/detail messages to any active sync channel
+        // without resetting progress counters or percent.
+        for (const key of ['webdav', 'local_vault', 'cloud_api', 'vaults'] as const) {
+          if (syncProgress[key].active) {
+            appendSyncLog(key, p.message);
+          }
+        }
+        return;
+      }
       const ch = p.channel as 'webdav' | 'local_vault' | 'cloud_api';
       if (ch === 'webdav' || ch === 'local_vault' || ch === 'cloud_api') {
         const target = syncProgress[ch];
@@ -309,7 +323,7 @@ onMounted(async () => {
       }
       if (vaultSyncBusyId.value) {
         const vTarget = syncProgress.vaults;
-        vTarget.percent = Math.max(2, Math.min(100, p.percent || 0));
+        vTarget.percent = Math.max(vTarget.percent, Math.max(2, Math.min(100, p.percent || 0)));
         vTarget.current = p.current || 0;
         vTarget.total = p.total || 0;
         appendSyncLog('vaults', p.message);
@@ -944,6 +958,19 @@ async function pullCloudVault() {
 
 <template>
   <section class="settings__section webdav-sync">
+    <div
+      v-if="workspace.currentFolder"
+      style="display: flex; justify-content: flex-end; margin-bottom: 8px;"
+    >
+      <button
+        type="button"
+        class="settings__btn-secondary"
+        style="font-size: 12px; padding: 4px 10px;"
+        @click="openSyncConflicts"
+      >
+        {{ settings.language === 'zh' ? '冲突与快照管理…' : 'Conflict & Snapshot Manager…' }}
+      </button>
+    </div>
     <!-- ==================== 笔记库管理 (#531) ==================== -->
     <div v-show="searching || currentTab === 'vaults'" class="webdav-sync__panel">
       <h4 class="settings__heading">
@@ -1070,6 +1097,14 @@ async function pullCloudVault() {
               {{ syncProgress.vaults.current }} / {{ syncProgress.vaults.total }} ·
             </template>
             {{ syncProgress.vaults.percent }}%
+            <button
+              type="button"
+              class="btn-secondary"
+              style="margin-left: 8px; padding: 2px 8px; font-size: 11px;"
+              @click="openSyncConflicts"
+            >
+              {{ settings.language === 'zh' ? '冲突管理…' : 'Conflicts…' }}
+            </button>
           </span>
         </div>
         <div class="webdav-sync__progress-track">
@@ -1165,8 +1200,8 @@ async function pullCloudVault() {
           :class="{ 'webdav-sync__check-item--disabled': !settings.webdavEnabled }"
           :title="
             settings.language === 'zh'
-              ? '保持子目录结构，并将根目录散落文件自动分门别类 (笔记文档 / 图片素材 / 文献附件)'
-              : 'Preserve subfolder structure and auto-categorize root files (Notes / Images / References)'
+              ? '勾选后会将根目录散落文件自动归类至 笔记文档 / 图片素材 / 文献附件；不勾选则完全按本地目录 1:1 同步'
+              : 'Auto-categorize root files into Notes / Images / References; uncheck to keep exact 1:1 local directory structure'
           "
         >
           <input
@@ -1176,7 +1211,7 @@ async function pullCloudVault() {
             @change="saveConfig"
           />
           <span class="webdav-sync__check-label">
-            {{ settings.language === 'zh' ? '保持目录结构' : 'Keep Directory Structure' }}
+            {{ settings.language === 'zh' ? '根目录文件自动分类' : 'Auto-categorize Root Files' }}
           </span>
         </label>
 
@@ -1477,7 +1512,7 @@ async function pullCloudVault() {
             @change="saveConfig"
           />
           <span class="webdav-sync__check-label">
-            {{ settings.language === 'zh' ? '保持目录结构' : 'Keep Directory Structure' }}
+            {{ settings.language === 'zh' ? '根目录文件自动分类' : 'Auto-categorize Root Files' }}
           </span>
         </label>
 
@@ -1817,7 +1852,7 @@ async function pullCloudVault() {
             @change="saveConfig"
           />
           <span class="webdav-sync__check-label">
-            {{ settings.language === 'zh' ? '保持目录结构' : 'Keep Directory Structure' }}
+            {{ settings.language === 'zh' ? '根目录文件自动分类' : 'Auto-categorize Root Files' }}
           </span>
         </label>
 

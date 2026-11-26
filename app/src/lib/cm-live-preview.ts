@@ -25,7 +25,7 @@ import {
 import { frozenDuringComposition, isImeSafeFlushTransaction } from './cm-ime-guard';
 import { tags as t } from '@lezer/highlight';
 import { isDragging, isDragEndTransaction } from './cm-drag-aware';
-import { bulletDeco, hrDeco, listItemHasTask, type MdSyntaxNode } from './cm-live-render';
+import { bulletDecoForDepth, hrDeco, listItemHasTask, type MdSyntaxNode } from './cm-live-render';
 import { hljsFallbackExtension } from './cm-hljs-fallback';
 
 // Marker node names (from @lezer/markdown) we want to hide off-line.
@@ -39,6 +39,19 @@ const HIDDEN_MARK_NODES = new Set<string>([
 ]);
 
 const hideDeco = Decoration.replace({});
+
+function isInsideFrontmatter(doc: EditorView['state']['doc'], pos: number): boolean {
+  if (doc.lines < 2) return false;
+  if (doc.line(1).text.trim() !== '---') return false;
+  for (let ln = 2; ln <= Math.min(doc.lines, 200); ln++) {
+    const line = doc.line(ln);
+    const t = line.text.trim();
+    if (t === '---' || t === '...') {
+      return pos <= line.to;
+    }
+  }
+  return false;
+}
 
 // #353 "Always show Markdown markers": nothing is hidden or replaced, so the
 // rendered styling (heading size, bold) stays and no line reflows when the
@@ -72,6 +85,15 @@ const makeLiveMarkdownPlugin = (showMarkers: boolean, hideActiveLineMarkers = fa
       }
       if (!showMarkers && update.selectionSet && !isDragging(update.state)) {
         if (hideActiveLineMarkers) {
+          return;
+        }
+        const prevSel = update.startState.selection.main;
+        const nextSel = update.state.selection.main;
+        const prevFromLine = update.startState.doc.lineAt(prevSel.from).number;
+        const prevToLine = update.startState.doc.lineAt(prevSel.to).number;
+        const nextFromLine = update.state.doc.lineAt(nextSel.from).number;
+        const nextToLine = update.state.doc.lineAt(nextSel.to).number;
+        if (prevFromLine === nextFromLine && prevToLine === nextToLine && prevSel.empty === nextSel.empty) {
           return;
         }
         this.decorations = this.build(update.view);
@@ -136,12 +158,18 @@ const makeLiveMarkdownPlugin = (showMarkers: boolean, hideActiveLineMarkers = fa
                 );
                 builder.add(node.from, after === ' ' ? node.to + 1 : node.to, hideDeco);
               } else {
-                builder.add(node.from, node.to, bulletDeco);
+                let listDepth = 0;
+                for (let p = node.node.parent; p; p = p.parent) {
+                  if (p.name === 'BulletList' || p.name === 'OrderedList') listDepth++;
+                }
+                builder.add(node.from, node.to, bulletDecoForDepth(Math.max(0, listDepth - 1)));
               }
               return;
             }
             if (name === 'HorizontalRule') {
               if (showMarkers || onCaretLine || node.to <= node.from) return;
+              // #626 — never replace YAML frontmatter `---` delimiters with <hr>.
+              if (node.from === 0 || isInsideFrontmatter(view.state.doc, node.from)) return;
               builder.add(node.from, node.to, hrDeco);
               return;
             }
