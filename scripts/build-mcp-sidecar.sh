@@ -30,6 +30,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# ---------------------------------------------------------------------------
+# Windows: rustc spawns `link.exe` by bare name and lets PATH pick which one it
+# gets. This script always runs under Git Bash, and Git Bash puts its own
+# /usr/bin - which ships coreutils' link.exe, a two-argument hardlink utility -
+# in front of the Windows PATH that vcvars64.bat prepared. The linker is then
+# invoked with cargo's argument list and dies with
+#     link: extra operand '...rcgu.o'
+# vcvars64.bat exports VCToolsInstallDir, so put the MSVC toolchain back at the
+# front of PATH. No-op on macOS / Linux, and inside a plain cmd call too.
+# ---------------------------------------------------------------------------
+if [[ -n "${VCToolsInstallDir:-}" ]] && command -v cygpath >/dev/null 2>&1; then
+    case "$(uname -m)" in
+        aarch64|arm64) MSVC_HOST_DIR="Hostarm64/arm64" ;;
+        *)             MSVC_HOST_DIR="Hostx64/x64"    ;;
+    esac
+    MSVC_BIN="$(cygpath -u "${VCToolsInstallDir%/}")/bin/$MSVC_HOST_DIR"
+    if [[ -d "$MSVC_BIN" ]]; then
+        export PATH="$MSVC_BIN:$PATH"
+    fi
+fi
+
 MCP_CRATE="$REPO_ROOT/mcp-server"
 OUT_DIR="$REPO_ROOT/app/src-tauri/binaries"
 

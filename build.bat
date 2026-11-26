@@ -54,13 +54,51 @@ for %%P in (
   "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
   "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
   "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-) do ( if exist %%P if not defined VSVCVARS set "VSVCVARS=%%P" )
+) do ( if exist %%P if not defined VSVCVARS set "VSVCVARS=%%~P" )
 
 if defined VSVCVARS (
-  echo [0/5] loading VS environment: %VSVCVARS%
-  call "%VSVCVARS%" >nul 2>&1
+  REM   !VAR! and not %VAR% below. A percent-expanded value is spliced into
+  REM   the block text BEFORE cmd matches its parentheses, so a value holding
+  REM   "(x86)" lets that ")" close the block early and the rest of the line
+  REM   gets parsed as a command - the exact source of
+  REM     \Microsoft was unexpected at this time.
+  REM   !VAR! is expanded when the line RUNS, after the block is parsed.
+  REM   For the same reason the for-list item is stored with %%~P (quotes
+  REM   stripped): the value is then re-quoted once, below, instead of being
+  REM   double-quoted into call ""C:\...\vcvars64.bat"" - which call re-parses
+  REM   and also dies on the space in "Program Files".
+  echo [0/5] loading VS environment: !VSVCVARS!
+  call "!VSVCVARS!" >nul 2>&1
 ) else (
   echo [WARN] vcvars64.bat not found - vendored-openssl / libgit2 may fail to build
+)
+
+REM -- 0b/5 backfill the Windows SDK dirs when vcvars could not ------------
+REM   vcvars finds the Windows SDK by querying the registry for the Kits root.
+REM   When that lookup is unavailable (locked-down tooling, stale SDK
+REM   registration) INCLUDE and LIB come back with the MSVC paths only, and
+REM   the first link dies with
+REM     LINK : fatal error LNK1181: cannot open input file 'kernel32.lib'
+REM   which reads like a broken VS install. Fill both from the highest
+REM   installed Kit instead. Nothing happens when vcvars already did its job.
+set "PFX86=%ProgramFiles(x86)%"
+echo !INCLUDE! | findstr /I /C:"Windows Kits" >nul
+if errorlevel 1 (
+  set "WINSDKVER="
+  if exist "!PFX86!\Windows Kits\10\Include" (
+    REM   dir /on sorts by name, so the last entry is the newest Kit.
+    for /f "delims=" %%V in ('dir /b /ad-h /on "!PFX86!\Windows Kits\10\Include" 2^>nul') do set "WINSDKVER=%%V"
+  )
+  if defined WINSDKVER (
+    set "SDKLIBARCH=x64"
+    if /I "!VSCMD_ARG_TGT_ARCH!"=="arm64" set "SDKLIBARCH=arm64"
+    set "INCLUDE=!INCLUDE!;!PFX86!\Windows Kits\10\Include\!WINSDKVER!\ucrt;!PFX86!\Windows Kits\10\Include\!WINSDKVER!\shared;!PFX86!\Windows Kits\10\Include\!WINSDKVER!\um"
+    set "LIB=!LIB!;!PFX86!\Windows Kits\10\Lib\!WINSDKVER!\ucrt\!SDKLIBARCH!;!PFX86!\Windows Kits\10\Lib\!WINSDKVER!\um\!SDKLIBARCH!"
+    set "PATH=!PFX86!\Windows Kits\10\bin\!WINSDKVER!\!SDKLIBARCH!;!PATH!"
+    echo [0/5] Windows SDK paths backfilled from Windows Kits\10\!WINSDKVER!
+  ) else (
+    echo [WARN] no Windows SDK in INCLUDE and none under Windows Kits\10 - linking will fail
+  )
 )
 
 REM -- pin Git Bash to the FRONT of PATH so `bash` is Git, not WSL -------
@@ -79,8 +117,10 @@ if not defined GITBINDIR (
   )
 )
 if defined GITBINDIR (
-  echo [0/5] using Git Bash: %GITBINDIR%\bash.exe
-  set "PATH=%GITBINDIR%;%PATH%"
+  REM   !GITBINDIR! again: the path can be "C:\Program Files (x86)\Git\bin",
+  REM   and %GITBINDIR% inside this block would break it the same way as above.
+  echo [0/5] using Git Bash: !GITBINDIR!\bash.exe
+  set "PATH=!GITBINDIR!;!PATH!"
 ) else (
   echo [WARN] Git Bash not found on PATH - `bash` may resolve to WSL and break the sidecar build
 )

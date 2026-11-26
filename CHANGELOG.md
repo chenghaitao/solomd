@@ -59,6 +59,33 @@
 #521 懒延续行回车修复、平板浮层「更多」菜单关闭修复、`markdown.ts` #T09-4 同步锚点修复、
 独立更新中心（`useUpdateCenter`）、Slideshow、自定义主题 tokens、PDF `%%EOF` 护栏等。
 
+### 构建脚本修复（`build.bat`）
+
+在装了 **VS 2022 BuildTools**（路径为 `C:\Program Files (x86)\Microsoft Visual Studio\...`）的机器上，
+`build.bat` 会在第 0 步加载 VS 环境时立刻退出，只留下一行：
+
+```
+\Microsoft was unexpected at this time.
+```
+
+两处引号 / 括号问题叠加导致：
+
+1. `for %%P in ("...\vcvars64.bat" ...)` 的列表项自带引号，`set "VSVCVARS=%%P"` 把引号一并存进变量，
+   `call "%VSVCVARS%"` 于是变成 `call ""C:\Program Files (x86)\...\vcvars64.bat""` —— `call` 的
+   二次解析在 `Program Files` 的空格处断词。
+2. `%VSVCVARS%` 在 `if ... ( ... )` 块内是**解析期**展开，值里 `(x86)` 的 `)` 被当成块的结束括号，
+   该行剩下的 `\Microsoft ...` 被当作命令解析 —— 正是报错的字面来源。
+
+修复：for 列表项以 `%%~P` 去掉引号后再存（存储值只加一次引号），块内一律改用延迟展开
+`!VSVCVARS!` / `!GITBINDIR!`。`GITBINDIR` 同类隐患一并处理（Git 装在 x86 目录时同样会炸）。
+
+顺带修掉两个把本地打包卡住的构建链问题：
+
+| 位置 | 问题 | 处理 |
+| --- | --- | --- |
+| `scripts/build-mcp-sidecar.sh` | 脚本总在 Git Bash 下跑，而 Git Bash 把自己的 `/usr/bin`（含 coreutils 的 `link.exe`，一个两参数的硬链接工具）排在 vcvars 准备好的 PATH 之前；rustc 只按名字找 `link.exe`，于是报 `link: extra operand '...rcgu.o'` | 检测到 `VCToolsInstallDir` 时把它对应的 MSVC bin（`Hostx64/x64`）前置到 PATH；macOS / Linux 上无副作用 |
+| `build.bat` 新增 0b 步 | vcvars 靠注册表查 Windows SDK；查询不可用时 `INCLUDE`/`LIB` 只有 MSVC 路径，首次链接就报 `LNK1181: 无法打开 kernel32.lib`，看着像 VS 装坏了 | 当 `INCLUDE` 里没有 `Windows Kits` 时，从 `Windows Kits\10\Include` 取最新版本回填 include / lib / bin；vcvars 正常时该步不生效 |
+
 ### 验证
 
 - 单元测试 **774/774** 通过；回归检查 **72/72** 通过。
